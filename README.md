@@ -16,31 +16,28 @@ This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tes
 
 ## Install on Windows
 
-1. Find the active **BeamNG user folder** using the game launcher's user-folder tools. Use that folder's `current` directory where present; do not assume a fixed AppData path or install into Steam's game binaries.
-2. Install and launch the supported Earth version normally, including its companion server. Enduro never enables or teleports Earth for you.
-3. Install **one** Enduro copy:
-   - ZIP: copy `beamng_earth_enduro-task002.zip` from the generated `dist` directory to `<user folder>/mods/`.
-   - Unpacked: copy this repository's `mod/beamng_earth_enduro/` directory to `<user folder>/mods/unpacked/beamng_earth_enduro/`.
-4. Create `<user folder>/settings/beamngEarthEnduro/`. Copy `config.example.json` from the Enduro mod/ZIP into that directory and rename it `config.json`.
-5. Set `base.latitude` and `base.longitude` to your designers' approved WGS84 coordinates. The shipped values are intentionally null. No permanent base has been selected.
-6. Enable Enduro in the Mod Manager, load Earth Freeroam, and use **UI Apps → Add App → Enduro HUD**. Move/resize it as desired and keep it in your Earth layout. Enduro never replaces the layout.
-7. Choose **Reload Enduro** after editing configuration, or reload the extension/restart the game. Automatic file-change handling is included but the button is the explicit refresh path.
+1. [Download `beamng_earth_enduro-task002-ready.zip`](https://github.com/MadMerick01/BeamNG-Earth-Enduro/raw/refs/heads/task002-ready-download/beamng_earth_enduro-task002-ready.zip).
+2. Copy that single ZIP into your active **BeamNG user folder's `mods` directory**. Use the game launcher's user-folder tools to locate it; do not put the ZIP in Steam's game binaries. **Do not extract it.** Remove/disable an older Enduro mod copy to avoid duplicate extensions; keep your user settings and save files.
+3. With the supported Earth mod and its companion running separately, enable Enduro, load Earth Freeroam, and use **UI Apps → Add App → Enduro HUD**. Move/resize it as desired. Enduro never replaces the layout.
+4. The HUD shows **START LOCATION REQUIRED** and the default base **`-33.60147222, 150.82288889`** for a new profile. Use Earth's teleport interface to go there manually. After 50 m / three continuous valid seconds, Enduro enters READY. An existing profile instead follows its unchanged manual-resume flow.
 
-The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. Do not put the ZIP in an extra wrapper folder. Do not install both ZIP and unpacked copies.
+No JSON edits, extraction, Python, Node.js or command-line commands are needed to install or play Enduro. The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. Enduro remains independent of Earth. ZIPs are hosted on a separate download-only branch, not committed to the implementation source tree.
 
-## Configure
+## Default base and optional advanced configuration
 
-`<user folder>/settings/beamngEarthEnduro/config.json` corresponds to the game's VFS path `/settings/beamngEarthEnduro/config.json`:
+The permanent built-in default is **33°36'05.3"S 150°49'22.4"E**, decimal **latitude `-33.60147222`, longitude `150.82288889`**. It is used automatically when no user configuration exists. No settings files are created on load, and no existing configuration or saved profile is overwritten.
+
+Optional overrides remain available at `<user folder>/settings/beamngEarthEnduro/config.json` (VFS `/settings/beamngEarthEnduro/config.json`). Only users who want an override need to copy/edit the included `config.example.json`:
 
 ```json
 {
-  "base": { "latitude": null, "longitude": null },
+  "base": { "latitude": -33.60147222, "longitude": 150.82288889 },
   "resumeRadiusMetres": 50,
   "stabilitySeconds": 3
 }
 ```
 
-Replace both null values with numeric approved coordinates before playing. Latitude must be -90..90 and longitude -180..180. The radius supports 1..1000 metres; stability supports 1..60 seconds. Omitted radius/interval values default to 50 m / 3 s. Invalid values block activation and saving. Configuration is not generated or overwritten automatically.
+Latitude must be -90..90 and longitude -180..180. The radius supports 1..1000 metres; stability supports 1..60 seconds. Omitted radius/interval values default to 50 m / 3 s. A present but invalid/unreadable override blocks activation and saving rather than being silently replaced by defaults. Choose **Reload Enduro** after changing an override; file-change handling is also included.
 
 An existing profile retains its original base even when the configuration changes. For a new profile, the base becomes fixed after the first successful arrival verification, including across configuration reloads in that running instance. An unsaved profile does not survive exiting the game. Back up existing profile files before intentionally starting a different profile; there is no reset/delete button in this prototype.
 
@@ -81,7 +78,7 @@ python -m venv .venv
 
 On Linux/macOS use `.venv/bin/python` in place of `.venv\Scripts\python.exe`. Lupa is pinned and supplies LuaJIT 2.1 for tests; an installed native `luajit` can run the Lua suites instead, but the Python bridge tests still require Lupa. Python/Lupa/Node are not shipped in the mod.
 
-The archive is generated at `dist/beamng_earth_enduro-task002.zip`. Packaging is deterministic and includes installation, architecture and acceptance documentation; it does not package user settings or saves. To check source identity against a separate read-only Earth checkout:
+The archive is generated at `dist/beamng_earth_enduro-task002-ready.zip`. Packaging is deterministic and includes installation, architecture and acceptance documentation; it does not package user settings, saves or development dependencies. The Python/Node commands above are for developers rebuilding/testing the mod, not for players installing the supplied ZIP. Developers can alternatively copy `mod/beamng_earth_enduro/` into the user's `mods/unpacked/beamng_earth_enduro/`; do not install both copies. To check source identity against a separate read-only Earth checkout:
 
 ```sh
 .venv\Scripts\python.exe tools/check_earth_compatibility.py C:\path\to\BeamNG.Earth

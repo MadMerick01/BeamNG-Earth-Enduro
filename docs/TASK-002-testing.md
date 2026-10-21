@@ -1,6 +1,8 @@
 # Task 002 testing — BeamNG-Earth Enduro
 
-Status: automated tests passed in the Linux cloud instance; **all Windows in-game acceptance steps below are untested**. This is an installable prototype for designer review, not a claim of in-game acceptance. No BeamNG.drive installation/runtime was provided here. No Task 003 features or commits/merge were made.
+Status: automated tests passed in the Linux cloud instance; **all Windows in-game acceptance steps below are untested**. This is an installable prototype for designer review, not a claim of in-game acceptance. No BeamNG.drive installation/runtime was provided here. Task 003 has not started; Task 002 remains on its development branch without a main-branch merge.
+
+The ready-to-install update uses built-in base **-33.60147222, 150.82288889**, radius **50 m** and stability **three seconds** without any user configuration. Existing overrides and profile bases are preserved. Distribution is `beamng_earth_enduro-task002-ready.zip`; players only copy the ZIP into their active user folder's `mods` directory and add Enduro HUD. No extraction or developer tools are needed. A separate download-only GitHub branch hosts the archive because this interface has no attachment tool and direct GitHub release API access is blocked; generated ZIPs remain excluded from the implementation branch.
 
 ## Automated validation
 
@@ -18,16 +20,16 @@ Recorded cloud results:
 
 | Suite | Result | What it establishes |
 | --- | --- | --- |
-| `test_location.lua` | 41 assertions passed | Finite/range validation, geography, antimeridian/poles, radius boundaries, timer reset, epoch/gap handling and config bounds. |
+| `test_location.lua` | 52 assertions passed | Finite/range validation, geography, antimeridian/poles, radius boundaries, timer reset, epoch/gap handling, built-in defaults, override precedence and config bounds. |
 | `test_adapter.lua` | 54 assertions passed | Mock Earth compatibility/capabilities, fresh frame consistency, stale/disconnected data, vehicle absence, loading/rebase/reset states, normal guard mode, error isolation and source cache invalidation. |
 | `test_persistence.lua` | 58 assertions passed | Valid/invalid schema, optional fields, generation selection, backup recovery, unknown schema protection, partial-write/read-back/directory failures, no writes during load. |
 | `test_core.lua` | 105 assertions passed | First arrival/resume locking, profile creation, immutable base/target, revalidation, click-time checks, zero writes while locked, no periodic saves/payouts, failed writes and HUD limits. |
 | `test_hud.lua` | 13 assertions passed | Change/throttle/heartbeat/resync behavior and bridge failure isolation. |
 | `test_hud.mjs` | 5 Node tests passed | Angular directive lifecycle in a VM stub, commands, copyable coordinates, stale Save disabling and cleanup. |
-| `test_installable.py` | 4 Python tests passed | Exported loader/game hooks with engine stubs, actual temporary-file JSON round trips, restart/manual resume, fixed base, partial disk writes and recovery. |
-| `test_package.py` | 4 Python tests passed | Standalone archive paths, absence of user saves, manifest/assets, PNG checksums and deterministic packaging. |
+| `test_installable.py` | 7 Python tests passed | Exported loader/game hooks with engine stubs, no-configuration default arrival/save/resume, byte-preservation of overrides/existing saves, fixed base, temporary-file JSON round trips and interrupted-write recovery. |
+| `test_package.py` | 5 Python tests passed | Standalone archive paths, absence of user saves, manifest/assets, PNG checksums, deterministic packaging and running configuration modules directly from the ZIP without a user file or source-checkout fallback. |
 
-Total: **271 Lua assertions, 5 JavaScript tests and 8 Python tests passed**. Mock/JSON tests are not real game tests. In particular they do not establish native VFS behavior, real physics ordering, complete collision readiness, Windows layout persistence or visual rendering.
+Total: **282 Lua assertions, 5 JavaScript tests and 12 Python tests passed**. Mock/JSON tests are not real game tests. In particular they do not establish native VFS behavior, real physics ordering, complete collision readiness, Windows layout persistence or visual rendering.
 
 Additional packaging/source checks: the generated archive has the loader, Lua and app at its root; no user settings, save files, test runtime or upstream source is included. Archive entries/JSON manifests and icon are checked during package validation. The source manifest was checked against the read-only Earth baseline checkout and with simulated Windows CRLF line endings using `tools/check_earth_compatibility.py`.
 
@@ -40,13 +42,12 @@ Fill this out during designer testing; do not infer results from the mock tests:
 - BeamNG.drive version / renderer: **not recorded** (initial candidate 0.39.4)
 - Earth version / exact revision: **not validated in-game**
 - ZIP or unpacked install: **not tested in-game**
-- Approved base coordinates: **unset; designers must provide them**
+- Approved built-in base coordinates: **-33.60147222, 150.82288889** (Windows arrival remains untested)
 
 ## Session A — first launch
 
-- [ ] Install supported Earth and exactly one Enduro copy; start the Earth companion normally.
-- [ ] Without configuration, confirm BASE CONFIGURATION REQUIRED; Save must remain disabled.
-- [ ] Copy/edit `config.example.json` into the user settings directory with approved numeric coordinates.
+- [ ] With supported Earth running separately, download `beamng_earth_enduro-task002-ready.zip` and copy it directly into the active user's `mods` directory. Do not extract it; disable/remove duplicate Enduro mod copies while retaining user saves/settings.
+- [ ] On a clean test profile with no Enduro user configuration, confirm the built-in base is -33.60147222, 150.82288889. Do not create/edit JSON to start this test.
 - [ ] Load Earth Freeroam, add Enduro HUD in UI Apps, and save the layout through the game's editor as needed.
 - [ ] Confirm START LOCATION REQUIRED, correct base fields and geographic distance when available.
 - [ ] Confirm the coordinate inputs can be selected/copied individually without game input interference.
@@ -79,7 +80,7 @@ Perform destructive file corruption only on backed-up test-profile copies with t
 | --- | --- | --- |
 | Earth missing/disabled | EARTH UNAVAILABLE, no writes/profile creation. Ordinary game remains usable. | Untested |
 | Unsupported Earth source or server metadata | Clear unsupported status; log details; no internal-access fallback or writes. | Untested |
-| Unset/out-of-range/nonfinite base | CONFIG_REQUIRED; no gameplay initialization/save. | Untested |
+| Present override with unset/out-of-range/nonfinite base | CONFIG_REQUIRED; no gameplay initialization/save; override not overwritten or silently ignored. | Untested |
 | Outside arrival radius | START/RESUME REQUIRED; moving outside during verification resets timer. | Untested |
 | Teleport/rebase/drop hold/tunnel placement | Progression/save suspended during detectable transitions; no false immediate READY. | Untested |
 | Invalid/stale geographic readings | Verification resets, last save unchanged. | Untested |

@@ -33,5 +33,5 @@ def build(output: Path) -> Path:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path,
-                        default=Path(__file__).resolve().parents[1] / 'dist' / 'beamng_earth_enduro-task002.zip')
+                        default=Path(__file__).resolve().parents[1] / 'dist' / 'beamng_earth_enduro-task002-ready.zip')
     print(build(parser.parse_args().output))

@@ -1,5 +1,5 @@
 {
-  "base": { "latitude": null, "longitude": null },
+  "base": { "latitude": -33.60147222, "longitude": 150.82288889 },
   "resumeRadiusMetres": 50,
   "stabilitySeconds": 3
 }

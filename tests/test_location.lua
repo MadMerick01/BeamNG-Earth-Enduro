@@ -42,4 +42,22 @@ for _, patch in ipairs({ { 'resumeRadiusMetres',0 }, {'resumeRadiusMetres',math.
 end
 cfg=F.config(); cfg.resumeRadiusMetres=nil; cfg.stabilitySeconds=nil
 local clean=C.validate(cfg); T.eq(clean.resumeRadiusMetres,50,'default radius'); T.eq(clean.stabilitySeconds,3,'default interval')
+local io=F.io()
+local defaults=C.load(io)
+T.eq(defaults.base.latitude,-33.60147222,'missing config uses approved default latitude')
+T.eq(defaults.base.longitude,150.82288889,'missing config uses approved default longitude')
+T.eq(defaults.resumeRadiusMetres,50,'built-in radius')
+T.eq(defaults.stabilitySeconds,3,'built-in stability interval')
+T.eq(io.writes,0,'loading defaults does not create configuration')
+defaults.base.latitude=0
+T.eq(C.load(io).base.latitude,-33.60147222,'defaults are detached per load')
+io=F.io({[C.FILE]=F.config()})
+T.eq(C.load(io).base.latitude,0,'existing override wins over defaults')
+T.eq(io.writes,0,'existing override never overwritten')
+io.files[C.FILE]={base={}}
+T.eq(C.load(io),nil,'present invalid override is not silently ignored')
+io.files[C.FILE]=F.config(); io.readFails=C.FILE
+T.eq(C.load(io),nil,'unreadable override does not fall back to defaults')
+io=F.io(); io.existsFails=true
+T.eq(C.load(io),nil,'failed existence check is not treated as absent configuration')
 T.done('location/config')

@@ -13,7 +13,7 @@ Distributable root: `mod/beamng_earth_enduro/`. Its `scripts/beamngEarthEnduro/m
 | `compatibility.lua` | Fingerprints and metadata for the inspected upstream revision; Windows CRLF normalization. |
 | `location.lua` | Finite coordinate validation, haversine metres and uninterrupted proximity timer. No local-world distance is used for arrival. |
 | `persistence.lua` | Profile schema, validation, detached snapshots, alternating generations and read-back verification. |
-| `config.lua` | Dedicated user-file configuration and bounds. Unset base is invalid. |
+| `config.lua` | Built-in permanent default base and optional user override with bounds. A present invalid override fails closed. |
 | `hud.lua` | Mount heartbeat, changed snapshots, 4 Hz ceiling and periodic UI resynchronization. |
 | `diagnostics.lua` | Namespaced, change-driven logging. No per-frame repeated status logs. |
 
@@ -51,7 +51,7 @@ Every continuous valid post-physics sample must stay within the radius for the c
 
 | State | Entry / exit |
 | --- | --- |
-| `CONFIG_REQUIRED` | Missing/unset/invalid configuration. No profile initialization or writes. Valid configuration plus reload returns to the start/resume gate. |
+| `CONFIG_REQUIRED` | A present override is unset/invalid/unreadable, or its existence cannot be checked. No profile initialization or writes. Valid configuration plus reload returns to the start/resume gate. Missing override files use built-in defaults. |
 | `EARTH_UNAVAILABLE` | Missing/unsupported/disconnected Earth, stale/invalid/transitioning data, no vehicle or paused simulation. Timer/baseline reset. Fresh compatible data returns to the applicable verification flow. |
 | `START_LOCATION_REQUIRED` | No saved profile. Immutable target is the configured base (or an already-created unsaved profile's original base in that running instance). No profile is created outside it. |
 | `RESUME_REQUIRED` | Loaded valid profile. Immutable target is its saved resume coordinates; arriving at the base instead does not unlock it. |
@@ -64,6 +64,8 @@ After initial arrival, session authorization is remembered only for that running
 Reset hooks impose an additional 0.5-second quiet period. A Save click re-reads the adapter, requires the verified epoch and compares against the latest trusted baseline; a new transition, invalid pose or unobserved jump over 25 m blocks the write and restarts verification. The backend ignores the HUD's Save-enable value as authorization.
 
 ## Persistence
+
+If `/settings/beamngEarthEnduro/config.json` does not exist, the built-in default is latitude **-33.60147222**, longitude **150.82288889**, radius 50 m and stability three seconds. A present override is validated and takes precedence; invalid/unreadable overrides fail closed without replacement. Loading defaults never creates a user configuration file. Existing profiles keep their original base even with no override file or a different built-in default. Manual resume and save storage are unchanged.
 
 VFS directory: `/settings/beamngEarthEnduro/`. Profile: `default`; schema: 1. Two files: `save-a.json`, `save-b.json`. Saves contain schema/profile/generation, fixed base, mutable resume, placeholder progression and available vehicle model/configuration strings. New progression fields are zero and never incremented. Optional altitude/heading are validated on load but not produced from unverified APIs; old pose metadata is not carried to a newly saved position where it would be stale.
 

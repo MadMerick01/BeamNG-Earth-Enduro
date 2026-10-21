@@ -8,6 +8,8 @@ import zlib
 from pathlib import Path
 from zipfile import ZipFile
 
+from lupa.luajit21 import LuaRuntime
+
 from tools.package import build
 
 
@@ -39,8 +41,8 @@ class PackageTest(unittest.TestCase):
             self.assertEqual(manifest['name'], 'Enduro HUD')
             self.assertEqual(manifest['directive'], 'beamngEarthEnduroHud')
             self.assertIn('beamng-earth-enduro-hud', manifest['domElement'])
-            self.assertIsNone(config['base']['latitude'])
-            self.assertIsNone(config['base']['longitude'])
+            self.assertEqual(config['base']['latitude'], -33.60147222)
+            self.assertEqual(config['base']['longitude'], 150.82288889)
             self.assertIn(b'/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', archive.read(prefix + 'app.js'))
             self.assertIn(b'BEAMNG-EARTH ENDURO', archive.read(prefix + 'app.html'))
             self.assertIn(b'beamngEarthEnduro_core', archive.read('scripts/beamngEarthEnduro/modScript.lua'))
@@ -63,6 +65,31 @@ class PackageTest(unittest.TestCase):
             offset += 12 + size
         self.assertTrue(ended)
         self.assertEqual(offset, len(data))
+
+    def test_packaged_lua_starts_with_default_base_without_user_configuration(self):
+        prefix = 'lua/ge/extensions/'
+        with ZipFile(self.output) as archive:
+            sources = {name[len(prefix):-4]: archive.read(name).decode('utf-8')
+                       for name in archive.namelist() if name.startswith(prefix) and name.endswith('.lua')}
+        lua = LuaRuntime()
+        lua.globals().zipModules = lua.table_from(sources)
+        lua.execute('''
+          package.path = '' -- Do not allow fallback to the development checkout.
+          table.insert(package.loaders, 2, function(name)
+            local code = zipModules[name]
+            if not code then return '\\nmodule absent from ZIP: ' .. name end
+            return assert(loadstring(code, '@ZIP/' .. name .. '.lua'))
+          end)
+          packagedDefaults = require('beamngEarthEnduro/config').load({
+            exists = function() return false end,
+            read = function() error('missing configuration must not be read') end,
+          })
+        ''')
+        defaults = lua.globals().packagedDefaults
+        self.assertEqual(defaults['base']['latitude'], -33.60147222)
+        self.assertEqual(defaults['base']['longitude'], 150.82288889)
+        self.assertEqual(defaults['resumeRadiusMetres'], 50)
+        self.assertEqual(defaults['stabilitySeconds'], 3)
 
     def test_package_is_reproducible(self):
         second = build(Path(self.temp.name) / 'second.zip')

@@ -73,9 +73,9 @@ T.check(not c:manualSave(),'write failure visible'); T.eq(c.state,'ERROR','uncer
 T.eq(io.files[B].resume.latitude,4,'latest valid generation retained on failure')
 T.check(not c:manualSave(),'error does not retry unsafe write')
 
--- Invalid/missing configuration, corrupt saves, and unknown schemas remain locked.
+-- Missing configuration selects the built-in base; invalid overrides/saves stay locked.
 for _, scenario in ipairs({
-  { files={}, state='CONFIG_REQUIRED' },
+  { files={}, state='START_LOCATION_REQUIRED' },
   { files={[CONFIG]={base={}}}, state='CONFIG_REQUIRED' },
   { files={[CONFIG]=F.config(),[A]='truncated'}, state='ERROR' },
   { files={[CONFIG]=F.config(),[A]={schemaVersion=2}}, state='ERROR' },
