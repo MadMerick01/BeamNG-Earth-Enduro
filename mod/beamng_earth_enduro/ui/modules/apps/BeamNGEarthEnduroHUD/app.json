@@ -1,0 +1,14 @@
+{
+  "domElement": "<beamng-earth-enduro-hud></beamng-earth-enduro-hud>",
+  "name": "Enduro HUD",
+  "types": ["ui.apps.categories.utility"],
+  "description": "Manual geographic start, save and resume for BeamNG-Earth Enduro.",
+  "css": {"width": "360px", "height": "510px", "top": "100px", "left": "20px"},
+  "author": "BeamNG-Earth Enduro",
+  "version": "0.1.0",
+  "directive": "beamngEarthEnduroHud",
+  "appName": "BeamNGEarthEnduroHUD",
+  "category": "BeamNG-Earth Enduro",
+  "isAuxiliary": false,
+  "interactive": "yes"
+}
