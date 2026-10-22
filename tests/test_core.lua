@@ -23,6 +23,7 @@ T.eq(io.writes,0,'arrival has no disk writes'); T.eq(c.profile.progression.balan
 local initialTarget=F.copy(c.startupTarget)
 adapter.pose=F.position(2,3); c:tick(0.1)
 T.eq(c.state,'READY','ordinary travel may leave base after arrival')
+T.eq(c.profile.progression.totalDistanceKm,0,'teleport-sized jump adds no mileage')
 T.check(c:manualSave(),'manual save succeeds')
 T.eq(io.writes,1,'one write per manual click'); T.eq(c.profile.resume.latitude,2,'new position saved')
 T.eq(c.profile.base.latitude,0,'save leaves original base fixed')
@@ -30,7 +31,7 @@ T.eq(c.profile.vehicle.model,'pickup','available vehicle identity saved')
 T.check(P.equal(c.startupTarget,initialTarget),'save does not mutate arrival target')
 local disk=F.copy(io.files[A])
 F.advance(c,10); T.eq(io.writes,1,'no periodic or per-frame saves')
-T.eq(c.profile.progression.totalDistanceKm,0,'no mileage tracked'); T.eq(c.profile.progression.balance,0,'no economy awarded')
+T.eq(c.profile.progression.balance,0,'no economy awarded')
 
 -- A separate controller represents a real restart: the target is the saved location.
 c,io,adapter=F.controller({io=io})
@@ -100,6 +101,37 @@ unsavedIO.files[CONFIG].base=F.position(10,10); unsaved:reload()
 T.eq(unsaved.startupTarget.latitude,0,'unsaved created profile also keeps original base on config reload')
 unsaved:reload(); T.eq(unsaved:view().base.latitude,0,'repeated reloads keep pending original base')
 unsaved:tick(0.1); T.eq(unsaved.profile.base.latitude,0,'re-arrival does not rewrite original unsaved base')
+
+-- Mileage: distance between consecutive readings while READY, saved by manual Save.
+do
+  local m,mio,ma=F.controller()
+  local north = 1 / 111195.0802 -- degrees latitude per metre
+  m:tick(0.1); T.eq(m.state,'READY','mileage controller arrived')
+  T.eq(m:view().totalDistanceKm,0,'arrival starts at zero mileage')
+  for i=1,100 do ma.pose=F.position(i*2*north); m:tick(0.1) end -- 200 m at 20 m/s
+  T.near(m:view().totalDistanceKm,0.2,1e-6,'driving 200 m adds 0.2 km')
+  T.near(m:view().unsavedDistanceKm,0.2,1e-6,'driven distance shown as unsaved')
+  ma.pose=F.position(5000*north); m:tick(0.1)
+  T.near(m:view().totalDistanceKm,0.2,1e-6,'teleport jump (50 km/s) is not counted')
+  ma.pose=F.position(5010*north); m:tick(0.1)
+  T.near(m:view().totalDistanceKm,0.21,1e-6,'driving resumes from the teleport destination')
+  ma.valid=false; m:tick(0.1); ma.valid=true; ma.pose=F.position(5020*north); m:tick(0.1)
+  T.near(m:view().totalDistanceKm,0.21,1e-6,'movement while position unavailable is not counted')
+  ma.pose=F.position(5030*north); m:tick(0)
+  T.near(m:view().totalDistanceKm,0.21,1e-6,'zero-time step is not counted')
+  T.check(m:manualSave(),'mileage saved')
+  T.near(mio.files[A].progression.totalDistanceKm,0.21,1e-6,'save file holds mileage')
+  T.eq(m:view().unsavedDistanceKm,0,'nothing unsaved after save')
+  ma.pose=F.position(5040*north); m:tick(0.1)
+  T.near(m:view().unsavedDistanceKm,0.01,1e-6,'odometer continued from 5030 m after save')
+  local r,_,ra=F.controller({io=mio})
+  T.near(r:view().totalDistanceKm,0.21,1e-6,'restart loads saved mileage, unsaved distance discarded')
+  ra.pose=F.position(5030*north); r:tick(0.1); ra.pose=F.position(5040*north); r:tick(0.1)
+  T.near(r:view().totalDistanceKm,0.22,1e-6,'mileage keeps accumulating after resume')
+  local before=r:view().totalDistanceKm; ra.pose=F.position(); r:reload(); r:tick(0.1)
+  T.eq(r.state,'RESUME_REQUIRED','reload requires arrival before mileage counts')
+  T.near(r:view().totalDistanceKm,0.21,1e-6,'reload discards unsaved mileage'); T.check(before>0.21,'had unsaved mileage')
+end
 
 -- Display throttling and duplicate mount notifications do not write or spam logs.
 local events,logs
