@@ -15,39 +15,19 @@ T.near(L.distance(F.position(0,179.9999),F.position(0,-179.9999)),22.239,0.01,'a
 T.near(L.distance(F.position(90,0),F.position(90,180)),0,1e-6,'pole longitudes coincide')
 T.near(L.distance(F.position(),F.position(0,180)),20015114.44,0.1,'antipodal numeric stability')
 T.eq(L.distance({},F.position()),nil,'invalid distance not zero')
-local metresToDeg = 180 / (math.pi * 6371008.8)
-local v = L.verifier(50,3)
-T.check(not v:step(F.position(49.99*metresToDeg),F.position(),0.1,'a'),'inside begins with zero elapsed')
-for _=1,29 do v:step(F.position(49.99*metresToDeg),F.position(),0.1,'a') end
-T.near(v.elapsed,2.9,1e-8,'not ready before interval')
-T.check(v:step(F.position(49.99*metresToDeg),F.position(),0.1,'a'),'ready after continuous three seconds')
-T.check(not v:step(F.position(50.01*metresToDeg),F.position(),0.1,'a'),'outside boundary resets')
-T.eq(v.elapsed,0,'outside clears elapsed')
-v:step(F.position(),F.position(),0.1,'a'); v:step(F.position(),F.position(),0.5,'a')
-T.eq(v.elapsed,0.5,'elapsed accumulates')
-v:step({},F.position(),0.1,'a'); T.eq(v.elapsed,0,'invalid sample clears elapsed')
-v:step(F.position(),F.position(),0.1,'a'); v:step(F.position(),F.position(),0.5,'a')
-v:step(F.position(),F.position(),0.1,'b'); T.eq(v.elapsed,0,'origin epoch restarts interval')
-v:step(F.position(),F.position(),2,'b'); T.eq(v.elapsed,0,'long sample gap resets')
-v:step(F.position(),F.position(),0,'b'); T.eq(v.elapsed,0,'paused time cannot verify')
-v:step(F.position(),F.position(),0/0,'b'); T.eq(v.elapsed,0,'NaN time rejected')
-v:step(F.position(),F.position(),0.1,nil); T.eq(v.elapsed,0,'missing epoch rejected')
-v:step(F.position(),F.position(),0.1,'a'); v:step(F.position(),F.position(),0.5,'a')
-v:step(F.position(),F.position(0.00001),0.1,'a'); T.eq(v.elapsed,0,'changed target restarts interval')
 T.check(C.validate(F.config()) ~= nil,'valid config')
 local cfg = F.config(); cfg.base.latitude=nil; T.eq(C.validate(cfg),nil,'unset base rejected')
-for _, patch in ipairs({ { 'resumeRadiusMetres',0 }, {'resumeRadiusMetres',math.huge}, {'stabilitySeconds',0},
-    {'stabilitySeconds','3'}, {'resumeRadiusMetres',1001}, {'stabilitySeconds',61} }) do
+for _, patch in ipairs({ { 'resumeRadiusMetres',0 }, {'resumeRadiusMetres',math.huge},
+    {'resumeRadiusMetres','50'}, {'resumeRadiusMetres',1001} }) do
   cfg=F.config(); cfg[patch[1]]=patch[2]; T.eq(C.validate(cfg),nil,'unsafe config value rejected')
 end
-cfg=F.config(); cfg.resumeRadiusMetres=nil; cfg.stabilitySeconds=nil
-local clean=C.validate(cfg); T.eq(clean.resumeRadiusMetres,50,'default radius'); T.eq(clean.stabilitySeconds,3,'default interval')
+cfg=F.config(); cfg.resumeRadiusMetres=nil; cfg.stabilitySeconds=3
+local clean=C.validate(cfg); T.eq(clean.resumeRadiusMetres,50,'default radius'); T.eq(clean.stabilitySeconds,nil,'legacy stability setting ignored')
 local io=F.io()
 local defaults=C.load(io)
 T.eq(defaults.base.latitude,-33.60147222,'missing config uses approved default latitude')
 T.eq(defaults.base.longitude,150.82288889,'missing config uses approved default longitude')
 T.eq(defaults.resumeRadiusMetres,50,'built-in radius')
-T.eq(defaults.stabilitySeconds,3,'built-in stability interval')
 T.eq(io.writes,0,'loading defaults does not create configuration')
 defaults.base.latitude=0
 T.eq(C.load(io).base.latitude,-33.60147222,'defaults are detached per load')

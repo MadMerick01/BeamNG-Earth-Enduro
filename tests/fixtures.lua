@@ -6,7 +6,7 @@ function F.copy(value)
   return out
 end
 function F.position(lat, lon) return { latitude = lat == nil and 0 or lat, longitude = lon == nil and 0 or lon } end
-function F.config() return { base = F.position(), resumeRadiusMetres = 50, stabilitySeconds = 3 } end
+function F.config() return { base = F.position(), resumeRadiusMetres = 50 } end
 function F.save(generation, lat, lon)
   return {
     schemaVersion = 1, generation = generation or 1, profileId = 'default', base = F.position(),
@@ -36,14 +36,12 @@ function F.io(files)
   return io
 end
 function F.adapter(pose)
-  local a = { pose = pose or F.position(), epoch = 'session:anchor:car', valid = true, vehicle = { id = 1, model = 'pickup' } }
+  local a = { pose = pose or F.position(), valid = true, vehicle = { id = 1, model = 'pickup' } }
   function a:invalidate() end
-  function a:filesChanged() return false end
-  function a:sample(_, running)
-    if not self.valid or not running then return { valid = false, reason = self.reason or 'earth_transition' } end
+  function a:sample()
+    if not self.valid then return { valid = false, reason = self.reason or 'vehicle_required' } end
     return {
-      valid = true, compatible = true, version = '1.5.4-beta', latitude = self.pose.latitude,
-      longitude = self.pose.longitude, epoch = self.epoch, vehicle = F.copy(self.vehicle),
+      valid = true, latitude = self.pose.latitude, longitude = self.pose.longitude, vehicle = F.copy(self.vehicle),
     }
   end
   return a
@@ -60,6 +58,6 @@ function F.controller(options)
   return c, io, adapter, events, logs
 end
 function F.advance(c, seconds)
-  for _ = 1, math.ceil(seconds * 10) do c:tick(0.1, 0.1) end
+  for _ = 1, math.ceil(seconds * 10) do c:tick(0.1) end
 end
 return F
