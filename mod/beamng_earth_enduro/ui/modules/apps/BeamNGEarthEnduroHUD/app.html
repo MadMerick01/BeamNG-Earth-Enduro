@@ -3,22 +3,22 @@
   <div role="status" style="margin:10px 0;color:#a7e5c9;font-weight:bold;">{{data.stateLabel}}</div>
   <p style="margin:8px 0;">{{data.sessionStatus}}</p>
   <div style="display:grid;grid-template-columns:1fr;gap:4px;">
-    <label>Base Latitude:
-      <input aria-label="Base latitude" type="text" readonly ng-value="coordinate(data.base.latitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
-    </label>
-    <label>Base Longitude:
-      <input aria-label="Base longitude" type="text" readonly ng-value="coordinate(data.base.longitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    <label>Base Coordinates (lat, long):
+      <div style="display:flex;gap:6px;">
+        <input aria-label="Base coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.base)" placeholder="Not configured" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
+        <button type="button" aria-label="Copy base coordinates" ng-click="copyCoordinates(data.base)" ng-disabled="!coordinates(data.base)">Copy</button>
+      </div>
     </label>
     <div ng-if="data.baseDistanceMetres != null">Current Distance from Base: {{data.baseDistanceMetres | number:1}} m</div>
   </div>
   <div ng-if="data.target && !data.arrivalVerified && data.state !== 'READY'" style="margin-top:10px;">
     <div style="font-weight:bold;" ng-if="data.mode === 'resume'">RESUME REQUIRED</div>
     <div style="font-weight:bold;" ng-if="data.mode === 'start'">START LOCATION REQUIRED</div>
-    <label>{{data.mode === 'resume' ? 'Saved' : 'Target'}} Latitude:
-      <input aria-label="Target latitude" type="text" readonly ng-value="coordinate(data.target.latitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
-    </label>
-    <label>{{data.mode === 'resume' ? 'Saved' : 'Target'}} Longitude:
-      <input aria-label="Target longitude" type="text" readonly ng-value="coordinate(data.target.longitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    <label>{{data.mode === 'resume' ? 'Saved' : 'Target'}} Coordinates (lat, long):
+      <div style="display:flex;gap:6px;">
+        <input aria-label="Target coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.target)" placeholder="Not configured" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
+        <button type="button" aria-label="Copy target coordinates" ng-click="copyCoordinates(data.target)" ng-disabled="!coordinates(data.target)">Copy</button>
+      </div>
     </label>
     <div ng-if="data.distanceMetres != null">Distance from {{data.mode === 'resume' ? 'Saved Location' : 'Target'}}: {{data.distanceMetres | number:1}} m</div>
     <div ng-if="data.radiusMetres">Arrival radius: {{data.radiusMetres | number:0}} m</div>
@@ -26,11 +26,11 @@
   <p ng-if="data.instruction" style="margin:10px 0;">{{data.instruction}}</p>
   <div ng-if="data.state === 'VERIFYING_LOCATION'">Stable: {{data.stableForSeconds | number:1}} / {{data.stabilitySeconds | number:1}} seconds</div>
   <div ng-if="data.current" style="margin-top:10px;">
-    <label>Current Latitude:
-      <input aria-label="Current latitude" type="text" readonly ng-value="coordinate(data.current.latitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
-    </label>
-    <label>Current Longitude:
-      <input aria-label="Current longitude" type="text" readonly ng-value="coordinate(data.current.longitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    <label>Current Coordinates (lat, long):
+      <div style="display:flex;gap:6px;">
+        <input aria-label="Current coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.current)" placeholder="Not configured" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
+        <button type="button" aria-label="Copy current coordinates" ng-click="copyCoordinates(data.current)" ng-disabled="!coordinates(data.current)">Copy</button>
+      </div>
     </label>
   </div>
   <div ng-if="data.vehicle">Vehicle: {{data.vehicle.model || 'Active vehicle'}} <span ng-if="data.vehicle.id != null">(#{{data.vehicle.id}})</span></div>

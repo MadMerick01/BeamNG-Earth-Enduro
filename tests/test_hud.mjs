@@ -53,13 +53,26 @@ test('UI destruction releases timer and ignores late events', () => {
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })
   assert.equal(a.scope.data.saveAllowed, false)
 })
-test('coordinates are individually copyable fixed decimal values', () => {
+test('coordinates copy as one latitude, longitude pair through the game clipboard', () => {
   const a = app()
-  assert.equal(a.scope.coordinate(-33.86), '-33.86000000')
-  assert.equal(a.scope.coordinate(0), '0.00000000')
-  assert.equal(a.scope.coordinate(Infinity), 'Not configured')
-  assert.equal(a.scope.coordinate(null), 'Not configured')
+  const position = { latitude: -33.86, longitude: 150.82 }
+  assert.equal(a.scope.coordinates(position), '-33.86000000, 150.82000000')
+  assert.equal(a.scope.coordinates({ latitude: 0, longitude: 0 }), '0.00000000, 0.00000000')
+  a.scope.copyCoordinates(position)
+  assert.equal(a.commands.at(-1), 'setClipboard("-33.86000000, 150.82000000")')
+  const count = a.commands.length
+  for (const invalid of [null, {}, { latitude: Infinity, longitude: 0 },
+    { latitude: 0, longitude: 181 }, { latitude: 91, longitude: 0 },
+    { latitude: '0); malicious()', longitude: 0 }]) {
+    assert.equal(a.scope.coordinates(invalid), '')
+    a.scope.copyCoordinates(invalid)
+  }
+  assert.equal(a.commands.length, count)
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
-  assert.equal((html.match(/type="text" readonly/g) || []).length, 6)
+  assert.equal((html.match(/type="text" readonly/g) || []).length, 3)
+  for (const key of ['base', 'target', 'current']) {
+    assert.ok(html.includes('ng-click="copyCoordinates(data.' + key + ')"'))
+    assert.ok(html.includes('ng-disabled="!coordinates(data.' + key + ')"'))
+  }
   assert.doesNotMatch(html, /ng-bind-html|engineLua/)
 })

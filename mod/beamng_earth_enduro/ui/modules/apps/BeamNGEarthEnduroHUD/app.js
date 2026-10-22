@@ -20,8 +20,18 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.reloadEnduro = function () {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.reload() end')
       }
-      scope.coordinate = function (value) {
-        return typeof value === 'number' && isFinite(value) ? value.toFixed(8) : 'Not configured'
+      scope.coordinates = function (position) {
+        if (!position || typeof position.latitude !== 'number' || typeof position.longitude !== 'number' ||
+            !isFinite(position.latitude) || !isFinite(position.longitude) ||
+            Math.abs(position.latitude) > 90 || Math.abs(position.longitude) > 180) return ''
+        return position.latitude.toFixed(8) + ', ' + position.longitude.toFixed(8)
+      }
+      scope.copyCoordinates = function (position) {
+        var text = scope.coordinates(position)
+        if (!text) return
+        if (typeof bngApi !== 'undefined' && bngApi.engineLua) {
+          bngApi.engineLua('setClipboard("' + text + '")')
+        }
       }
       scope.$on('BeamNGEarthEnduroState', function (event, data) {
         if (disposed || !data || typeof data.state !== 'string') return
