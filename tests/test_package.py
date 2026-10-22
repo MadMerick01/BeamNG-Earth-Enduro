@@ -26,6 +26,7 @@ class PackageTest(unittest.TestCase):
             self.assertIn('lua/ge/extensions/beamngEarthEnduro/core.lua', names)
             self.assertIn('ui/modules/apps/BeamNGEarthEnduroHUD/app.json', names)
             self.assertIn('README.md', names)
+            self.assertIn('docs/TASK-004-mileage.md', names)
             self.assertIn('docs/TASK-003-simplified-checks.md', names)
             self.assertIn('docs/TASK-002-testing.md', names)
             self.assertIn('docs/TASK-002-architecture.md', names)

@@ -1,8 +1,8 @@
 # BeamNG-Earth Enduro
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 003 prototype:** Enduro HUD, a simple coordinate arrival check, and recoverable manual save/resume.
-Economy, mileage earning, vehicle ownership/condition, repairs and upgrades are deferred.
+**Task 004 prototype:** Enduro HUD, a simple coordinate arrival check, recoverable manual save/resume and mileage tracking.
+Economy, vehicle ownership/condition, repairs and upgrades are deferred.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
 **Windows BeamNG.drive acceptance is not yet tested.** The only arrival check is that the player vehicle is within the radius of the target coordinates; Enduro does not wait for Earth's terrain, roads or streaming to finish.
@@ -44,7 +44,9 @@ An existing profile retains its original base even when the configuration change
 1. With no save, the HUD shows **START LOCATION REQUIRED**, the base coordinates and geographic distance when available.
 2. Copy the latitude and longitude fields individually and use **Earth's own teleport interface** to go there. Enduro never submits the teleport.
 3. Enter an active vehicle. As soon as it is within the configured radius of the target coordinates, the HUD shows **LOCATION VERIFIED — READY TO CONTINUE**.
-4. Drive elsewhere. The initial radius is an arrival gate, not a boundary restricting subsequent travel. Click **Save** to keep the current valid geographic position. No periodic or shutdown autosave occurs, and no money or mileage is generated.
+4. Drive elsewhere. The initial radius is an arrival gate, not a boundary restricting subsequent travel. Click **Save** to keep the current valid geographic position. No periodic or shutdown autosave occurs, and no money is generated.
+
+   While READY, the HUD's **Mileage** counts the distance your vehicle covers between readings. Jumps faster than 150 m/s (540 km/h), such as teleports, are not counted, and nothing is counted while the vehicle position is unavailable. Mileage driven since the last Save is shown as *unsaved*; it is stored by **Save** and lost if you exit or choose **Reload Enduro** without saving.
 5. Restart the game. The HUD shows **RESUME REQUIRED**, the saved coordinates and distance. Manually teleport using Earth; Save unlocks again once the vehicle is within the radius.
 
 The Save button reads the vehicle position again at click time and saves that. It cannot save with no vehicle or invalid coordinates. Vehicle model is saved when available. Configuration, altitude and heading are omitted because a reliable native retrieval contract for those values has not been established for this task. Enduro does not spawn or restore vehicles.
@@ -78,4 +80,4 @@ On Linux/macOS use `.venv/bin/python` in place of `.venv\Scripts\python.exe`. Lu
 
 The archive is generated at `dist/beamng_earth_enduro-task002-ready.zip`. Packaging is deterministic and includes installation, architecture and acceptance documentation; it does not package user settings, saves or development dependencies. The Python/Node commands above are for developers rebuilding/testing the mod, not for players installing the supplied ZIP. Developers can alternatively copy `mod/beamng_earth_enduro/` into the user's `mods/unpacked/beamng_earth_enduro/`; do not install both copies.
 
-See the [Task 003 simplified arrival check](docs/TASK-003-simplified-checks.md). The [Task 002 architecture](docs/TASK-002-architecture.md) and [Task 002 testing](docs/TASK-002-testing.md) documents describe the earlier, stricter checks and are kept as historical records, as is Task 001.
+See [Task 004 mileage tracking](docs/TASK-004-mileage.md) and the [Task 003 simplified arrival check](docs/TASK-003-simplified-checks.md). The [Task 002 architecture](docs/TASK-002-architecture.md) and [Task 002 testing](docs/TASK-002-testing.md) documents describe the earlier, stricter checks and are kept as historical records, as is Task 001.

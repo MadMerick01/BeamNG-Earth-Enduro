@@ -5,6 +5,8 @@ local diagnostics = require('beamngEarthEnduro/diagnostics')
 local hud = require('beamngEarthEnduro/hud')
 local earthAdapter = require('beamngEarthEnduro/earthAdapter')
 local M = {}
+-- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
+local MAX_DRIVING_SPEED = 150
 
 local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
@@ -40,13 +42,14 @@ function M.new(deps)
 
   function c:reload()
     self.adapter:invalidate()
-    self.sessionVerified, self.lastSample, self.error = false, nil, nil
+    self.sessionVerified, self.lastSample, self.error, self.odometer = false, nil, nil, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
     self.diag:event('save_loaded_or_rejected', self.loadStatus, self.profile and 'I' or 'W')
     self.feedback = self.loadStatus == 'recovered' and 'Recovered the last readable save.' or 'Not saved this session.'
     if self.loadStatus ~= 'missing' and not self.profile then self.error = self.loadStatus end
+    self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     self.mode = self.profile and 'resume' or 'start'
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
@@ -60,6 +63,7 @@ function M.new(deps)
   end
 
   function c:interrupt(reason)
+    self.odometer = nil
     if self.configuration and not self.error then self:transition('EARTH_UNAVAILABLE', reason) end
   end
 
@@ -69,7 +73,18 @@ function M.new(deps)
     self.adapter:invalidate()
   end
 
-  function c:observe(sample)
+  -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
+  function c:addMileage(sample, dt)
+    if self.odometer and location.finite(dt) and dt > 0 then
+      local metres = location.distance(self.odometer, sample)
+      if metres and metres <= MAX_DRIVING_SPEED * dt then
+        self.profile.progression.totalDistanceKm = self.profile.progression.totalDistanceKm + metres / 1000
+      end
+    end
+    self.odometer = location.copy(sample)
+  end
+
+  function c:observe(sample, dt)
     self.lastSample = sample
     self.diag:event('earth', tostring(sample.reason or 'available') .. ':' .. tostring(sample.detail or ''))
     if not self.configuration then self:transition('CONFIG_REQUIRED', 'configuration'); return end
@@ -77,8 +92,11 @@ function M.new(deps)
     if not sample.valid or not location.valid(sample) then
       self:interrupt(sample.reason or 'position_invalid'); return
     end
-    -- After arrival, driving anywhere is allowed. There is no mileage/economy here.
-    if self.sessionVerified then self:transition('READY', 'verified'); return end
+    -- After arrival, driving anywhere is allowed and counts toward mileage.
+    if self.sessionVerified then
+      self:addMileage(sample, dt)
+      self:transition('READY', 'verified'); return
+    end
     local distance = location.distance(sample, self.startupTarget)
     if not distance or distance > self.configuration.resumeRadiusMetres then
       self:transition(self.mode == 'resume' and 'RESUME_REQUIRED' or 'START_LOCATION_REQUIRED', 'arrival')
@@ -89,7 +107,7 @@ function M.new(deps)
       self.unsavedBase = location.copy(self.profile.base)
       self.diag:event('profile_initialised', 'default (in memory, not yet saved)')
     end
-    self.sessionVerified = true
+    self.sessionVerified, self.odometer = true, location.copy(sample)
     self:transition('READY', 'verified')
   end
 
@@ -122,14 +140,16 @@ function M.new(deps)
       } or nil,
       balance = self.profile and self.profile.progression.balance or 0,
       totalDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0,
+      unsavedDistanceKm = self.profile and math.max(0, self.profile.progression.totalDistanceKm - self.savedDistanceKm) or 0,
       saveAllowed = self.state == 'READY',
       saveFeedback = self.feedback,
     }
   end
 
   function c:tick(dtReal)
-    self.clock = self.clock + (location.finite(dtReal) and math.max(0, dtReal) or 0)
-    self:observe(self.adapter:sample())
+    local dt = location.finite(dtReal) and math.max(0, dtReal) or 0
+    self.clock = self.clock + dt
+    self:observe(self.adapter:sample(), dt)
     self.ui:publish(self:view(), self.clock)
   end
 
@@ -162,6 +182,7 @@ function M.new(deps)
       return false
     end
     self.profile, self.lastSample, self.unsavedBase = saved, fresh, nil
+    self.savedDistanceKm = saved.progression.totalDistanceKm
     self.feedback = 'Saved successfully.'
     self.diag:clear('manual_save_succeeded'); self.diag:event('manual_save_succeeded', 'generation ' .. saved.generation)
     return true
@@ -210,7 +231,7 @@ local function safely(f)
 end
 
 function M.onExtensionLoaded()
-  return safely(function() local c = ensure(); c.diag:event('extension_loaded', 'BeamNG-Earth Enduro Task 003') end)
+  return safely(function() local c = ensure(); c.diag:event('extension_loaded', 'BeamNG-Earth Enduro Task 004') end)
 end
 function M.onPreRender(dtReal)
   return safely(function() ensure():tick(dtReal) end)
