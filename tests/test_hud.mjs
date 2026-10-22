@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import vm from 'node:vm'
+import test from 'node:test'
+
+const source = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.js', import.meta.url), 'utf8')
+function app() {
+  const commands = [], handlers = {}, timers = new Map()
+  let definition, clock = 0
+  const scope = { $on: (name, fn) => { handlers[name] = fn }, $evalAsync: fn => fn() }
+  vm.runInNewContext(source, {
+    angular: { module(name) {
+      assert.equal(name, 'beamng.apps')
+      return { directive(id, factory) { assert.equal(id, 'beamngEarthEnduroHud'); definition = factory.at(-1)() } }
+    } },
+    bngApi: { engineLua: command => commands.push(command) },
+    setInterval: fn => { timers.set(1, fn); return 1 },
+    clearInterval: id => timers.delete(id), Date: { now: () => clock }
+  })
+  definition.link(scope)
+  return { scope, commands, handlers, timers, advance: ms => { clock += ms; for (const tick of timers.values()) tick() } }
+}
+
+test('app mounts and resynchronizes without overwriting layouts', () => {
+  const a = app()
+  assert.match(a.commands[0], /uiMounted\(true\)/)
+  a.advance(3000)
+  assert.match(a.commands[1], /uiMounted\(true\)/)
+  assert.equal(a.scope.data.saveAllowed, false)
+})
+test('Save only sends the fixed command when Lua enabled it', () => {
+  const a = app()
+  a.scope.save()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })
+  a.scope.save()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.save() end')
+  a.scope.reloadEnduro()
+  assert.match(a.commands[2], /\.reload\(\)/)
+})
+test('stale backend removes Save authorization', () => {
+  const a = app()
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })
+  a.advance(6001)
+  assert.equal(a.scope.data.saveAllowed, false)
+  assert.equal(a.scope.data.state, 'EARTH_UNAVAILABLE')
+})
+test('UI destruction releases timer and ignores late events', () => {
+  const a = app()
+  a.handlers.$destroy()
+  assert.equal(a.timers.size, 0)
+  assert.match(a.commands.at(-1), /uiMounted\(false\)/)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })
+  assert.equal(a.scope.data.saveAllowed, false)
+})
+test('coordinates are individually copyable fixed decimal values', () => {
+  const a = app()
+  assert.equal(a.scope.coordinate(-33.86), '-33.86000000')
+  assert.equal(a.scope.coordinate(0), '0.00000000')
+  assert.equal(a.scope.coordinate(Infinity), 'Not configured')
+  assert.equal(a.scope.coordinate(null), 'Not configured')
+  const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
+  assert.equal((html.match(/type="text" readonly/g) || []).length, 6)
+  assert.doesNotMatch(html, /ng-bind-html|engineLua/)
+})

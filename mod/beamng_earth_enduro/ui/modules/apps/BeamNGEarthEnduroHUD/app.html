@@ -1,0 +1,44 @@
+<div class="bngApp" style="height:100%;width:100%;overflow:auto;box-sizing:border-box;padding:14px;background:rgba(12,19,24,.9);color:#f2f6f5;font:14px/1.4 sans-serif;border:1px solid #568d7a;border-radius:8px;">
+  <div style="font-size:16px;font-weight:bold;letter-spacing:1px;">BEAMNG-EARTH ENDURO</div>
+  <div role="status" style="margin:10px 0;color:#a7e5c9;font-weight:bold;">{{data.stateLabel}}</div>
+  <p style="margin:8px 0;">{{data.sessionStatus}}</p>
+  <div style="display:grid;grid-template-columns:1fr;gap:4px;">
+    <label>Base Latitude:
+      <input aria-label="Base latitude" type="text" readonly ng-value="coordinate(data.base.latitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    </label>
+    <label>Base Longitude:
+      <input aria-label="Base longitude" type="text" readonly ng-value="coordinate(data.base.longitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    </label>
+    <div ng-if="data.baseDistanceMetres != null">Current Distance from Base: {{data.baseDistanceMetres | number:1}} m</div>
+  </div>
+  <div ng-if="data.target && !data.arrivalVerified && data.state !== 'READY'" style="margin-top:10px;">
+    <div style="font-weight:bold;" ng-if="data.mode === 'resume'">RESUME REQUIRED</div>
+    <div style="font-weight:bold;" ng-if="data.mode === 'start'">START LOCATION REQUIRED</div>
+    <label>{{data.mode === 'resume' ? 'Saved' : 'Target'}} Latitude:
+      <input aria-label="Target latitude" type="text" readonly ng-value="coordinate(data.target.latitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    </label>
+    <label>{{data.mode === 'resume' ? 'Saved' : 'Target'}} Longitude:
+      <input aria-label="Target longitude" type="text" readonly ng-value="coordinate(data.target.longitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    </label>
+    <div ng-if="data.distanceMetres != null">Distance from {{data.mode === 'resume' ? 'Saved Location' : 'Target'}}: {{data.distanceMetres | number:1}} m</div>
+    <div ng-if="data.radiusMetres">Arrival radius: {{data.radiusMetres | number:0}} m</div>
+  </div>
+  <p ng-if="data.instruction" style="margin:10px 0;">{{data.instruction}}</p>
+  <div ng-if="data.state === 'VERIFYING_LOCATION'">Stable: {{data.stableForSeconds | number:1}} / {{data.stabilitySeconds | number:1}} seconds</div>
+  <div ng-if="data.current" style="margin-top:10px;">
+    <label>Current Latitude:
+      <input aria-label="Current latitude" type="text" readonly ng-value="coordinate(data.current.latitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    </label>
+    <label>Current Longitude:
+      <input aria-label="Current longitude" type="text" readonly ng-value="coordinate(data.current.longitude)" style="box-sizing:border-box;width:100%;user-select:text;" />
+    </label>
+  </div>
+  <div ng-if="data.vehicle">Vehicle: {{data.vehicle.model || 'Active vehicle'}} <span ng-if="data.vehicle.id != null">(#{{data.vehicle.id}})</span></div>
+  <div style="margin-top:8px;">Balance (reserved): {{data.balance | number:0}}</div>
+  <div>Mileage (reserved): {{data.totalDistanceKm | number:2}} km</div>
+  <div style="display:flex;gap:8px;margin-top:10px;">
+    <button type="button" ng-click="save()" ng-disabled="!data.saveAllowed" style="padding:7px 12px;">Save</button>
+    <button type="button" ng-click="reloadEnduro()" style="padding:7px 12px;">Reload Enduro</button>
+  </div>
+  <p role="status" style="margin:8px 0 0;">{{data.saveFeedback}}</p>
+</div>
