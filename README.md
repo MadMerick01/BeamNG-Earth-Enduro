@@ -8,13 +8,14 @@ into your active BeamNG.drive user folder's `mods` directory. With BeamNG.Earth
 running, add **Enduro HUD** using UI Apps.
 No Python, Node.js, command-line commands or JSON edits are required.
 
+Works with any BeamNG.Earth version (checked against every release from v1.4.5-preview to v1.5.5-beta).
+
 Default base: latitude **-33.60147222**, longitude **150.82288889**.
 Manually teleport there using Earth. Save unlocks as soon as your vehicle is within
-50 metres (Task 003 simplified check). Existing profile bases and manual resume are preserved.
-Windows in-game acceptance remains untested. Automated tests passed:
-209 Lua assertions, 5 JavaScript tests and 12 Python tests.
+50 metres. While unlocked, the HUD tracks mileage driven; Save stores your position and mileage.
+Windows in-game acceptance remains untested.
 
-Source commit: https://github.com/MadMerick01/BeamNG-Earth-Enduro/commit/57277ff0300d3f117a58dc5e4e3e37f1845f13ed
-Archive SHA-256: `71fe39a4f0f368052bfa0ad03c0eabbd66562ba4cebdb523ca1cdb7b7438c50e`
+Source commit: https://github.com/MadMerick01/BeamNG-Earth-Enduro/commit/3d7ea9221574a54d61a4906bc4b4f0fd6ae5e5cf
+Archive SHA-256: `e4b0d4d5e4702f4283dbc29588cc7a1ee3e1d4f4bf16ff3d0e4ca5d9fccb3d01`
 
 The file name is unchanged so existing download links keep working.
