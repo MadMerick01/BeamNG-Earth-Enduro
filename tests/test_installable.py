@@ -80,8 +80,7 @@ class InstalledHooksTest(unittest.TestCase):
         file.write_text(json.dumps({'base': {'latitude': latitude, 'longitude': longitude}}))
 
     def arrive(self):
-        for _ in range(32):
-            self.core.onPreRender(0.1, 0.1)
+        self.core.onPreRender(0.1)
         self.assertEqual(self.core.getState()['state'], 'READY')
 
     def test_loader_uses_default_base_without_configuration_or_writes(self):
@@ -93,7 +92,6 @@ class InstalledHooksTest(unittest.TestCase):
         self.assertEqual(state['base']['latitude'], -33.60147222)
         self.assertEqual(state['base']['longitude'], 150.82288889)
         self.assertEqual(state['radiusMetres'], 50)
-        self.assertEqual(state['stabilitySeconds'], 3)
         self.assertFalse(self.core.save())
         self.lua.execute('fakeEarth.pose = {latitude=-33.60147222, longitude=150.82288889}')
         self.arrive()
@@ -105,7 +103,7 @@ class InstalledHooksTest(unittest.TestCase):
         self.lua.execute('fakeEarth.pose = {latitude=-33.60147222, longitude=150.82288889}')
         self.arrive()
         self.lua.execute('fakeEarth.pose = {latitude=-33.7, longitude=150.9}')
-        self.core.onPreRender(0.1, 0.1)
+        self.core.onPreRender(0.1)
         self.assertTrue(self.core.save())
         original = self.path('/settings/beamngEarthEnduro/save-a.json').read_bytes()
         self.core.onExtensionUnloaded()
@@ -148,7 +146,7 @@ class InstalledHooksTest(unittest.TestCase):
         self.assertEqual(self.core.getState()['state'], 'START_LOCATION_REQUIRED')
         self.arrive()
         self.lua.execute('fakeEarth.pose = {latitude=1, longitude=2}')
-        self.core.onPreRender(0.1, 0.1)
+        self.core.onPreRender(0.1)
         self.assertTrue(self.core.save())
         saved = json.loads(self.path('/settings/beamngEarthEnduro/save-a.json').read_text())
         self.assertEqual(saved['resume'], {'latitude': 1, 'longitude': 2})
@@ -160,7 +158,7 @@ class InstalledHooksTest(unittest.TestCase):
         self.assertFalse(self.core.save())
         self.arrive()
         self.lua.execute('fakeEarth.pose = {latitude=3, longitude=4}')
-        self.core.onPreRender(0.1, 0.1)
+        self.core.onPreRender(0.1)
         self.assertTrue(self.core.save())
         second = json.loads(self.path('/settings/beamngEarthEnduro/save-b.json').read_text())
         self.assertEqual(second['generation'], 2)
@@ -186,17 +184,15 @@ class InstalledHooksTest(unittest.TestCase):
         self.assertEqual(self.core.getState()['state'], 'RESUME_REQUIRED')
         self.assertIn('Recovered', self.core.getState()['saveFeedback'])
 
-    def test_reset_and_mission_hooks_lock_saving_without_implicit_writes(self):
+    def test_mission_end_locks_saving_without_implicit_writes(self):
         self.configure()
         self.core.onExtensionLoaded()
         self.arrive()
         self.core.uiMounted(True)
-        self.core.onPreRender(0.1, 0.1)
+        self.core.onPreRender(0.1)
         self.assertGreater(self.lua.globals().notifications, 0)
-        self.core.onVehicleResetted(1)
-        self.assertFalse(self.core.save())
-        self.assertEqual(self.core.getState()['state'], 'EARTH_UNAVAILABLE')
         self.core.onClientEndMission()
+        self.assertEqual(self.core.getState()['state'], 'EARTH_UNAVAILABLE')
         self.assertFalse(self.core.save())
         self.assertFalse(list(self.user.rglob('save-*.json')))
 

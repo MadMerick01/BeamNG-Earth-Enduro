@@ -26,6 +26,7 @@ class PackageTest(unittest.TestCase):
             self.assertIn('lua/ge/extensions/beamngEarthEnduro/core.lua', names)
             self.assertIn('ui/modules/apps/BeamNGEarthEnduroHUD/app.json', names)
             self.assertIn('README.md', names)
+            self.assertIn('docs/TASK-003-simplified-checks.md', names)
             self.assertIn('docs/TASK-002-testing.md', names)
             self.assertIn('docs/TASK-002-architecture.md', names)
             self.assertFalse(any(n.startswith(('settings/', 'tests/', 'beamng_earth_enduro/')) for n in names))
@@ -89,7 +90,6 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(defaults['base']['latitude'], -33.60147222)
         self.assertEqual(defaults['base']['longitude'], 150.82288889)
         self.assertEqual(defaults['resumeRadiusMetres'], 50)
-        self.assertEqual(defaults['stabilitySeconds'], 3)
 
     def test_package_is_reproducible(self):
         second = build(Path(self.temp.name) / 'second.zip')

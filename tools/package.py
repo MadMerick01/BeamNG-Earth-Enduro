@@ -14,7 +14,7 @@ def build(output: Path) -> Path:
             raise ValueError(f'Symlink not permitted in mod package: {path}')
         if path.is_file():
             entries[path.relative_to(source).as_posix()] = path.read_bytes()
-    for name in ('TASK-002-testing.md', 'TASK-002-architecture.md'):
+    for name in ('TASK-003-simplified-checks.md', 'TASK-002-testing.md', 'TASK-002-architecture.md'):
         entries['docs/' + name] = (root / 'docs' / name).read_bytes()
     entries['README.md'] = (root / 'README.md').read_bytes()
     output = output.resolve()
