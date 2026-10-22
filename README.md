@@ -10,7 +10,7 @@ This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tes
 ## Requirements
 
 - A licensed Windows BeamNG.drive installation. The mod follows the 0.39.x conventions inspected in Task 001; use 0.39.4 as the initial acceptance target and record the actual game version tested.
-- BeamNG.Earth (developed against `1.5.4-beta`, revision `bd9c764cb0aa47ae65f1d4998d00c9517988796e`) with its companion server running. Enduro no longer fingerprints Earth's source; it only needs Earth's anchor `enuToGeodetic()` to convert the vehicle position to latitude/longitude.
+- Any BeamNG.Earth version, with its companion server running. Enduro is not tied to an Earth version: it reads the vehicle position from the first of these that works — Earth's anchor `enuToGeodetic()` on the live vehicle position, Earth's recorded player position, or `places.here()` — so an Earth update only breaks Enduro if all three change. Every Earth release from `v1.4.5-preview` to `v1.5.5-beta` has been checked with `tools/check_earth_versions.py`.
 - No extra Python server or runtime dependencies are required by **Enduro** inside the game. Development tests use Python, Lupa and Node.js.
 
 ## Install on Windows
@@ -79,5 +79,12 @@ python -m venv .venv
 On Linux/macOS use `.venv/bin/python` in place of `.venv\Scripts\python.exe`. Lupa is pinned and supplies LuaJIT 2.1 for tests; an installed native `luajit` can run the Lua suites instead, but the Python bridge tests still require Lupa. Python/Lupa/Node are not shipped in the mod.
 
 The archive is generated at `dist/beamng_earth_enduro-task002-ready.zip`. Packaging is deterministic and includes installation, architecture and acceptance documentation; it does not package user settings, saves or development dependencies. The Python/Node commands above are for developers rebuilding/testing the mod, not for players installing the supplied ZIP. Developers can alternatively copy `mod/beamng_earth_enduro/` into the user's `mods/unpacked/beamng_earth_enduro/`; do not install both copies.
+
+After a BeamNG.Earth update, check that Enduro can still read positions from it (reads a local git clone of Earth; changes nothing):
+
+```sh
+git clone https://github.com/TecnaGamer/BeamNG.Earth.git
+.venv\Scripts\python.exe tools/check_earth_versions.py BeamNG.Earth
+```
 
 See [Task 004 mileage tracking](docs/TASK-004-mileage.md) and the [Task 003 simplified arrival check](docs/TASK-003-simplified-checks.md). The [Task 002 architecture](docs/TASK-002-architecture.md) and [Task 002 testing](docs/TASK-002-testing.md) documents describe the earlier, stricter checks and are kept as historical records, as is Task 001.

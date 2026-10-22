@@ -86,7 +86,7 @@ function M.new(deps)
 
   function c:observe(sample, dt)
     self.lastSample = sample
-    self.diag:event('earth', tostring(sample.reason or 'available') .. ':' .. tostring(sample.detail or ''))
+    self.diag:event('earth', tostring(sample.reason or 'available') .. ':' .. tostring(sample.detail or sample.source or ''))
     if not self.configuration then self:transition('CONFIG_REQUIRED', 'configuration'); return end
     if self.error then self:transition('ERROR', self.error); return end
     if not sample.valid or not location.valid(sample) then
