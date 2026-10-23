@@ -30,7 +30,7 @@ class PackageTest(unittest.TestCase):
             self.assertIn('docs/TASK-003-simplified-checks.md', names)
             self.assertIn('docs/TASK-002-testing.md', names)
             self.assertIn('docs/TASK-002-architecture.md', names)
-            self.assertFalse(any(n.startswith(('settings/', 'tests/', 'beamng_earth_enduro/')) for n in names))
+            self.assertFalse(any(n.startswith(('settings/', 'tests/', 'beamng_earth_enduro/', 'docs/beamng-api/')) for n in names))
             self.assertFalse(any('save-a.json' in n or 'save-b.json' in n or n.endswith('.pyc') for n in names))
             self.assertIsNone(archive.testzip())
 
