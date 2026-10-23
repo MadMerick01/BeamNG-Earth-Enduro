@@ -72,6 +72,15 @@ test('restart button only sends the fixed command when Lua enabled it', () => {
   a.scope.restartStage()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
 })
+test('car buttons only send fixed commands when Lua enabled them', () => {
+  const a = app()
+  a.scope.buyCar(); a.scope.revertCar()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', buyCarAllowed: true, revertCarAllowed: true })
+  a.scope.buyCar(); a.scope.revertCar()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.buyCar() end')
+  assert.equal(a.commands[2], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.revertCar() end')
+})
 test('stale backend removes Save authorization', () => {
   const a = app()
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })
