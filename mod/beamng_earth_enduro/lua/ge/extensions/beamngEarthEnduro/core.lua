@@ -7,6 +7,10 @@ local earthAdapter = require('beamngEarthEnduro/earthAdapter')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
+-- Money earned per kilometre of counted driving, and the amount the HUD test button adds.
+local EARNINGS_PER_KM = 50
+local TEST_MONEY = 10000
+local MAX_BALANCE = 9007199254740991
 
 local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
@@ -39,6 +43,7 @@ function M.new(deps)
   function c:reload()
     self.adapter:invalidate()
     self.sessionVerified, self.lastSample, self.error, self.odometer = false, nil, nil, nil
+    self.earningsCarry = 0
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -46,6 +51,7 @@ function M.new(deps)
     self.feedback = self.loadStatus == 'recovered' and 'Recovered the last readable save.' or 'Not saved this session.'
     if self.loadStatus ~= 'missing' and not self.profile then self.error = self.loadStatus end
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
+    self.savedBalance = self.profile and self.profile.progression.balance or 0
     self.mode = self.profile and 'resume' or 'start'
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
@@ -69,12 +75,22 @@ function M.new(deps)
     self.adapter:invalidate()
   end
 
+  -- The balance is whole dollars; fractions of a dollar carry over in memory until they add up.
+  function c:addMoney(amount)
+    local progression = self.profile.progression
+    local total = self.earningsCarry + amount
+    local whole = math.floor(total)
+    self.earningsCarry = total - whole
+    progression.balance = math.min(MAX_BALANCE, progression.balance + whole)
+  end
+
   -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
   function c:addMileage(sample, dt)
     if self.odometer and location.finite(dt) and dt > 0 then
       local metres = location.distance(self.odometer, sample)
       if metres and metres <= MAX_DRIVING_SPEED * dt then
         self.profile.progression.totalDistanceKm = self.profile.progression.totalDistanceKm + metres / 1000
+        self:addMoney(metres / 1000 * EARNINGS_PER_KM)
       end
     end
     self.odometer = location.copy(sample)
@@ -124,6 +140,8 @@ function M.new(deps)
       balance = self.profile and self.profile.progression.balance or 0,
       totalDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0,
       unsavedDistanceKm = self.profile and math.max(0, self.profile.progression.totalDistanceKm - self.savedDistanceKm) or 0,
+      unsavedBalance = self.profile and math.max(0, self.profile.progression.balance - self.savedBalance) or 0,
+      testMoneyAllowed = self.profile ~= nil and not self.error,
       saveAllowed = self.state == 'READY',
       saveFeedback = self.feedback,
     }
@@ -166,8 +184,20 @@ function M.new(deps)
     end
     self.profile, self.lastSample, self.unsavedBase = saved, fresh, nil
     self.savedDistanceKm = saved.progression.totalDistanceKm
+    self.savedBalance = saved.progression.balance
     self.feedback = 'Saved successfully.'
     self.diag:clear('manual_save_succeeded'); self.diag:event('manual_save_succeeded', 'generation ' .. saved.generation)
+    return true
+  end
+
+  -- Testing aid: adds money to the in-memory balance. Like driving earnings, it is kept by Save.
+  function c:addTestMoney()
+    if not self.profile or self.error then
+      self.diag:event('test_money_rejected', tostring(self.state), 'W')
+      return false
+    end
+    self:addMoney(TEST_MONEY)
+    self.diag:event('test_money_added', tostring(TEST_MONEY))
     return true
   end
 
@@ -220,6 +250,7 @@ function M.onPreRender(dtReal)
   return safely(function() ensure():tick(dtReal) end)
 end
 function M.save() return safely(function() return ensure():manualSave() end) end
+function M.addTestMoney() return safely(function() return ensure():addTestMoney() end) end
 function M.reload() return safely(function() ensure():reload() end) end
 function M.uiMounted(on) return safely(function() ensure():mount(on == true) end) end
 function M.getState() return safely(function() return ensure():view() end) end

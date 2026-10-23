@@ -77,7 +77,7 @@ The original base is copied on first verified creation and is never derived from
 
 ## HUD and diagnostics
 
-App ID `BeamNGEarthEnduroHUD`; UI name `Enduro HUD`; directive `beamngEarthEnduroHud`. Lua publishes `BeamNGEarthEnduroState`. The app sends fixed commands for `uiMounted`, `save` and `reload`, never dynamic coordinate/code or balance values. Coordinates use selectable read-only inputs. Angular interpolation is used for text, without HTML injection.
+App ID `BeamNGEarthEnduroHUD`; UI name `Enduro HUD`; directive `beamngEarthEnduroHud`. Lua publishes `BeamNGEarthEnduroState`. The app sends fixed commands for `uiMounted`, `save`, `reload` and `addTestMoney`, never dynamic coordinate/code or balance values. Coordinates use selectable read-only inputs. Angular interpolation is used for text, without HTML injection.
 
 Mount heartbeats renew a five-second lease every three seconds; publisher updates are limited to 4 Hz and full snapshots repeat every two seconds. JS disables the displayed Save state when the Lua bridge has not responded for more than six seconds. Destruction clears the timer and notifies unmount. Lua remains authoritative. Layout persistence and UI styling in the real game still require acceptance testing; Enduro does not replace layouts.
 

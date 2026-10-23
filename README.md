@@ -1,8 +1,8 @@
 # BeamNG-Earth Enduro
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, and mileage tracking.
-Economy, vehicle ownership/condition, repairs and upgrades are deferred.
+**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, mileage tracking and money earned by driving.
+Spending money, vehicle ownership/condition, repairs and upgrades are deferred.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
 **Windows BeamNG.drive acceptance is not yet tested.** Enduro only needs a valid vehicle position from Earth; it does not wait for Earth's terrain, roads or streaming to finish.
@@ -42,14 +42,16 @@ An existing profile retains its original base even when the configuration change
 ## Start, save and resume
 
 1. Load Earth Freeroam and enter an active vehicle. As soon as Earth reports a valid position, the HUD shows **READY** and Save is available, wherever the vehicle is.
-2. Drive anywhere. Click **Save** to keep the vehicle's current valid geographic position. No periodic or shutdown autosave occurs, and no money is generated.
+2. Drive anywhere. Click **Save** to keep the vehicle's current valid geographic position. No periodic or shutdown autosave occurs.
 
    While READY, the HUD's **Mileage** counts the distance your vehicle covers between readings. Jumps faster than 150 m/s (540 km/h), such as teleports, are not counted, and nothing is counted while the vehicle position is unavailable. Mileage driven since the last Save is shown as *unsaved*; it is stored by **Save** and lost if you exit or choose **Reload Enduro** without saving.
+
+   The HUD's **Money** goes up by **$50 for every kilometre** counted as mileage, so teleports earn nothing. The balance is whole dollars; part-dollars carry over while you keep driving. For testing, the **+$10000 (test)** button adds $10,000 straight away. Like mileage, money earned since the last Save is shown as *unsaved*, kept by **Save** and lost on exit or **Reload Enduro** without saving.
 3. Restart the game. The HUD shows your last saved coordinates and your distance from them. To continue from there, copy them and use **Earth's own teleport interface**; Enduro never submits the teleport. Saving is not locked to that spot, so the next Save records wherever the vehicle is.
 
 The Save button reads the vehicle position again at click time and saves that. It cannot save with no vehicle or invalid coordinates. Vehicle model is saved when available. Configuration, altitude and heading are omitted because a reliable native retrieval contract for those values has not been established for this task. Enduro does not spawn or restore vehicles.
 
-If the vehicle position is temporarily unavailable (no vehicle, Earth not running), the HUD shows EARTH UNAVAILABLE and returns to READY wherever the vehicle is as soon as a position is available again. This never changes the saved location or base. A mission start, extension reload or **Reload Enduro** reloads the save and discards unsaved mileage.
+If the vehicle position is temporarily unavailable (no vehicle, Earth not running), the HUD shows EARTH UNAVAILABLE and returns to READY wherever the vehicle is as soon as a position is available again. This never changes the saved location or base. A mission start, extension reload or **Reload Enduro** reloads the save and discards unsaved mileage and money.
 
 ## Save files and recovery
 
