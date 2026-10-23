@@ -21,7 +21,7 @@
   <div>Mileage: {{data.totalDistanceKm | number:2}} km<span ng-if="data.unsavedDistanceKm >= 0.005"> ({{data.unsavedDistanceKm | number:2}} km unsaved)</span></div>
   <div style="display:flex;gap:8px;margin-top:10px;">
     <button type="button" ng-click="save()" ng-disabled="!data.saveAllowed" style="padding:7px 12px;">Save</button>
-    <button type="button" title="Loads your last save again. Anything not saved is lost." ng-click="reloadEnduro()" style="padding:7px 12px;">Reload Enduro</button>
+    <button type="button" title="Loads your last save again. Anything not saved is lost." ng-click="reloadEnduro()" style="padding:7px 12px;">Reload rally</button>
     <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
   </div>
   <div style="margin-top:8px;">

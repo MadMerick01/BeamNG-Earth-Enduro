@@ -81,7 +81,7 @@ end
 
 local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
-  READY = 'READY', ERROR = 'ENDURO PAUSED',
+  READY = 'READY', ERROR = 'RALLY PAUSED',
 }
 -- What the HUD asks of the player until they reach the resume point.
 local goLabels = { resume = 'GO TO YOUR LAST SAVE', start = 'GO TO THE START' }
@@ -97,15 +97,15 @@ local messages = {
   earth_missing = 'Enable BeamNG.Earth to continue.',
   earth_starting = 'Waiting for BeamNG.Earth to finish starting.',
   earth_level_required = 'Load the BeamNG.Earth Freeroam level to continue.',
-  earth_interface_error = 'Earth information is unavailable. Reload Enduro when Earth is ready.',
+  earth_interface_error = 'Earth information is unavailable. Reload rally when Earth is ready.',
   vehicle_required = 'Enter an active vehicle to continue.',
   position_invalid = 'Waiting for a valid geographic position.',
 }
 -- What the player sees for each problem that pauses Enduro.
 local errorMessages = {
-  newer_version = 'Your save was made by a newer version of Enduro. Update the mod to keep playing.',
-  storage_unavailable = 'Enduro could not open its save folder. Press Reload Enduro to try again.',
-  internal_error = 'Enduro hit a problem and paused. Press Reload Enduro to carry on from your last save.',
+  newer_version = 'Your save was made by a newer version of the rally mod. Update the mod to keep playing.',
+  storage_unavailable = 'The rally could not open its save folder. Press Reload rally to try again.',
+  internal_error = 'The rally hit a problem and paused. Press Reload rally to carry on from your last save.',
   unknown_stage = 'Your save is for a stage this version does not have. Update the mod to keep playing.',
 }
 local loadMessages = {
@@ -627,7 +627,7 @@ function M.new(deps)
     local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
     if quote and (self.error or vehicleId ~= quote.vehicleId) then quote = nil end
     if self.state == 'CONFIG_REQUIRED' then
-      status = 'Set valid base coordinates in the Enduro configuration, then choose Reload Enduro.'
+      status = 'Set valid base coordinates in the rally configuration, then choose Reload rally.'
     elseif self.state == 'ERROR' then
       status = errorMessages[self.error] or errorMessages.internal_error
     elseif self.gameOver then
@@ -753,7 +753,7 @@ function M.new(deps)
 
   function c:mount(on)
     if self.ui:mount(on, self.clock) then
-      self.diag:clear('ui_initialised'); self.diag:event('ui_initialised', 'Enduro HUD')
+      self.diag:clear('ui_initialised'); self.diag:event('ui_initialised', 'World Ironman Enduro Rally HUD')
     end
   end
 
