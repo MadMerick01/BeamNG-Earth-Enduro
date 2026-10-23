@@ -129,16 +129,16 @@ test('the stage briefing can be dismissed without sending a command', () => {
 test('tabs switch without sending a command and flag what needs attention', () => {
   const a = app()
   const count = a.commands.length
-  assert.equal(a.scope.tabs.map(t => t.id).join(), 'stage,nav,parts,car,repair,about')
+  assert.equal(a.scope.tabs.map(t => t.id).join(), 'stage,nav,parts,car,repair,tips')
   assert.equal(a.scope.tab, 'stage')
-  a.scope.setTab('about')
-  assert.equal(a.scope.tab, 'about')
+  a.scope.setTab('tips')
+  assert.equal(a.scope.tab, 'tips')
   assert.equal(a.commands.length, count)
   assert.equal(a.scope.tabAlert('repair'), false)
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', repairOwed: 400 })
   assert.equal(a.scope.tabAlert('repair'), true)
   assert.equal(a.scope.tabAlert('stage'), false)
-  assert.equal(a.scope.tab, 'about')
+  assert.equal(a.scope.tab, 'tips')
 })
 test('a new bill, wreck or set of coordinates opens its tab once', () => {
   const a = app()
@@ -163,7 +163,7 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
   for (const always of ['ng-click="save()"', 'Money:', 'GAME OVER', 'Wrecked:', 'STAGE COMPLETE']) {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
-  for (const id of ['stage', 'nav', 'parts', 'car', 'repair', 'about']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
+  for (const id of ['stage', 'nav', 'parts', 'car', 'repair', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
 })
 test('the stage clock shows h:mm:ss, signed pace and colours by time left', () => {
   const a = app()
