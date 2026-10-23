@@ -25,6 +25,10 @@ local DEFAULT_PART_PRICE = 250
 local PART_TRADE_IN_SHARE = 0.3
 -- Driving this far from where the parts were changed, without paying, puts the paid parts back.
 local UNPAID_PARTS_DRIVE_LIMIT = 25
+-- Car pricing: a car config's game Value, or a flat price when it has none. The car you leave is
+-- traded in for a share of its Value, less the repair it needs; a trade-in is never below $0.
+local DEFAULT_CAR_PRICE = 10000
+local CAR_TRADE_IN_SHARE = 0.5
 -- A fresh start, with no save, puts the player in this car; they upgrade it from there.
 local STARTER_MODEL = 'burnside'
 local STARTER_CONFIG = 'vehicles/burnside/worldironmanenduro_starter.pc'
@@ -134,8 +138,8 @@ function M.new(deps)
     self.sessionVerified, self.lastSample, self.error, self.odometer = false, nil, nil, nil
     self.earningsCarry = 0
     self.quote, self.repairFeedback = nil, nil
-    self.partsFeedback = nil
-    self.vehicleProvided, self.arrivingModel, self.arrived = false, nil, false
+    self.partsFeedback, self.carFeedback = nil, nil
+    self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
     self.wreck, self.restartArmed = nil, false
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
@@ -252,6 +256,10 @@ function M.new(deps)
   -- Charges the quoted price and repairs. A changed vehicle or new damage needs a fresh quote first,
   -- and the player is only charged once the game has accepted the repair.
   function c:repairVehicle()
+    if self.pendingCar then
+      self.repairFeedback = 'Buy or revert the new car first.'
+      return false
+    end
     if self.pendingParts then
       self.repairFeedback = 'Buy or revert your part changes first. Their bill includes the repair.'
       return false
@@ -301,7 +309,7 @@ function M.new(deps)
 
   -- Adopts the fitted parts as paid for, when there is nothing to charge against.
   function c:adoptParts(snapshot)
-    self.ownedParts, self.pendingParts = snapshot, nil
+    self.ownedParts, self.pendingParts, self.pendingCar = snapshot, nil, nil
     self.diag:event('parts_owned', tostring(snapshot.model) .. ' #' .. tostring(snapshot.id))
   end
 
@@ -312,14 +320,20 @@ function M.new(deps)
     local owned = self.ownedParts
     -- The starter or saved car comes as paid for, even when it replaced a car of the same model.
     if self.arrivingModel and snapshot.model == self.arrivingModel then
-      self.arrivingModel = nil
+      snapshot.value = snapshot.value or self.arrivingValue
+      self.arrivingModel, self.arrivingValue = nil, nil
       self:adoptParts(snapshot)
       return true
     end
-    -- Buying vehicles is not part of Enduro yet, so a different vehicle or model is simply taken as owned.
-    if not self.profile or self.error or not owned or owned.id ~= snapshot.id or owned.model ~= snapshot.model then
+    if not self.profile or self.error or not owned then
       self:adoptParts(snapshot)
       return true
+    end
+    -- A different vehicle, or a different model in place of this one, is a car the player is buying.
+    if owned.id ~= snapshot.id or owned.model ~= snapshot.model then return self:quoteCar(snapshot) end
+    if self.pendingCar then
+      self.pendingCar = nil
+      self.carFeedback = 'Back in your own car. Nothing to pay.'
     end
     local diff = M.partsDiff(owned, snapshot)
     if not diff then
@@ -345,12 +359,106 @@ function M.new(deps)
     return true
   end
 
+  -- Cars. Picking a car in the game's vehicle selector, or getting into any car that is not the
+  -- player's, opens a bill: the car's price, plus parts changed on it since, less the trade-in of
+  -- the player's car. The swap mends the old car, so its damage is frozen into the bill.
+  function c:quoteCar(snapshot)
+    local owned, previous = self.ownedParts, self.pendingCar
+    local sameCar = previous and previous.id == snapshot.id and previous.model == snapshot.model
+    local oldDamage = previous and previous.oldDamage
+      or (self.pendingParts and self.pendingParts.damage)
+      or (self.lastDamage and self.lastDamage.id == owned.id and self.lastDamage.damage) or self.owedDamage
+    local base = sameCar and previous.base or snapshot
+    local extras = M.partsDiff(base, snapshot)
+    local price = math.floor((base.value or DEFAULT_CAR_PRICE) + 0.5)
+    local repair = M.repairCost(oldDamage)
+    local tradeIn = math.max(0, math.floor((owned.value or DEFAULT_CAR_PRICE) * CAR_TRADE_IN_SHARE + 0.5) - repair)
+    local extrasCost = extras and extras.cost or 0
+    self.pendingParts, self.quote = nil, nil
+    self.pendingCar = {
+      id = snapshot.id, model = snapshot.model, name = base.name or snapshot.model, base = base,
+      price = price, extras = extrasCost, tradeIn = tradeIn, repair = repair, oldDamage = oldDamage,
+      cost = math.max(0, price + extrasCost - tradeIn), fromId = owned.id,
+      position = previous and previous.position
+        or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil,
+    }
+    local cost = self.pendingCar.cost
+    self.carFeedback = self:canAfford(cost) and 'Press Buy car to keep it, or Revert to get your car back.'
+      or ('Not enough money. You need ' .. dollars(cost - self.profile.progression.balance)
+        .. ' more. Revert, or your car comes back when you drive off.')
+    self.diag:event('car_quote', string.format('%s %d, trade-in %d', tostring(snapshot.model), cost, tradeIn))
+    return true
+  end
+
+  function c:buyCar()
+    if not self.profile or self.error or self.gameOver then
+      self.carFeedback = 'Buying cars is unavailable right now. Check the status above.'
+      return false
+    end
+    local pending = self.pendingCar
+    if not pending then
+      self.carFeedback = 'No car to pay for.'
+      return false
+    end
+    if not self:checkParts() then
+      self.carFeedback = 'Could not read the car. Try again in a moment.'
+      return false
+    end
+    if not self.pendingCar then return false end
+    if self.pendingCar.cost ~= pending.cost or self.pendingCar.id ~= pending.id then
+      self.carFeedback = 'The car changed, so the bill was updated. Press Buy car again to accept it.'
+      return false
+    end
+    if not self:spend(pending.cost, 'car') then
+      self.carFeedback = 'Not enough money. You need ' .. dollars(pending.cost - self.profile.progression.balance) .. ' more.'
+      return false
+    end
+    -- Later part changes are priced against what was paid for, so the car keeps its own Value.
+    local snapshot = self.fittedParts
+    snapshot.value = pending.base.value
+    self:adoptParts(snapshot)
+    self.owedDamage = 0
+    self.carFeedback = 'Bought ' .. tostring(pending.name) .. ' for ' .. dollars(pending.cost) .. '. Save to keep it.'
+    return true
+  end
+
+  -- Puts the player back in their own car: the one they left, if it is still there, or else their
+  -- car respawned in place. A respawned car looks new, but the repair it needed is still owed.
+  function c:revertCar(droveOff)
+    local pending, owned = self.pendingCar, self.ownedParts
+    if not pending or not owned then
+      self.carFeedback = 'No car to revert.'
+      return false
+    end
+    local ok, why, detail
+    local respawned = pending.id == pending.fromId
+    if not respawned then
+      ok = self.garage:enter(pending.fromId)
+      respawned = not ok
+    end
+    if respawned then
+      self.arrivingModel, self.arrivingValue = owned.model, owned.value
+      ok, why, detail = self.garage:spawnConfig(owned.model, owned.config)
+      if not ok then
+        self.arrivingModel, self.arrivingValue = nil, nil
+        self.carFeedback = 'Could not bring your car back. Try again in a moment.'
+        self.diag:event('car_revert_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+        return false
+      end
+      self.owedDamage = pending.oldDamage
+    end
+    self.pendingCar = nil
+    self.carFeedback = droveOff and 'You drove off without paying, so your own car is back.' or 'Your own car is back.'
+    return true
+  end
+
   -- Called every tick: checks parts after a spawn or vehicle switch, notes the damage the vehicle has
   -- before a change, and puts the paid parts back if the player drives off without paying.
   function c:watchParts()
     if not self.garage or self.gameOver then return end
     local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
-    if vehicleId ~= nil and self.ownedParts and vehicleId ~= self.ownedParts.id then self.partsCheckDue = true end
+    local expected = self.pendingCar and self.pendingCar.id or (self.ownedParts and self.ownedParts.id)
+    if vehicleId ~= nil and expected ~= nil and vehicleId ~= expected then self.partsCheckDue = true end
     if not self.ownedParts then self.partsCheckDue = true end
     if self.partsCheckDue then
       -- Damage is frozen until the check: the respawn has already reset it.
@@ -359,13 +467,14 @@ function M.new(deps)
     end
     local inspected = self:inspectDamage()
     if inspected then self.lastDamage = inspected end
-    local pending = self.pendingParts
+    local pending = self.pendingCar or self.pendingParts
     if pending and self.lastSample and self.lastSample.valid then
       if not pending.position then pending.position = location.copy(self.lastSample)
       else
         local moved = location.distance(pending.position, self.lastSample)
+        local revert = self.pendingCar and self.revertCar or self.revertParts
         -- A failed revert is retried after another stretch of driving, not every frame.
-        if moved and moved > UNPAID_PARTS_DRIVE_LIMIT and not self:revertParts(true) then
+        if moved and moved > UNPAID_PARTS_DRIVE_LIMIT and not revert(self, true) then
           pending.position = location.copy(self.lastSample)
         end
       end
@@ -443,14 +552,17 @@ function M.new(deps)
     if self.vehicleProvided or self.gameOver or not self.garage or self.state ~= 'READY' or not self.arrived then return end
     self.vehicleProvided = true
     local model, config, label
+    local configFile
     if self.mode == 'start' then
-      model, config, label = STARTER_MODEL, STARTER_CONFIG, 'starter_car'
+      model, config, label, configFile = STARTER_MODEL, STARTER_CONFIG, 'starter_car', STARTER_CONFIG
     else
       config = self.profile and self.profile.vehicle and self.profile.vehicle.config
       if not config then return end
-      model, label = config.model, 'saved_car'
+      model, label, configFile = config.model, 'saved_car', config.partConfigFilename
     end
     self.arrivingModel = model
+    -- A car respawned from a saved config may not know its .pc file, so its price is looked up here.
+    self.arrivingValue = self.garage.carValue and (self.garage:carValue(model, configFile)) or nil
     local ok, why, detail = self.garage:spawnConfig(model, config)
     if not ok then
       self.arrivingModel = nil
@@ -470,7 +582,7 @@ function M.new(deps)
     local fitted = self.fittedParts
     if fitted and fitted.id == owned.id and type(fitted.config) == 'table' then look = fitted.config end
     local config = persistence.plainConfig({ model = source.model or owned.model, parts = source.parts,
-      partsTree = source.partsTree, vars = look.vars, paints = look.paints, licenseName = look.licenseName })
+      partsTree = source.partsTree, partConfigFilename = source.partConfigFilename or owned.configFile, vars = look.vars, paints = look.paints, licenseName = look.licenseName })
     if not config then self.diag:event('vehicle_config_unsaved', tostring(owned.model), 'W') end
     return config
   end
@@ -479,7 +591,8 @@ function M.new(deps)
   -- bill open, what it had before the change mended it. A restored car owes its repair.
   function c:savedVehicleDamage()
     local damage = self.owedDamage
-    if self.pendingParts then damage = self.pendingParts.damage
+    if self.pendingCar then damage = self.pendingCar.oldDamage
+    elseif self.pendingParts then damage = self.pendingParts.damage
     elseif self.garage and self.ownedParts then
       local inspected = self:inspectDamage()
       if inspected and inspected.id == self.ownedParts.id then damage = inspected.damage end
@@ -546,7 +659,7 @@ function M.new(deps)
       self.wreck = nil
       return
     end
-    local damage = self.pendingParts and self.pendingParts.damage
+    local damage = (self.pendingCar and self.pendingCar.oldDamage) or (self.pendingParts and self.pendingParts.damage)
     if not damage then
       local inspected = self:inspectDamage()
       damage = inspected and inspected.damage
@@ -685,7 +798,7 @@ function M.new(deps)
       repairQuoteAllowed = active and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
       repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage) or nil,
-      repairAllowed = quote ~= nil and not self.pendingParts and not self.gameOver,
+      repairAllowed = quote ~= nil and not self.pendingParts and not self.pendingCar and not self.gameOver,
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
         added = self.pendingParts.added, removed = self.pendingParts.removed,
@@ -694,6 +807,13 @@ function M.new(deps)
       buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
       revertPartsAllowed = self.pendingParts ~= nil and not self.gameOver,
       partsFeedback = self.partsFeedback,
+      carChange = self.pendingCar and {
+        name = self.pendingCar.name, price = self.pendingCar.price, extras = self.pendingCar.extras,
+        tradeIn = self.pendingCar.tradeIn, cost = self.pendingCar.cost,
+      } or nil,
+      buyCarAllowed = self.pendingCar ~= nil and self:canAfford(self.pendingCar.cost),
+      revertCarAllowed = self.pendingCar ~= nil and not self.gameOver,
+      carFeedback = self.carFeedback,
       saveAllowed = self.state == 'READY' and self.arrived and not self.gameOver,
       saveFeedback = self.feedback,
     }
@@ -815,6 +935,8 @@ function M.requestRepairQuote() return safely(function() return ensure():request
 function M.repairVehicle() return safely(function() return ensure():repairVehicle() end) end
 function M.buyParts() return safely(function() return ensure():buyParts() end) end
 function M.revertParts() return safely(function() return ensure():revertParts(false) end) end
+function M.buyCar() return safely(function() return ensure():buyCar() end) end
+function M.revertCar() return safely(function() return ensure():revertCar(false) end) end
 function M.restartStage() return safely(function() return ensure():restartStage() end) end
 function M.onVehicleSpawned() return safely(function() if active then active:vehicleSpawned() end end) end
 function M.reload() return safely(function() ensure():reload() end) end

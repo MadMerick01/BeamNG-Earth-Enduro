@@ -12,6 +12,8 @@ local function defaults()
     vehicles = function() return rawget(_G, 'core_vehicles') or (extensions and extensions.core_vehicles) end,
     -- jbeam/io looks up a part's jbeam data, whose information.value is the price career uses.
     jbeam = function() return require('jbeam/io') end,
+    objectById = function(id) return getObjectByID(id) end,
+    enter = function(vehicle) be:enterVehicle(0, vehicle) end,
   }
 end
 
@@ -74,8 +76,27 @@ function M.new(environment)
     return value, type(info.name) == 'string' and info.name or nil
   end
 
+  -- Returns the game's price (the Value in the config's info file) and a display name for a car
+  -- config, given its .pc path. The price is nil when the config has none.
+  function g:carValue(model, configFile)
+    if type(model) ~= 'string' or model == '' then return nil end
+    local key = type(configFile) == 'string' and configFile:match('([^/\\]+)%.pc$') or nil
+    local vehicles = env.vehicles()
+    local info
+    if key and type(vehicles) == 'table' and type(vehicles.getConfig) == 'function' then
+      local ok, result = pcall(vehicles.getConfig, model, key)
+      info = ok and type(result) == 'table' and result or nil
+    end
+    local value = info and tonumber(info.Value)
+    if value and (value ~= value or value < 0 or value == math.huge) then value = nil end
+    local name = info and type(info.Name) == 'string' and info.Name or model
+    if info and type(info.Configuration) == 'string' then name = name .. ' ' .. info.Configuration end
+    return value, name
+  end
+
   -- Returns the player vehicle's fitted parts:
-  -- { id, model, config, parts = { [slot] = part }, values = { [part] = price or nil }, names = { [part] = name } }.
+  -- { id, model, config, parts = { [slot] = part }, values = { [part] = price or nil }, names = { [part] = name },
+  --   configFile, value, name } where value is the car's own price from carValue.
   function g:parts()
     local vehicle, id = current()
     if not vehicle then return nil, 'vehicle_required' end
@@ -94,7 +115,10 @@ function M.new(environment)
       local ok, filename = pcall(function() return vehicle:getJBeamFilename() end)
       model = ok and filename or nil
     end
-    return { id = id, model = model, config = copy(data.config), parts = parts, values = values, names = names }
+    local configFile = type(data.config.partConfigFilename) == 'string' and data.config.partConfigFilename or nil
+    local value, name = g:carValue(model, configFile)
+    return { id = id, model = model, config = copy(data.config), parts = parts, values = values, names = names,
+      configFile = configFile, value = value, name = name or model }
   end
 
   -- Respawns the vehicle where it stands, which leaves every part new. With no config it keeps the
@@ -141,6 +165,15 @@ function M.new(environment)
     end
     local ok, why = pcall(vehicles.replaceVehicle, model, { config = config, keepOtherVehRotation = true }, vehicle)
     if not ok then return false, 'spawn_failed', tostring(why) end
+    return true
+  end
+
+  -- Puts the player back in the vehicle with this id, if it still exists.
+  function g:enter(id)
+    local ok, vehicle = pcall(env.objectById, id)
+    if not ok or not vehicle then return false, 'vehicle_gone' end
+    local entered, why = pcall(env.enter, vehicle)
+    if not entered then return false, 'enter_failed', tostring(why) end
     return true
   end
 

@@ -83,4 +83,18 @@ ok, why = G.new(env({ vehicles = function() return {} end })):spawnConfig('burns
 T.eq(why, 'spawn_unavailable', 'missing replaceVehicle reported')
 ok, why = G.new(env({ vehicles = function() return { replaceVehicle = function() error('boom') end } end })):spawnConfig('burnside', 'x.pc')
 T.check(not ok, 'spawn error contained'); T.eq(why, 'spawn_failed', 'spawn error reported')
+-- Car prices come from the config's info Value, looked up by the .pc file's name.
+local carEnv = env({ vehicles = function() return { getConfig = function(model, key)
+  if model == 'pickup' and key == 'offroad' then return { Value = 21000, Name = 'Gavril D-Series', Configuration = 'Offroad' } end
+  if key == 'broken' then error('changed') end
+end } end })
+local value, name = G.new(carEnv):carValue('pickup', 'vehicles/pickup/offroad.pc')
+T.eq(value, 21000, 'car Value read'); T.eq(name, 'Gavril D-Series Offroad', 'car name read')
+T.eq((G.new(carEnv):carValue('pickup', 'vehicles/pickup/broken.pc')), nil, 'lookup errors contained')
+T.eq((G.new(carEnv):carValue('pickup', nil)), nil, 'no config file, no Value')
+local entered
+local enterEnv = env({ objectById = function(id) return id == 3 and vehicle(3) or nil end, enter = function(v) entered = v:getID() end })
+T.check(G.new(enterEnv):enter(3), 'enters a parked car'); T.eq(entered, 3, 'player put in that car')
+ok, why = G.new(enterEnv):enter(4)
+T.check(not ok, 'missing car not entered'); T.eq(why, 'vehicle_gone', 'reason given')
 T.done('garage')

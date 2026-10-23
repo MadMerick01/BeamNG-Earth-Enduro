@@ -70,4 +70,19 @@
     </div>
     <p role="status" ng-if="data.partsFeedback" style="margin:8px 0 0;">{{data.partsFeedback}}</p>
   </div>
+  <div style="margin-top:12px;padding-top:10px;border-top:1px solid #568d7a;">
+    <div style="font-weight:bold;">Car</div>
+    <div ng-if="!data.carChange">Pick a car in the game's vehicle selector. The HUD prices it here.</div>
+    <div ng-if="data.carChange">
+      <div>{{data.carChange.name}}: ${{data.carChange.price | number:0}}</div>
+      <div ng-if="data.carChange.extras > 0">Parts changed: ${{data.carChange.extras | number:0}}</div>
+      <div>Trade-in of your car: &minus;${{data.carChange.tradeIn | number:0}}</div>
+      <div style="font-weight:bold;">Total: ${{data.carChange.cost | number:0}}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button type="button" ng-click="buyCar()" ng-disabled="!data.buyCarAllowed" style="padding:7px 12px;">Buy car</button>
+      <button type="button" ng-click="revertCar()" ng-disabled="!data.revertCarAllowed" style="padding:7px 12px;">Revert</button>
+    </div>
+    <p role="status" ng-if="data.carFeedback" style="margin:8px 0 0;">{{data.carFeedback}}</p>
+  </div>
 </div>

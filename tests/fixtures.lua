@@ -51,7 +51,17 @@ end
 function F.garage()
   local g = { damage = 0, vehicleId = 1, model = 'pickup', repairs = 0, accepts = true,
     fitted = { engine = 'pickup_engine_v8', intake = 'pickup_intake_stock' },
-    values = { pickup_engine_v8 = 4000, pickup_intake_stock = 100, pickup_turbo = 2400, pickup_intake_race = 800 } }
+    values = { pickup_engine_v8 = 4000, pickup_intake_stock = 100, pickup_turbo = 2400, pickup_intake_race = 800 },
+    carValues = { pickup = 20000, burnside = 3500, sport = 40000 }, parked = {} }
+  function g:carValue(model) return self.carValues[model], model end
+  -- Other cars still in the world, by id: { model, fitted, damage }.
+  function g:enter(id)
+    local car = self.parked[id]
+    if not car then return false, 'vehicle_gone' end
+    self.parked[id] = nil
+    self.vehicleId, self.model, self.fitted, self.damage = id, car.model, car.fitted, car.damage
+    return true
+  end
   function g:inspect()
     if self.unreadable then return nil, 'damage_unavailable' end
     return { id = self.vehicleId, damage = self.damage }
@@ -61,7 +71,8 @@ function F.garage()
     local names = {}
     for _, part in pairs(self.fitted) do names[part] = part end
     return { id = self.vehicleId, model = self.model, config = { model = self.model, parts = F.copy(self.fitted) },
-      parts = F.copy(self.fitted), values = F.copy(self.values), names = names }
+      parts = F.copy(self.fitted), values = F.copy(self.values), names = names,
+      value = self.carValues[self.model], name = self.model }
   end
   -- Parts menu stand-in: fits parts for free and respawns, which mends the damage.
   function g:fit(slot, part)

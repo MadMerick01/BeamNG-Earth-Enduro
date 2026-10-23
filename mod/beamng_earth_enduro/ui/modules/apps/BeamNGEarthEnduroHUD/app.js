@@ -32,6 +32,12 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.buyParts = function () {
         if (scope.data.buyPartsAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.buyParts() end')
       }
+      scope.buyCar = function () {
+        if (scope.data.buyCarAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.buyCar() end')
+      }
+      scope.revertCar = function () {
+        if (scope.data.revertCarAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.revertCar() end')
+      }
       scope.revertParts = function () {
         if (scope.data.revertPartsAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.revertParts() end')
       }

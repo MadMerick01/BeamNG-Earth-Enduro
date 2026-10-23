@@ -290,9 +290,6 @@ do
   T.eq(g.fitted.turbo, nil, 'driving off puts the paid parts back'); T.eq(m:view().partsChange, nil, 'bill cleared after driving off')
   T.eq(m:view().balance, 10000 - 1370 - 200, 'driving off still pays the repair')
 
-  -- A different vehicle is taken as owned; vehicle buying is not part of Enduro yet.
-  g.vehicleId, ma.vehicle.id = 5, 5; g.fitted = { engine = 'other' }; m:tick(0.1); m:tick(0.1)
-  T.eq(m.ownedParts.id, 5, 'new vehicle adopted'); T.eq(m:view().partsChange, nil, 'no bill for a new vehicle')
   g.partsUnreadable = true; m:vehicleSpawned(); m:tick(0.1); T.check(m.partsCheckDue, 'unreadable parts retried')
 end
 
@@ -479,6 +476,47 @@ do
   m:addTestMoney(); T.check(m:manualSave(), 'saved'); T.eq(mio.files[A].progression.balance, 13000, 'saved balance')
   m:restartStage(); T.check(m:restartStage(), 'restarted')
   T.eq(m:view().balance, 3000, 'restart resets to the starting money'); T.eq(mio.files[B].progression.balance, 3000, 'restart saved with the starting money')
+end
+
+-- Cars: a car picked in the vehicle selector is billed at its game Value less the trade-in of the
+-- player's car; Buy keeps it, Revert or driving off brings the player's car back.
+do
+  local m,_,ma,_,_,g=F.controller()
+  m:tick(0.1); m:addTestMoney()
+  T.eq(m.ownedParts.value, 20000, 'own car priced from its game Value')
+  g.damage = 2000; m:tick(0.1)
+  -- Replaced in place: the swap mends the old car, so its repair comes off the trade-in.
+  g.model, g.fitted, g.damage = 'sport', { engine = 'sport_v12' }, 0; m:vehicleSpawned(); m:tick(0.1)
+  local bill = m:view().carChange
+  T.eq(bill.price, 40000, 'new car priced from its game Value'); T.eq(bill.tradeIn, 10000 - 1100, 'half the old Value less its repair')
+  T.eq(bill.cost, 40000 - 8900, 'bill is price less trade-in'); T.eq(m:view().partsChange, nil, 'no parts bill for a new car')
+  T.check(not m:view().buyCarAllowed, 'Buy car locked when short'); T.check(m:view().revertCarAllowed, 'Revert offered')
+  T.check(not m:buyCar(), 'buy refused when short'); T.eq(m:view().balance, 10000, 'nothing charged when short')
+  T.check(not m:view().repairAllowed, 'repair locked during a car bill'); T.check(not m:repairVehicle(), 'repair waits for the car bill')
+  T.eq(m:savedVehicleDamage(), 2000, 'Save keeps the old car and its damage')
+  g:fit('turbo', 'pickup_turbo'); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().carChange.extras, 2400, 'parts fitted to the new car are billed'); T.eq(m:view().carChange.cost, 33500, 'bill updated live')
+  T.check(m:revertCar(false), 'revert accepted'); T.eq(g.model, 'pickup', 'own car respawned in place')
+  T.eq(g.fitted.intake, 'pickup_intake_stock', 'own car has its paid parts'); T.eq(m:view().repairOwed, 1100, 'respawned car still owes its repair')
+  m:vehicleSpawned(); m:tick(0.1); T.eq(m:view().carChange, nil, 'no bill after reverting'); T.eq(m.ownedParts.value, 20000, 'own car keeps its Value')
+
+  -- A cheap car: the trade-in covers it, and never pays out.
+  g.model, g.fitted = 'burnside', { engine = 'burnside_i6' }; m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().carChange.cost, 0, 'trade-in covers a cheaper car')
+  T.check(m:buyCar(), 'buy succeeds'); T.eq(m:view().balance, 10000, 'trade-in never pays out')
+  T.eq(m.ownedParts.model, 'burnside', 'new car is now owned'); T.eq(m:view().repairOwed, nil, 'old car repair settled by the trade-in')
+  T.eq(m:view().carChange, nil, 'bill cleared'); T.check(not m:buyCar(), 'nothing left to buy')
+
+  -- Spawned as an extra car: driving off puts the player back in their own car, damage and all.
+  ma.pose = F.position(0, 0); g.damage = 300; m:tick(0.1)
+  g.parked[1] = { model = g.model, fitted = F.copy(g.fitted), damage = g.damage }
+  g.vehicleId, ma.vehicle.id, g.model, g.fitted, g.damage = 9, 9, 'sport', { engine = 'sport_v12' }, 0
+  m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().carChange.tradeIn, 1750 - 250, 'extra car trades in the car left behind')
+  ma.pose = F.position(0, 0.001); m:tick(0.1)
+  T.eq(g.vehicleId, 1, 'driving off puts the player back in their car'); T.eq(m:view().carChange, nil, 'bill cleared after driving off')
+  T.eq(g.damage, 300, 'own car keeps its real damage'); T.eq(m:view().balance, 10000, 'nothing charged for driving off')
+  ma.vehicle.id = 1; m:tick(0.1); T.eq(m:view().carChange, nil, 'back in own car, no bill')
 end
 
 -- Display throttling and duplicate mount notifications do not write or spam logs.
