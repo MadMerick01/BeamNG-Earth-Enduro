@@ -103,8 +103,18 @@ test('coordinates copy as one latitude, longitude pair through the game clipboar
   }
   assert.equal(a.commands.length, count)
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
-  assert.equal((html.match(/type="text" readonly/g) || []).length, 1)
+  assert.equal((html.match(/type="text" readonly/g) || []).length, 2)
   assert.ok(html.includes('ng-click="copyCoordinates(data.resume)"'))
   assert.ok(html.includes('ng-disabled="!coordinates(data.resume)"'))
+  assert.ok(html.includes('ng-click="copyCoordinates(data.stage.finish)"'))
+  assert.match(html, /Navigation tip:/)
   assert.doesNotMatch(html, /ng-bind-html|engineLua/)
+})
+test('the stage briefing can be dismissed without sending a command', () => {
+  const a = app()
+  const count = a.commands.length
+  assert.equal(a.scope.briefingDismissed, false)
+  a.scope.dismissBriefing()
+  assert.equal(a.scope.briefingDismissed, true)
+  assert.equal(a.commands.length, count)
 })

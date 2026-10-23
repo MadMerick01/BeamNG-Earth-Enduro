@@ -7,7 +7,7 @@ The mod (folder, ZIP and code names) is still called `beamng_earth_enduro` so ex
 
 ## The rally
 
-**Stages.** The first stage is **Zoji La**, from `34.23713, 74.80177` to `34.43223, 75.80991`. More stages are added by adding an entry to `lua/ge/extensions/beamngEarthEnduro/stages.lua` (an id, a name, start and finish coordinates and a finish radius). The HUD shows the stage name and, once you are on the stage, the straight-line distance to the finish.
+**Stages.** The first stage is **Zoji La**, from `34.224032, 75.029787` near Gund, Kashmir, to `34.43223, 75.80991` near Dras, Ladakh. More stages are added by adding an entry to `lua/ge/extensions/beamngEarthEnduro/stages.lua` (an id, a name, start and finish towns, start and finish coordinates and a finish radius). The HUD shows the stage name, a briefing when the stage starts, and the finish town and coordinates with a Copy button. **Navigation tip:** paste the finish coordinates into the map search and click the finish point; the map plots a route from where you are and shows arrows and road markers in game. Once you are on the stage the HUD also shows the straight-line distance and compass direction to the finish.
 
 **Starting a stage.** A fresh start (no save yet) or a restarted stage gives you the start coordinates to teleport to, $0 and no mileage. When you arrive you are put in the starter car.
 
@@ -33,19 +33,19 @@ This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tes
 1. [Download the latest `beamng_earth_enduro.zip`](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases/latest/download/beamng_earth_enduro.zip). Older builds are listed on the [Releases page](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases).
 2. Copy that single ZIP into your active **BeamNG user folder's `mods` directory**. Use the game launcher's user-folder tools to locate it; do not put the ZIP in Steam's game binaries. **Do not extract it.** Remove/disable an older copy of this mod to avoid duplicate extensions; keep your user settings and save files.
 3. With the supported Earth mod and its companion running separately, enable the mod, load Earth Freeroam, and use **UI Apps → Add App → World Ironman Enduro Rally**. Move/resize it as desired. The mod never replaces the layout.
-4. The HUD shows the start coordinates, the Zoji La start **`34.23713, 74.80177`** for a new profile. Copy them, paste them into the BeamNG.Earth map and teleport there. Once you arrive, the HUD says you are in the right place and Save is available.
+4. The HUD shows the start coordinates, the Zoji La start **`34.224032, 75.029787`** for a new profile. Copy them, paste them into the BeamNG.Earth map and teleport there. Once you arrive, the HUD says you are in the right place and Save is available.
 
 No JSON edits, extraction, Python, Node.js or command-line commands are needed to install or play the rally. The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. The mod remains independent of Earth. ZIPs are published as GitHub Releases, not committed to the implementation source tree.
 
 ## Default base and optional advanced configuration
 
-The built-in base (where a new profile starts) is the first stage's start, Zoji La: **latitude `34.23713`, longitude `74.80177`**. It is used automatically when no user configuration exists. A `base` in the configuration moves the first stage's start, which is mainly useful for testing; the finish stays where the stage puts it. No settings files are created on load, and no existing configuration or saved profile is overwritten.
+The built-in base (where a new profile starts) is the first stage's start, Zoji La: **latitude `34.224032`, longitude `75.029787`**. It is used automatically when no user configuration exists. A `base` in the configuration moves the first stage's start, which is mainly useful for testing; the finish stays where the stage puts it. No settings files are created on load, and no existing configuration or saved profile is overwritten.
 
 Optional overrides remain available at `<user folder>/settings/beamngEarthEnduro/config.json` (VFS `/settings/beamngEarthEnduro/config.json`). Only users who want an override need to copy/edit the included `config.example.json`:
 
 ```json
 {
-  "base": { "latitude": 34.23713, "longitude": 74.80177 },
+  "base": { "latitude": 34.224032, "longitude": 75.029787 },
   "resumeRadiusMetres": 50
 }
 ```

@@ -649,6 +649,7 @@ function M.new(deps)
     elseif self.state == 'READY' and self.wreck then label = 'WRECKED'
     elseif self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
     local active = self.profile ~= nil and not self.error and not self.gameOver
+    local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.gameOver
     return {
       state = self.state, stateLabel = label, mode = self.mode,
       sessionStatus = status, arrived = self.arrived,
@@ -656,10 +657,13 @@ function M.new(deps)
       base = base,
       resume = resume,
       resumeDistanceMetres = current and resume and location.distance(current, resume) or nil,
-      stage = self.stage and { name = self.stage.name, finish = location.copy(self.stage.finish) } or nil,
-      -- Straight-line distance, shown once the player is on the stage.
-      finishDistanceMetres = current and self.arrived and self.stage and not self.gameOver
-        and location.distance(current, self.stage.finish) or nil,
+      stage = self.stage and {
+        name = self.stage.name, finish = location.copy(self.stage.finish),
+        startTown = self.stage.startTown, finishTown = self.stage.finishTown, briefing = self.stage.briefing,
+      } or nil,
+      -- Straight-line distance and compass direction, shown once the player is on the stage.
+      finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
+      finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
       stageFinished = self.stageFinished, gameOver = self.gameOver,
       wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)) } or nil,
       restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error,
