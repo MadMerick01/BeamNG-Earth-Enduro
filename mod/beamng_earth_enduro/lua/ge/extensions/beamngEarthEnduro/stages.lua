@@ -2,7 +2,7 @@
 -- store it), the name the HUD shows, the start and finish coordinates, and the towns nearest the
 -- start and finish, which the HUD shows so the player can find them on the map, and a short
 -- briefing shown when the stage starts, the money the player starts it with, and the time limit
--- in seconds (the stage's Google Maps driving time). The finish counts once the vehicle is within
+-- in seconds (the stage's Google Maps driving time; set targetIsEstimate = true to mark a guess). The finish counts once the vehicle is within
 -- finishRadiusMetres of it. The first stage is where a new player starts.
 local location = require('beamngEarthEnduro/location')
 local M = {}
@@ -17,9 +17,8 @@ M.list = {
     finish = { latitude = 34.43223, longitude = 75.80991 },
     finishRadiusMetres = 100,
     startingMoney = 3000,
-    -- PLACEHOLDER: an estimate of 3 h 30 min until the Google Maps trip time from Gund to Dras is
-    -- known. Replace it with that time and remove targetIsEstimate.
-    targetSeconds = 3.5 * 3600, targetIsEstimate = true,
+    -- Google Maps trip time from Gund to Dras: 2 h 30 min.
+    targetSeconds = 2.5 * 3600,
   },
 }
 
