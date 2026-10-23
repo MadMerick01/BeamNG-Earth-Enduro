@@ -38,6 +38,14 @@ test('Save only sends the fixed command when Lua enabled it', () => {
   a.scope.reloadEnduro()
   assert.match(a.commands[2], /\.reload\(\)/)
 })
+test('test money button only sends the fixed command when Lua enabled it', () => {
+  const a = app()
+  a.scope.addTestMoney()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', testMoneyAllowed: true })
+  a.scope.addTestMoney()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.addTestMoney() end')
+})
 test('stale backend removes Save authorization', () => {
   const a = app()
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })

@@ -15,7 +15,7 @@ T.check(c:view().baseDistanceMetres>100000,'HUD has geographic base distance')
 T.check(c.profile~=nil,'profile created at first position'); T.eq(c.profile.generation,0,'new profile in memory')
 T.eq(c:view().target,nil,'no saved location shown before the first save')
 T.eq(c.profile.base.latitude,0,'new profile uses configured base')
-T.eq(io.writes,0,'starting a session has no disk writes'); T.eq(c.profile.progression.balance,0,'placeholder balance')
+T.eq(io.writes,0,'starting a session has no disk writes'); T.eq(c.profile.progression.balance,0,'new profile starts with no money')
 local initialTarget=F.copy(c.startupTarget)
 adapter.pose=F.position(2,3); c:tick(0.1)
 T.eq(c.state,'READY','travel anywhere stays ready')
@@ -28,7 +28,7 @@ T.eq(c.profile.vehicle.model,'pickup','available vehicle identity saved')
 T.check(P.equal(c.startupTarget,initialTarget),'save does not mutate arrival target')
 local disk=F.copy(io.files[A])
 F.advance(c,10); T.eq(io.writes,1,'no periodic or per-frame saves')
-T.eq(c.profile.progression.balance,0,'no economy awarded')
+T.eq(c.profile.progression.balance,0,'standing still earns no money')
 
 -- A separate controller represents a real restart: the target is the saved location.
 c,io,adapter=F.controller({io=io})
@@ -135,6 +135,34 @@ do
   local before=r:view().totalDistanceKm; ra.pose=F.position(); r:reload(); r:tick(0.1)
   T.eq(r.state,'READY','reload restarts the session at the current position')
   T.near(r:view().totalDistanceKm,0.21,1e-6,'reload discards unsaved mileage'); T.check(before>0.21,'had unsaved mileage')
+end
+
+-- Money: $50 per counted kilometre, plus a +$10000 test button; both kept by manual Save.
+do
+  local m,mio,ma=F.controller()
+  local north = 1 / 111195.0802
+  T.check(not m:addTestMoney(),'test money needs an active profile'); T.eq(m:view().testMoneyAllowed,false,'test button disabled before a position')
+  m:tick(0.1)
+  for i=1,100 do ma.pose=F.position(i*10*north); m:tick(0.5) end -- 1 km at 20 m/s
+  T.eq(m:view().balance,50,'driving 1 km earns $50')
+  T.eq(m:view().unsavedBalance,50,'earned money shown as unsaved')
+  ma.pose=F.position(1010*north); m:tick(0.5)
+  T.eq(m:view().balance,50,'10 m earns 50 cents, not yet a whole dollar')
+  ma.pose=F.position(1020*north); m:tick(0.5)
+  T.eq(m:view().balance,51,'fractions of a dollar carry over')
+  ma.pose=F.position(60000*north); m:tick(0.1)
+  T.eq(m:view().balance,51,'teleports earn no money')
+  T.check(m:view().testMoneyAllowed,'test button enabled while active')
+  T.check(m:addTestMoney(),'test money added'); T.eq(m:view().balance,10051,'test button adds $10000')
+  T.eq(mio.writes,0,'earning money never writes to disk')
+  T.check(m:manualSave(),'money saved'); T.eq(mio.files[A].progression.balance,10051,'save file holds balance')
+  T.eq(m:view().unsavedBalance,0,'nothing unsaved after save')
+  m:addTestMoney()
+  local r=F.controller({io=mio})
+  T.eq(r:view().balance,10051,'restart loads saved balance, unsaved money discarded')
+  m:reload(); T.eq(m:view().balance,10051,'reload discards unsaved money')
+  mio.writeFails=true; m:tick(0.1); m:manualSave()
+  T.check(not m:addTestMoney(),'test money locked after a save error')
 end
 
 -- Display throttling and duplicate mount notifications do not write or spam logs.

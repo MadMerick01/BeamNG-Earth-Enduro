@@ -17,6 +17,9 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.save = function () {
         if (scope.data.saveAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.save() end')
       }
+      scope.addTestMoney = function () {
+        if (scope.data.testMoneyAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.addTestMoney() end')
+      }
       scope.reloadEnduro = function () {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.reload() end')
       }

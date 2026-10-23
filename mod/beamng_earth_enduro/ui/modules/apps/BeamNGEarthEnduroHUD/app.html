@@ -29,11 +29,12 @@
     </label>
   </div>
   <div ng-if="data.vehicle">Vehicle: {{data.vehicle.model || 'Active vehicle'}} <span ng-if="data.vehicle.id != null">(#{{data.vehicle.id}})</span></div>
-  <div style="margin-top:8px;">Balance (reserved): {{data.balance | number:0}}</div>
+  <div style="margin-top:8px;">Money: ${{data.balance | number:0}}<span ng-if="data.unsavedBalance > 0"> (${{data.unsavedBalance | number:0}} unsaved)</span></div>
   <div>Mileage: {{data.totalDistanceKm | number:2}} km<span ng-if="data.unsavedDistanceKm >= 0.005"> ({{data.unsavedDistanceKm | number:2}} km unsaved)</span></div>
   <div style="display:flex;gap:8px;margin-top:10px;">
     <button type="button" ng-click="save()" ng-disabled="!data.saveAllowed" style="padding:7px 12px;">Save</button>
     <button type="button" ng-click="reloadEnduro()" style="padding:7px 12px;">Reload Enduro</button>
+    <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
   </div>
   <p role="status" style="margin:8px 0 0;">{{data.saveFeedback}}</p>
 </div>
