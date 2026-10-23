@@ -29,7 +29,7 @@
     </label>
   </div>
   <div ng-if="data.vehicle">Vehicle: {{data.vehicle.model || 'Active vehicle'}} <span ng-if="data.vehicle.id != null">(#{{data.vehicle.id}})</span></div>
-  <div style="margin-top:8px;">Money: ${{data.balance | number:0}}<span ng-if="data.unsavedBalance > 0"> (${{data.unsavedBalance | number:0}} unsaved)</span></div>
+  <div style="margin-top:8px;">Money: ${{data.balance | number:0}}<span ng-if="data.unsavedBalance > 0"> (${{data.unsavedBalance | number:0}} unsaved)</span><span ng-if="data.unsavedSpending > 0"> (${{data.unsavedSpending | number:0}} spent, unsaved)</span></div>
   <div>Mileage: {{data.totalDistanceKm | number:2}} km<span ng-if="data.unsavedDistanceKm >= 0.005"> ({{data.unsavedDistanceKm | number:2}} km unsaved)</span></div>
   <div style="display:flex;gap:8px;margin-top:10px;">
     <button type="button" ng-click="save()" ng-disabled="!data.saveAllowed" style="padding:7px 12px;">Save</button>
@@ -37,4 +37,13 @@
     <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
   </div>
   <p role="status" style="margin:8px 0 0;">{{data.saveFeedback}}</p>
+  <div style="margin-top:12px;padding-top:10px;border-top:1px solid #568d7a;">
+    <div style="font-weight:bold;">Repair</div>
+    <div ng-if="data.repairQuote != null">Repair quote: ${{data.repairQuote | number:0}}</div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button type="button" ng-click="requestRepairQuote()" ng-disabled="!data.repairQuoteAllowed" style="padding:7px 12px;">Get repair quote</button>
+      <button type="button" ng-click="repairVehicle()" ng-disabled="!data.repairAllowed" style="padding:7px 12px;">Repair</button>
+    </div>
+    <p role="status" ng-if="data.repairFeedback" style="margin:8px 0 0;">{{data.repairFeedback}}</p>
+  </div>
 </div>

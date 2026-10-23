@@ -4,6 +4,7 @@ local persistence = require('beamngEarthEnduro/persistence')
 local diagnostics = require('beamngEarthEnduro/diagnostics')
 local hud = require('beamngEarthEnduro/hud')
 local earthAdapter = require('beamngEarthEnduro/earthAdapter')
+local garage = require('beamngEarthEnduro/garage')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -11,6 +12,27 @@ local MAX_DRIVING_SPEED = 150
 local EARNINGS_PER_KM = 50
 local TEST_MONEY = 10000
 local MAX_BALANCE = 9007199254740991
+-- Repair pricing from the vehicle's overall damage (BeamNG's own traffic code treats about 50 as a
+-- scratch, 1000 as moderate and 30000 as major). Tune these after testing in game.
+local REPAIR_MIN_DAMAGE = 50
+local REPAIR_CALLOUT_FEE = 100
+local REPAIR_COST_PER_DAMAGE = 0.5
+local MAX_REPAIR_COST = 20000
+
+-- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
+function M.repairCost(damage)
+  if type(damage) ~= 'number' or damage ~= damage or damage < REPAIR_MIN_DAMAGE then return 0 end
+  return math.min(MAX_REPAIR_COST, math.floor(REPAIR_CALLOUT_FEE + damage * REPAIR_COST_PER_DAMAGE + 0.5))
+end
+
+local function dollars(amount)
+  local text = tostring(math.floor(amount))
+  repeat
+    local n
+    text, n = text:gsub('^(-?%d+)(%d%d%d)', '%1,%2')
+  until n == 0
+  return '$' .. text
+end
 
 local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
@@ -31,7 +53,7 @@ function M.new(deps)
     state = 'CONFIG_REQUIRED', clock = 0, sessionVerified = false,
     diag = diagnostics.new(deps.log), adapter = deps.adapter,
     store = persistence.new(deps.io), ui = hud.new(deps.trigger),
-    feedback = 'Not saved this session.',
+    feedback = 'Not saved this session.', garage = deps.garage,
   }
 
   function c:transition(nextState, reason)
@@ -44,6 +66,7 @@ function M.new(deps)
     self.adapter:invalidate()
     self.sessionVerified, self.lastSample, self.error, self.odometer = false, nil, nil, nil
     self.earningsCarry = 0
+    self.quote, self.repairFeedback = nil, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -84,6 +107,96 @@ function M.new(deps)
     progression.balance = math.min(MAX_BALANCE, progression.balance + whole)
   end
 
+  function c:canAfford(amount)
+    return self.profile ~= nil and not self.error and type(amount) == 'number' and amount >= 0
+      and amount == math.floor(amount) and amount <= self.profile.progression.balance
+  end
+
+  -- Every purchase pays through here: refuses when the balance is short, never goes below zero.
+  -- Like earnings, the new balance is only kept on disk by Save.
+  function c:spend(amount, label)
+    if not self:canAfford(amount) then
+      self.diag:event('spend_rejected', tostring(label) .. ':' .. tostring(amount), 'W')
+      return false
+    end
+    self.profile.progression.balance = self.profile.progression.balance - amount
+    self.diag:event('spend', tostring(label) .. ':' .. tostring(amount))
+    return true
+  end
+
+  -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
+  function c:priceRepair()
+    if not self.profile or self.error then return nil, 'unavailable' end
+    if not self.garage then return nil, 'repair_unavailable' end
+    local vehicle, why = self.garage:inspect()
+    if not vehicle then return nil, why end
+    return vehicle, M.repairCost(vehicle.damage)
+  end
+
+  local repairMessages = {
+    unavailable = 'Repairs are unavailable right now. Check the status above.',
+    vehicle_required = 'Enter a vehicle to get a repair quote.',
+  }
+  local function repairProblem(why)
+    return repairMessages[why] or 'Could not read the vehicle damage. Try again in a moment.'
+  end
+
+  function c:requestRepairQuote()
+    local vehicle, cost = self:priceRepair()
+    if not vehicle then
+      self.quote, self.repairFeedback = nil, repairProblem(cost)
+      self.diag:event('repair_quote_failed', tostring(cost), 'W')
+      return false
+    end
+    self.diag:event('repair_quote', string.format('%.1f damage, %d', vehicle.damage, cost))
+    if cost == 0 then
+      self.quote, self.repairFeedback = nil, 'No damage to repair.'
+      return true
+    end
+    self.quote = { vehicleId = vehicle.id, cost = cost }
+    self.repairFeedback = self:canAfford(cost) and 'Press Repair to fix every damaged part.'
+      or ('Not enough money yet. You need ' .. dollars(cost - self.profile.progression.balance) .. ' more.')
+    return true
+  end
+
+  -- Charges the quoted price and repairs. A changed vehicle or new damage needs a fresh quote first,
+  -- and the player is only charged once the game has accepted the repair.
+  function c:repairVehicle()
+    if not self.quote then
+      self.repairFeedback = 'Get a repair quote first.'
+      return false
+    end
+    local vehicle, cost = self:priceRepair()
+    if not vehicle then
+      self.quote, self.repairFeedback = nil, repairProblem(cost)
+      self.diag:event('repair_rejected', tostring(cost), 'W')
+      return false
+    end
+    if vehicle.id ~= self.quote.vehicleId or cost ~= self.quote.cost then
+      self.quote = nil
+      self:requestRepairQuote()
+      if self.quote then
+        self.repairFeedback = 'The damage changed, so the quote was updated. Press Repair again to accept it.'
+      end
+      return false
+    end
+    if not self:canAfford(cost) then
+      self.repairFeedback = 'Not enough money. You need ' .. dollars(cost - self.profile.progression.balance) .. ' more.'
+      self.diag:event('repair_rejected', 'insufficient_funds', 'W')
+      return false
+    end
+    local ok, why, detail = self.garage:repair()
+    if not ok then
+      self.repairFeedback = 'Repair failed. You have not been charged.'
+      self.diag:event('repair_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+      return false
+    end
+    self:spend(cost, 'repair')
+    self.quote = nil
+    self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. Save to keep the new balance.'
+    return true
+  end
+
   -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
   function c:addMileage(sample, dt)
     if self.odometer and location.finite(dt) and dt > 0 then
@@ -121,6 +234,10 @@ function M.new(deps)
     local target = self.profile and self.profile.generation > 0 and self.profile.resume or nil
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
+    -- A quote only stands for the vehicle it was made for.
+    local quote = self.quote
+    local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
+    if quote and (self.error or vehicleId ~= quote.vehicleId) then quote = nil end
     if self.state == 'CONFIG_REQUIRED' then
       status = 'Set valid base coordinates in the Enduro configuration, then choose Reload Enduro.'
     elseif self.state == 'ERROR' then
@@ -141,7 +258,12 @@ function M.new(deps)
       totalDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0,
       unsavedDistanceKm = self.profile and math.max(0, self.profile.progression.totalDistanceKm - self.savedDistanceKm) or 0,
       unsavedBalance = self.profile and math.max(0, self.profile.progression.balance - self.savedBalance) or 0,
+      unsavedSpending = self.profile and math.max(0, self.savedBalance - self.profile.progression.balance) or 0,
       testMoneyAllowed = self.profile ~= nil and not self.error,
+      repairQuoteAllowed = self.profile ~= nil and not self.error and self.garage ~= nil,
+      repairQuote = quote and quote.cost or nil,
+      repairAllowed = quote ~= nil,
+      repairFeedback = self.repairFeedback,
       saveAllowed = self.state == 'READY',
       saveFeedback = self.feedback,
     }
@@ -225,7 +347,7 @@ local function gameIO()
 end
 local function ensure()
   if not active then
-    active = M.new({ io = gameIO(), adapter = earthAdapter.new(), log = rawget(_G, 'log'),
+    active = M.new({ io = gameIO(), adapter = earthAdapter.new(), garage = garage.new(), log = rawget(_G, 'log'),
       trigger = function(event, payload) if guihooks then guihooks.trigger(event, payload) end end })
   end
   return active
@@ -251,6 +373,8 @@ function M.onPreRender(dtReal)
 end
 function M.save() return safely(function() return ensure():manualSave() end) end
 function M.addTestMoney() return safely(function() return ensure():addTestMoney() end) end
+function M.requestRepairQuote() return safely(function() return ensure():requestRepairQuote() end) end
+function M.repairVehicle() return safely(function() return ensure():repairVehicle() end) end
 function M.reload() return safely(function() ensure():reload() end) end
 function M.uiMounted(on) return safely(function() ensure():mount(on == true) end) end
 function M.getState() return safely(function() return ensure():view() end) end
