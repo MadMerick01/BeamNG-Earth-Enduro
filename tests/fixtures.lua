@@ -46,16 +46,30 @@ function F.adapter(pose)
   end
   return a
 end
--- Stand-in for the garage: damage to report and whether the game accepts a repair.
+-- Stand-in for the garage: damage to report, fitted parts and whether the game accepts a respawn.
 function F.garage()
-  local g = { damage = 0, vehicleId = 1, repairs = 0, accepts = true }
+  local g = { damage = 0, vehicleId = 1, model = 'pickup', repairs = 0, accepts = true,
+    fitted = { engine = 'pickup_engine_v8', intake = 'pickup_intake_stock' },
+    values = { pickup_engine_v8 = 4000, pickup_intake_stock = 100, pickup_turbo = 2400, pickup_intake_race = 800 } }
   function g:inspect()
     if self.unreadable then return nil, 'damage_unavailable' end
     return { id = self.vehicleId, damage = self.damage }
   end
-  function g:repair()
+  function g:parts()
+    if self.partsUnreadable then return nil, 'parts_unavailable' end
+    local names = {}
+    for _, part in pairs(self.fitted) do names[part] = part end
+    return { id = self.vehicleId, model = self.model, config = { model = self.model, parts = F.copy(self.fitted) },
+      parts = F.copy(self.fitted), values = F.copy(self.values), names = names }
+  end
+  -- Parts menu stand-in: fits parts for free and respawns, which mends the damage.
+  function g:fit(slot, part)
+    self.fitted[slot], self.damage = part, 0
+  end
+  function g:repair(config)
     if not self.accepts then return false, 'repair_failed', 'rejected' end
     self.repairs, self.damage = self.repairs + 1, 0
+    if config then self.fitted = F.copy(config.parts) end
     return true
   end
   return g

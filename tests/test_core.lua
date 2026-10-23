@@ -203,6 +203,65 @@ do
   m:reload(); T.eq(m.quote,nil,'reload clears the quote')
 end
 
+-- Parts: changes made in the game's parts menu are billed against the paid parts, Buy charges,
+-- Revert or driving off puts the paid parts back, and the damage a change mended is billed too.
+do
+  local Core = require('beamngEarthEnduro/core')
+  local owned = { parts = { a = 'x', b = 'y' }, values = { x = 1000, y = 100 }, names = { x = 'X' } }
+  T.eq(Core.partsDiff(owned, owned), nil, 'same parts, nothing to bill')
+  local diff = Core.partsDiff(owned, { parts = { a = 'x', b = 'z', c = 'w' }, values = { z = 800 } })
+  T.eq(#diff.added, 2, 'swapped and new parts billed'); T.eq(#diff.removed, 1, 'swapped part traded in')
+  T.eq(diff.cost, 800 + 250 - 30, 'part values, flat price for unvalued parts, 30% trade-in')
+  T.eq(Core.partsDiff(owned, { parts = { a = '', b = 'y' }, values = {} }).cost, 0, 'removing parts never pays out')
+
+  local m,_,ma,_,_,g=F.controller()
+  m:tick(0.1); T.eq(m.ownedParts.parts.intake, 'pickup_intake_stock', 'fitted parts taken as paid for')
+  T.eq(m:view().partsChange, nil, 'no bill before a change')
+  g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
+  local bill = m:view().partsChange
+  T.eq(bill.partsCost, 770, 'live quote after a parts menu change'); T.eq(bill.repair, 0, 'undamaged car has no repair')
+  T.eq(bill.added[1].name, 'pickup_intake_race', 'quote lists the new part'); T.eq(bill.removed[1].name, 'pickup_intake_stock', 'quote lists the old part')
+  T.check(not m:view().buyPartsAllowed, 'Buy locked when short'); T.check(m:view().revertPartsAllowed, 'Revert offered')
+  T.check(not m:buyParts(), 'buy refused when short'); T.eq(m:view().balance, 0, 'nothing charged when short')
+  T.check(m:revertParts(false), 'revert accepted'); T.eq(g.fitted.intake, 'pickup_intake_stock', 'paid parts put back')
+  m:vehicleSpawned(); m:tick(0.1); T.eq(m:view().partsChange, nil, 'no bill after reverting')
+
+  -- Trying parts on and swapping back costs nothing.
+  g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
+  g:fit('intake', 'pickup_intake_stock'); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().partsChange, nil, 'swapping back clears the bill'); T.eq(m:view().partsFeedback, 'Part changes undone. Nothing to pay.', 'told nothing is owed')
+
+  -- A damaged car: the change mends it, so the repair joins the bill and stays after more changes.
+  m:addTestMoney(); g.damage = 1000; m:tick(0.1)
+  T.check(m:requestRepairQuote(), 'repair quoted before the change')
+  g:fit('turbo', 'pickup_turbo'); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().partsChange.repair, 600, 'repair added to the parts bill'); T.eq(m:view().partsChange.cost, 3000, 'bill totals parts and repair')
+  T.eq(m:view().repairQuote, nil, 'separate repair quote dropped'); T.check(not m:repairVehicle(), 'repair waits for the parts bill')
+  g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().partsChange.repair, 600, 'repair kept across changes'); T.eq(m:view().partsChange.cost, 3770, 'bill updated live')
+  T.check(m:view().buyPartsAllowed, 'Buy enabled when affordable')
+  g.fitted.turbo = nil
+  T.check(not m:buyParts(), 'changed parts re-quote instead of charging'); T.eq(m:view().partsChange.cost, 1370, 're-quoted bill')
+  T.check(m:buyParts(), 'buy succeeds'); T.eq(m:view().balance, 10000 - 1370, 'bill charged once')
+  T.eq(m:view().partsChange, nil, 'bill cleared'); T.eq(m.ownedParts.parts.intake, 'pickup_intake_race', 'new parts now owned')
+  T.check(not m:buyParts(), 'nothing left to buy')
+
+  -- Driving off without paying puts the paid parts back and still charges the repair.
+  ma.pose = F.position(0, 0); m:tick(0.1); g.damage = 200; m:tick(0.1)
+  g:fit('turbo', 'pickup_turbo'); m:vehicleSpawned(); m:tick(0.1)
+  ma.pose = F.position(0, 0.0001); m:tick(0.1); T.check(m:view().partsChange ~= nil, 'short move keeps the bill')
+  g.accepts = false; ma.pose = F.position(0, 0.001); m:tick(0.1); m:tick(0.1)
+  T.check(m:view().partsChange ~= nil, 'failed revert keeps the bill'); T.eq(g.fitted.turbo, 'pickup_turbo', 'parts unchanged on failed revert')
+  g.accepts = true; ma.pose = F.position(0, 0.002); m:tick(0.1)
+  T.eq(g.fitted.turbo, nil, 'driving off puts the paid parts back'); T.eq(m:view().partsChange, nil, 'bill cleared after driving off')
+  T.eq(m:view().balance, 10000 - 1370 - 200, 'driving off still pays the repair')
+
+  -- A different vehicle is taken as owned; vehicle buying is not part of Enduro yet.
+  g.vehicleId, ma.vehicle.id = 5, 5; g.fitted = { engine = 'other' }; m:tick(0.1); m:tick(0.1)
+  T.eq(m.ownedParts.id, 5, 'new vehicle adopted'); T.eq(m:view().partsChange, nil, 'no bill for a new vehicle')
+  g.partsUnreadable = true; m:vehicleSpawned(); m:tick(0.1); T.check(m.partsCheckDue, 'unreadable parts retried')
+end
+
 -- Display throttling and duplicate mount notifications do not write or spam logs.
 local events,logs
 controller,localIO,a,events,logs=F.controller(); controller:mount(true)

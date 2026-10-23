@@ -55,6 +55,15 @@ test('repair buttons only send fixed commands when Lua enabled them', () => {
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.requestRepairQuote() end')
   assert.equal(a.commands[2], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.repairVehicle() end')
 })
+test('parts buttons only send fixed commands when Lua enabled them', () => {
+  const a = app()
+  a.scope.buyParts(); a.scope.revertParts()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', buyPartsAllowed: true, revertPartsAllowed: true })
+  a.scope.buyParts(); a.scope.revertParts()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.buyParts() end')
+  assert.equal(a.commands[2], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.revertParts() end')
+})
 test('stale backend removes Save authorization', () => {
   const a = app()
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })

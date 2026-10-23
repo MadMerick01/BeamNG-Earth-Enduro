@@ -37,4 +37,31 @@ ok, why = G.new(env({ manager = function() return { getVehicleData = function() 
 T.eq(why, 'config_unavailable', 'no config, no repair')
 ok, why = G.new(env({ vehicles = function() return { replaceVehicle = function() error('boom') end } end })):repair()
 T.check(not ok, 'respawn error contained'); T.eq(why, 'repair_failed', 'respawn error reported')
+-- Parts: flattens the 0.39 partsTree and prices parts from their jbeam information.value.
+local tree = { chosenPartName = 'pickup', path = '/', children = {
+  pickup_engine = { chosenPartName = 'pickup_engine_v8', path = '/pickup_engine/', children = {
+    pickup_intake = { chosenPartName = 'pickup_intake_race', path = '/pickup_engine/pickup_intake/' } } },
+  pickup_bumper = { chosenPartName = '', path = '/pickup_bumper/' } } }
+local partsEnv = env({
+  manager = function() return { getVehicleData = function() return { ioCtx = {}, config = {
+    model = 'pickup', partsTree = tree, vars = { ['$tune'] = 2 }, paints = { 'red' } } } end } end,
+  jbeam = function() return { getPart = function(_, name)
+    if name == 'pickup_intake_race' then return { information = { value = 800, name = 'Race Intake' } } end
+    if name == 'pickup_engine_v8' then return { information = { value = 'bad' } } end
+    if name == 'pickup' then error('changed') end
+  end } end,
+})
+local parts = G.new(partsEnv):parts()
+T.eq(parts.id, 7, 'parts for the player vehicle'); T.eq(parts.model, 'pickup', 'parts model')
+T.eq(parts.parts['/pickup_engine/pickup_intake/'], 'pickup_intake_race', 'nested slot flattened')
+T.eq(parts.parts['/pickup_bumper/'], '', 'empty slot kept as empty')
+T.eq(parts.values.pickup_intake_race, 800, 'part value read'); T.eq(parts.names.pickup_intake_race, 'Race Intake', 'part name read')
+T.eq(parts.values.pickup_engine_v8, nil, 'unreadable value left out'); T.eq(parts.names.pickup, 'pickup', 'lookup errors contained')
+_, why = G.new(env()):parts()
+T.eq(why, 'parts_unavailable', 'no parts tree, no parts')
+local revert = { model = 'pickup', partsTree = { chosenPartName = 'pickup' }, vars = { ['$tune'] = 1 }, paints = { 'blue' } }
+T.check(G.new(partsEnv):repair(revert), 'respawn with given parts accepted')
+T.eq(replaced.options.config.partsTree.chosenPartName, 'pickup', 'respawns with the given parts')
+T.eq(replaced.options.config.vars['$tune'], 2, 'keeps the current tuning'); T.eq(replaced.options.config.paints[1], 'red', 'keeps the current paint')
+T.eq(revert.vars['$tune'], 1, 'given config left unchanged')
 T.done('garage')

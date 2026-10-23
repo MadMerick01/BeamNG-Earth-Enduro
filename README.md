@@ -1,8 +1,8 @@
 # BeamNG-Earth Enduro
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, mileage tracking, money earned by driving, and paid vehicle repairs.
-Vehicle ownership, buying vehicles and upgrades are deferred.
+**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, mileage tracking, money earned by driving, paid vehicle repairs and paid part changes.
+Vehicle ownership and buying vehicles are deferred.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
 **Windows BeamNG.drive acceptance is not yet tested.** Enduro only needs a valid vehicle position from Earth; it does not wait for Earth's terrain, roads or streaming to finish.
@@ -49,6 +49,8 @@ An existing profile retains its original base even when the configuration change
    The HUD's **Money** goes up by **$50 for every kilometre** counted as mileage, so teleports earn nothing. The balance is whole dollars; part-dollars carry over while you keep driving. For testing, the **+$10000 (test)** button adds $10,000 straight away. Like mileage, money earned since the last Save is shown as *unsaved*, kept by **Save** and lost on exit or **Reload Enduro** without saving.
 
    **Repair:** press **Get repair quote** to price the damage to the vehicle you are in. The price comes from the vehicle's overall damage: $100 call-out plus $0.50 per damage point, nothing under 50 points (a scratch), capped at $20,000. Press **Repair** to pay it; the vehicle is respawned where it stands with its current parts, tuning and paint, so every part is new. If you cannot afford it, nothing is charged or repaired and the HUD says how much more you need. If the damage changes or you switch vehicle after the quote, Repair re-quotes instead of charging. Money spent is shown as *spent, unsaved* until you **Save**.
+
+   **Parts:** change parts in BeamNG's own parts menu as usual. The parts the vehicle had when you got in count as paid for. After each change the HUD's **Parts** section lists the parts added and taken off and the bill. A part costs its value from the game's part files, or $250 if it has none; parts taken off in the same change are traded in for 30% of their value, which lowers the bill but never pays out. Press **Buy** to pay and keep the parts (it is disabled when you cannot afford it), or **Revert** to put the paid parts back; tuning and paint are free and kept either way. Trying parts on and swapping back costs nothing. If you drive more than 25 m without paying, the paid parts are put back automatically. A part change respawns the vehicle and mends all damage, so when the vehicle was damaged the repair price is added to the bill, and it is still charged on Revert or driving off, as far as your balance allows. Repair is locked while a parts bill is open. Switching to a different vehicle takes its parts as paid for, since buying vehicles is not part of Enduro yet.
 3. Restart the game. The HUD shows your last saved coordinates and your distance from them. To continue from there, copy them and use **Earth's own teleport interface**; Enduro never submits the teleport. Saving is not locked to that spot, so the next Save records wherever the vehicle is.
 
 The Save button reads the vehicle position again at click time and saves that. It cannot save with no vehicle or invalid coordinates. Vehicle model is saved when available. Configuration, altitude and heading are omitted because a reliable native retrieval contract for those values has not been established for this task. Enduro does not spawn or restore vehicles when loading a save; the only respawn is the in-place one a paid repair does.
