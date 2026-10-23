@@ -17,6 +17,32 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       // The briefing stays hidden for the rest of the session once the player dismisses it.
       scope.briefingDismissed = false
       scope.dismissBriefing = function () { scope.briefingDismissed = true }
+      // Each part of the HUD sits on its own tab so the app stays short.
+      scope.tabs = [
+        { id: 'stage', label: 'Stage' }, { id: 'nav', label: 'Navigation' },
+        { id: 'parts', label: 'Parts' }, { id: 'car', label: 'New Car' },
+        { id: 'repair', label: 'Repair' }, { id: 'about', label: 'About' }
+      ]
+      scope.tab = 'stage'
+      scope.setTab = function (id) { scope.tab = id }
+      // Marks a tab that has something waiting for the player.
+      var alerts = {
+        nav: function (d) { return !!d.resume },
+        parts: function (d) { return !!d.partsChange },
+        car: function (d) { return !!d.carChange },
+        repair: function (d) { return !!d.wreck || d.repairOwed > 0 }
+      }
+      scope.tabAlert = function (id) { return !!alerts[id] && alerts[id](scope.data || {}) }
+      // Opens a tab when its bill, wreck or coordinates first appear; the player can switch away after.
+      var autoOpen = [
+        ['repair', function (d) { return !!d.wreck }], ['car', alerts.car],
+        ['parts', alerts.parts], ['nav', alerts.nav]
+      ]
+      var follow = function (previous, next) {
+        for (var i = 0; i < autoOpen.length; i++) {
+          if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
+        }
+      }
       scope.save = function () {
         if (scope.data.saveAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.save() end')
       }
@@ -63,7 +89,11 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.$on('BeamNGEarthEnduroState', function (event, data) {
         if (disposed || !data || typeof data.state !== 'string') return
         lastMessage = Date.now()
-        scope.$evalAsync(function () { if (!disposed) scope.data = data })
+        scope.$evalAsync(function () {
+          if (disposed) return
+          follow(scope.data || {}, data)
+          scope.data = data
+        })
       })
       mount(true)
       var heartbeat = setInterval(function () {
