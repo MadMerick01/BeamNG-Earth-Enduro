@@ -7,7 +7,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       'use strict'
       var disposed = false
       var lastMessage = Date.now()
-      scope.data = { state: 'EARTH_UNAVAILABLE', stateLabel: 'WAITING FOR ENDURO', saveAllowed: false }
+      scope.data = { state: 'EARTH_UNAVAILABLE', stateLabel: 'WAITING FOR THE RALLY', saveAllowed: false }
       var call = function (command) {
         if (typeof bngApi !== 'undefined' && bngApi.engineLua) bngApi.engineLua(command)
       }
@@ -64,8 +64,8 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           scope.$evalAsync(function () {
             if (disposed) return
             scope.data = {
-              state: 'EARTH_UNAVAILABLE', stateLabel: 'WAITING FOR ENDURO', saveAllowed: false,
-              sessionStatus: 'Enduro is not responding. Check that the mod is enabled, then reload it.'
+              state: 'EARTH_UNAVAILABLE', stateLabel: 'WAITING FOR THE RALLY', saveAllowed: false,
+              sessionStatus: 'The rally mod is not responding. Check that the mod is enabled, then reload it.'
             }
           })
         }

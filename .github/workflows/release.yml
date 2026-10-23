@@ -48,11 +48,11 @@ jobs:
           {
             echo "Built from $short_sha on $(date -u +%Y-%m-%d): $subject"
             echo
-            echo 'Install: copy `beamng_earth_enduro.zip` into the `mods` folder of your BeamNG user folder. Do not extract it.'
+            echo 'Install World Ironman Enduro Rally: copy `beamng_earth_enduro.zip` into the `mods` folder of your BeamNG user folder. Do not extract it.'
           } > notes.md
           gh release create "$TAG" dist/beamng_earth_enduro.zip \
             --target "$GITHUB_SHA" \
-            --title "Enduro build ${{ github.run_number }} ($short_sha)" \
+            --title "World Ironman Enduro Rally build ${{ github.run_number }} ($short_sha)" \
             --notes-file notes.md \
             --generate-notes \
             --latest

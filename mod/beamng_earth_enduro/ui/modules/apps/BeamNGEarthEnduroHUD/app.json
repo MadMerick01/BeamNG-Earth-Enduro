@@ -4,11 +4,11 @@
   "types": ["ui.apps.categories.utility"],
   "description": "World Ironman Enduro Rally: long BeamNG.Earth stages where a wreck you cannot pay for ends the run.",
   "css": {"width": "360px", "height": "600px", "top": "100px", "left": "20px"},
-  "author": "BeamNG-Earth Enduro",
+  "author": "World Ironman Enduro Rally",
   "version": "0.1.0",
   "directive": "beamngEarthEnduroHud",
   "appName": "BeamNGEarthEnduroHUD",
-  "category": "BeamNG-Earth Enduro",
+  "category": "World Ironman Enduro Rally",
   "isAuxiliary": false,
   "interactive": "yes"
 }
