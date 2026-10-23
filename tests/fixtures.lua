@@ -67,14 +67,17 @@ function F.garage()
   function g:fit(slot, part)
     self.fitted[slot], self.damage = part, 0
   end
-  -- Starter car stand-in: records the spawn and, when g.starter is set, fits that car.
+  -- Spawn stand-in: records the spawn. A saved config table fits its parts; a starter file path
+  -- fits g.starter when set.
   g.spawns = {}
-  function g:spawnConfig(model, path)
+  function g:spawnConfig(model, config)
     if not self.accepts then return false, 'spawn_failed', 'rejected' end
-    if self.spawnedFrom == path then return true, 'already_fitted' end
-    self.spawns[#self.spawns + 1] = { model = model, path = path }
-    if self.starter then
-      self.model, self.fitted, self.damage, self.spawnedFrom = model, F.copy(self.starter), 0, path
+    if type(config) == 'string' and self.spawnedFrom == config then return true, 'already_fitted' end
+    self.spawns[#self.spawns + 1] = { model = model, config = F.copy(config) }
+    if type(config) == 'table' then
+      self.model, self.fitted, self.damage, self.spawnedFrom = model, F.copy(config.parts), 0, nil
+    elseif self.starter then
+      self.model, self.fitted, self.damage, self.spawnedFrom = model, F.copy(self.starter), 0, config
     end
     return true
   end

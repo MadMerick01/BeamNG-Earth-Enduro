@@ -13,8 +13,23 @@ local edits = {
   function(s) s.vehicle.model={} end, function(s) s.vehicle.configuration='bad\npath' end,
   function(s) s.resume.altitude=math.huge end, function(s) s.resume.heading=360 end,
   function(s) s.base=nil end, function(s) s.vehicle=nil end,
+  function(s) s.vehicle.config='pickup.pc' end, function(s) s.vehicle.config={ parts = {} } end,
+  function(s) s.vehicle.config={ model = 'pickup', vars = { x = 0/0 } } end,
+  function(s) s.vehicle.config={ model = 'pickup', [true] = 1 } end,
 }
 for _, edit in ipairs(edits) do local s=F.save(); edit(s); T.eq(P.validate(s),nil,'invalid save rejected') end
+-- A saved car config is kept as plain data.
+do
+  local s=F.save(); s.vehicle.config={ model='pickup', partsTree={ chosenPartName='pickup', children={ a={ chosenPartName='' } } },
+    vars={ ['$fuel']=80 }, paints={ { baseColor={ 1, 0, 0, 1 } } } }
+  local v=P.validate(s)
+  T.eq(v.vehicle.config.partsTree.children.a.chosenPartName,'','nested parts kept'); T.eq(v.vehicle.config.paints[1].baseColor[1],1,'paints kept')
+  T.check(v.vehicle.config~=s.vehicle.config,'config copied')
+  T.eq(P.validate(F.save()).vehicle.config,nil,'older save without a config still valid')
+  local deep={ model='pickup' }; local node=deep
+  for _=1,100 do node.children={}; node=node.children end
+  s=F.save(); s.vehicle.config=deep; T.eq(P.validate(s),nil,'absurdly deep config rejected')
+end
 local io=F.io(); local store=P.new(io)
 local save,why=store:load(); T.eq(save,nil,'missing no save'); T.eq(why,'missing','first launch recognized')
 T.eq(io.writes,0,'loading never writes'); T.eq(io.directories,0,'loading never makes directory')

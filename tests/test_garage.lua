@@ -73,6 +73,10 @@ local fromStarter = env({ manager = function() return { getVehicleData = functio
   model = 'burnside', partConfigFilename = '/vehicles/burnside/Starter.pc' } } end } end })
 local spawned, note = G.new(fromStarter):spawnConfig('burnside', 'vehicles/burnside/starter.pc')
 T.check(spawned, 'already the starter is fine'); T.eq(note, 'already_fitted', 'reported'); T.eq(replaced, nil, 'not respawned')
+local savedCar = { model = 'burnside', partsTree = { chosenPartName = 'burnside' } }
+T.check(G.new(fromStarter):spawnConfig('burnside', savedCar), 'saved config spawned even from the starter file')
+T.eq(replaced.options.config.partsTree.chosenPartName, 'burnside', 'spawns the saved parts')
+T.check(replaced.options.config ~= savedCar, 'saved config copied, not handed to the game')
 ok, why = G.new(env({ vehicle = function() return nil end })):spawnConfig('burnside', 'x.pc')
 T.eq(why, 'vehicle_required', 'no vehicle, no starter spawn')
 ok, why = G.new(env({ vehicles = function() return {} end })):spawnConfig('burnside', 'x.pc')

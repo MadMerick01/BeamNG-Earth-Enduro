@@ -117,6 +117,7 @@ function M.new(deps)
     self.earningsCarry = 0
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback = nil
+    self.vehicleProvided, self.arrivingModel = false, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -270,9 +271,9 @@ function M.new(deps)
     if not snapshot then return false end
     self.fittedParts = snapshot
     local owned = self.ownedParts
-    -- The starter car comes free, even when it replaced a car of the same model.
-    if self.starterArriving and snapshot.model == STARTER_MODEL then
-      self.starterArriving = nil
+    -- The starter or saved car comes as paid for, even when it replaced a car of the same model.
+    if self.arrivingModel and snapshot.model == self.arrivingModel then
+      self.arrivingModel = nil
       self:adoptParts(snapshot)
       return true
     end
@@ -389,20 +390,43 @@ function M.new(deps)
     return true
   end
 
-  -- On a fresh start the first vehicle Enduro sees is swapped, where it stands, for the starter car.
-  -- Only once per game session, so Reload Enduro before the first Save does not take a car away.
-  function c:giveStarterCar()
-    if self.starterGiven or not self.garage or self.mode ~= 'start' or self.state ~= 'READY' then return end
-    self.starterGiven = true
-    self.starterArriving = true
-    local ok, why, detail = self.garage:spawnConfig(STARTER_MODEL, STARTER_CONFIG)
+  -- Once per load, the first vehicle Enduro sees is swapped, where it stands, for the car of the
+  -- last save, or the starter car on a fresh start. Like money, part changes since the last Save
+  -- are undone by a reload. A save without a car config leaves the vehicle alone.
+  function c:provideVehicle()
+    if self.vehicleProvided or not self.garage or self.state ~= 'READY' then return end
+    self.vehicleProvided = true
+    local model, config, label
+    if self.mode == 'start' then
+      model, config, label = STARTER_MODEL, STARTER_CONFIG, 'starter_car'
+    else
+      config = self.profile and self.profile.vehicle and self.profile.vehicle.config
+      if not config then return end
+      model, label = config.model, 'saved_car'
+    end
+    self.arrivingModel = model
+    local ok, why, detail = self.garage:spawnConfig(model, config)
     if not ok then
-      self.starterArriving = nil
-      self.diag:event('starter_car_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+      self.arrivingModel = nil
+      self.diag:event(label .. '_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
       return
     end
-    if why == 'already_fitted' then self.starterArriving = nil end
-    self.diag:event('starter_car', why or 'spawned')
+    if why == 'already_fitted' then self.arrivingModel = nil end
+    self.diag:event(label, why or 'spawned')
+  end
+
+  -- The car Save keeps: the paid-for parts, with the paint and tuning fitted now. Only the fields
+  -- a respawn needs are kept; nil when the game's config cannot be stored as plain data.
+  function c:savedVehicleConfig()
+    local owned = self.ownedParts
+    if not owned or type(owned.config) ~= 'table' then return nil end
+    local source, look = owned.config, owned.config
+    local fitted = self.fittedParts
+    if fitted and fitted.id == owned.id and type(fitted.config) == 'table' then look = fitted.config end
+    local config = persistence.plainConfig({ model = source.model or owned.model, parts = source.parts,
+      partsTree = source.partsTree, vars = look.vars, paints = look.paints, licenseName = look.licenseName })
+    if not config then self.diag:event('vehicle_config_unsaved', tostring(owned.model), 'W') end
+    return config
   end
 
   -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
@@ -488,7 +512,7 @@ function M.new(deps)
     local dt = location.finite(dtReal) and math.max(0, dtReal) or 0
     self.clock = self.clock + dt
     self:observe(self.adapter:sample(), dt)
-    self:giveStarterCar()
+    self:provideVehicle()
     self:watchParts()
     self.ui:publish(self:view(), self.clock)
   end
@@ -511,7 +535,7 @@ function M.new(deps)
     local candidate = {
       schemaVersion = 1, profileId = self.profile.profileId, base = self.profile.base,
       resume = location.copy(fresh), progression = self.profile.progression,
-      vehicle = { model = fresh.vehicle and fresh.vehicle.model },
+      vehicle = { model = fresh.vehicle and fresh.vehicle.model, config = self:savedVehicleConfig() },
     }
     local saved, why = self.store:save(candidate)
     if not saved then

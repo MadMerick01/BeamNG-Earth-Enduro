@@ -10,6 +10,34 @@ local function optionalString(s)
   return s == nil or (type(s) == 'string' and #s > 0 and #s <= 512 and not s:find('%c'))
 end
 
+-- Copies a saved vehicle config (the game's own config table: model, partsTree, vars, paints),
+-- keeping only plain JSON data and refusing anything oversized. Returns nil when unusable.
+local MAX_CONFIG_DEPTH, MAX_CONFIG_VALUES = 64, 50000
+local function plainConfig(config)
+  local count = 0
+  local function copy(value, depth)
+    count = count + 1
+    if count > MAX_CONFIG_VALUES or depth > MAX_CONFIG_DEPTH then return nil, false end
+    local kind = type(value)
+    if kind == 'string' then return value, #value <= 4096 end
+    if kind == 'boolean' then return value, true end
+    if kind == 'number' then return value, location.finite(value) end
+    if kind ~= 'table' then return nil, false end
+    local out = {}
+    for k, v in pairs(value) do
+      if type(k) ~= 'string' and not (type(k) == 'number' and integer(k, 1)) then return nil, false end
+      local item, ok = copy(v, depth + 1)
+      if not ok then return nil, false end
+      out[k] = item
+    end
+    return out, true
+  end
+  if type(config) ~= 'table' or type(config.model) ~= 'string' or config.model == '' then return nil end
+  local out, ok = copy(config, 1)
+  return ok and out or nil
+end
+M.plainConfig = plainConfig
+
 function M.validate(s)
   if type(s) ~= 'table' then return nil, 'invalid_document' end
   if s.schemaVersion ~= M.SCHEMA then return nil, 'unsupported_schema' end
@@ -20,6 +48,11 @@ function M.validate(s)
       or p.totalDistanceKm < 0 or p.totalDistanceKm > MAX_INTEGER then return nil, 'invalid_progression' end
   if type(s.vehicle) ~= 'table' or not optionalString(s.vehicle.model)
       or not optionalString(s.vehicle.configuration) then return nil, 'invalid_vehicle' end
+  local vehicleConfig = nil
+  if s.vehicle.config ~= nil then
+    vehicleConfig = plainConfig(s.vehicle.config)
+    if not vehicleConfig then return nil, 'invalid_vehicle' end
+  end
   local resume = location.copy(s.resume)
   if s.resume.altitude ~= nil then
     if not location.finite(s.resume.altitude) or s.resume.altitude < -20000
@@ -35,7 +68,7 @@ function M.validate(s)
     schemaVersion = M.SCHEMA, profileId = 'default', generation = s.generation,
     base = location.copy(s.base), resume = resume,
     progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm },
-    vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration },
+    vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig },
   }
 end
 
