@@ -5,24 +5,19 @@ local CONFIG = '/settings/beamngEarthEnduro/config.json'
 local A, B = P.DIRECTORY .. 'save-a.json', P.DIRECTORY .. 'save-b.json'
 
 local c,io,adapter=F.controller()
-T.eq(c.state,'START_LOCATION_REQUIRED','first launch requires base arrival')
+T.eq(c.state,'EARTH_UNAVAILABLE','waits for the first vehicle position')
 T.eq(c.profile,nil,'no profile initialized prematurely')
-T.check(not c:manualSave(),'locked save rejected'); T.eq(io.writes,0,'locked save performs no writes')
-adapter.pose=F.position(1,1); F.advance(c,5)
-T.eq(c.state,'START_LOCATION_REQUIRED','arbitrary starting location never unlocks')
-T.eq(c.profile,nil,'profile absent away from base'); T.check(c:view().baseDistanceMetres>100000,'HUD has geographic base distance')
-T.check(not c:view().saveAllowed,'save button disabled away from target')
-local metresToDeg = 180 / (math.pi * 6371008.8)
-adapter.pose=F.position(50.01*metresToDeg); c:tick(0.1)
-T.eq(c.state,'START_LOCATION_REQUIRED','just outside radius stays locked')
-adapter.pose=F.position(49.99*metresToDeg); c:tick(0.1)
-T.eq(c.state,'READY','vehicle inside radius unlocks immediately')
-T.check(c:view().saveAllowed,'save button enabled at target')
-T.check(c.profile~=nil,'profile created after arrival'); T.eq(c.profile.generation,0,'new profile in memory')
-T.eq(io.writes,0,'arrival has no disk writes'); T.eq(c.profile.progression.balance,0,'placeholder balance')
+T.check(not c:manualSave(),'save before any position rejected'); T.eq(io.writes,0,'rejected save performs no writes')
+adapter.pose=F.position(1,1); c:tick(0.1)
+T.eq(c.state,'READY','any valid position unlocks save, away from base')
+T.check(c:view().saveAllowed,'save button enabled away from base')
+T.check(c:view().baseDistanceMetres>100000,'HUD has geographic base distance')
+T.check(c.profile~=nil,'profile created at first position'); T.eq(c.profile.generation,0,'new profile in memory')
+T.eq(c.profile.base.latitude,0,'new profile uses configured base')
+T.eq(io.writes,0,'starting a session has no disk writes'); T.eq(c.profile.progression.balance,0,'placeholder balance')
 local initialTarget=F.copy(c.startupTarget)
 adapter.pose=F.position(2,3); c:tick(0.1)
-T.eq(c.state,'READY','ordinary travel may leave base after arrival')
+T.eq(c.state,'READY','travel anywhere stays ready')
 T.eq(c.profile.progression.totalDistanceKm,0,'teleport-sized jump adds no mileage')
 T.check(c:manualSave(),'manual save succeeds')
 T.eq(io.writes,1,'one write per manual click'); T.eq(c.profile.resume.latitude,2,'new position saved')
@@ -35,10 +30,10 @@ T.eq(c.profile.progression.balance,0,'no economy awarded')
 
 -- A separate controller represents a real restart: the target is the saved location.
 c,io,adapter=F.controller({io=io})
-T.eq(c.state,'RESUME_REQUIRED','restart is locked'); T.eq(c.startupTarget.latitude,2,'saved target loaded')
-F.advance(c,5); T.eq(c.state,'RESUME_REQUIRED','base is not accepted instead of saved position')
-T.eq(io.writes,1,'failed resume leaves disk untouched'); T.check(P.equal(io.files[A],disk),'save survives failed arrival')
-adapter.pose=F.position(2,3); c:tick(0.1); T.eq(c.state,'READY','resume location reached')
+T.eq(c.mode,'resume','restart loads the save'); T.eq(c.startupTarget.latitude,2,'saved location loaded')
+F.advance(c,5); T.eq(c.state,'READY','save unlocks away from the saved location')
+T.eq(io.writes,1,'loading and driving leave disk untouched'); T.check(P.equal(io.files[A],disk),'save survives restart')
+adapter.pose=F.position(2,3); c:tick(0.1); T.eq(c.state,'READY','driving to the saved location stays ready')
 adapter.valid=false; adapter.reason='vehicle_required'; c:tick(0.1)
 T.eq(c.state,'EARTH_UNAVAILABLE','no vehicle position pauses session')
 T.check(not c:manualSave(),'save locked without vehicle position'); T.eq(io.writes,1,'no position cannot write')
@@ -53,7 +48,7 @@ T.eq(io.files[B].resume.latitude,4,'second resume saved')
 
 -- Configuration changes never move an existing profile's original base.
 io.files[CONFIG].base=F.position(10,10); c:reload()
-T.eq(c.state,'RESUME_REQUIRED','reload relocks arrival')
+T.eq(c.state,'EARTH_UNAVAILABLE','reload waits for a fresh position')
 T.eq(c:view().base.latitude,0,'profile keeps original base despite config change')
 T.eq(c.startupTarget.latitude,4,'resume remains independent of new config')
 
@@ -70,7 +65,6 @@ T.check(not c:manualSave(),'error does not retry unsafe write')
 
 -- Missing configuration selects the built-in base; invalid overrides/saves stay locked.
 for _, scenario in ipairs({
-  { files={}, state='START_LOCATION_REQUIRED' },
   { files={[CONFIG]={base={}}}, state='CONFIG_REQUIRED' },
   { files={[CONFIG]=F.config(),[A]='truncated'}, state='ERROR' },
   { files={[CONFIG]=F.config(),[A]={schemaVersion=2}}, state='ERROR' },
@@ -93,21 +87,29 @@ for _, reason in ipairs({'earth_missing','earth_starting','position_invalid','ve
 end
 local controller,localIO,a=F.controller()
 controller:tick(0.1); controller:endMission(); a.valid=false; a.reason='earth_level_required'; controller:tick(0.1)
-T.check(not controller.sessionVerified,'mission end discards session authorization')
+T.eq(controller.state,'EARTH_UNAVAILABLE','mission end pauses the session')
+T.check(not controller:manualSave(),'mission end locks saving')
 T.eq(localIO.writes,0,'mission end has no implicit save')
+
+-- Missing configuration selects the built-in base and saving works straight away.
+do
+  local localIO=F.io({}); local controller=F.controller({io=localIO})
+  F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
+  T.check(controller:manualSave(),'save works without configuration'); T.eq(localIO.writes,1,'one write')
+end
 
 local unsaved,unsavedIO=F.controller(); unsaved:tick(0.1)
 unsavedIO.files[CONFIG].base=F.position(10,10); unsaved:reload()
 T.eq(unsaved.startupTarget.latitude,0,'unsaved created profile also keeps original base on config reload')
 unsaved:reload(); T.eq(unsaved:view().base.latitude,0,'repeated reloads keep pending original base')
-unsaved:tick(0.1); T.eq(unsaved.profile.base.latitude,0,'re-arrival does not rewrite original unsaved base')
+unsaved:tick(0.1); T.eq(unsaved.profile.base.latitude,0,'new session does not rewrite original unsaved base')
 
 -- Mileage: distance between consecutive readings while READY, saved by manual Save.
 do
   local m,mio,ma=F.controller()
   local north = 1 / 111195.0802 -- degrees latitude per metre
-  m:tick(0.1); T.eq(m.state,'READY','mileage controller arrived')
-  T.eq(m:view().totalDistanceKm,0,'arrival starts at zero mileage')
+  m:tick(0.1); T.eq(m.state,'READY','mileage controller ready')
+  T.eq(m:view().totalDistanceKm,0,'session starts at zero mileage')
   for i=1,100 do ma.pose=F.position(i*2*north); m:tick(0.1) end -- 200 m at 20 m/s
   T.near(m:view().totalDistanceKm,0.2,1e-6,'driving 200 m adds 0.2 km')
   T.near(m:view().unsavedDistanceKm,0.2,1e-6,'driven distance shown as unsaved')
@@ -129,7 +131,7 @@ do
   ra.pose=F.position(5030*north); r:tick(0.1); ra.pose=F.position(5040*north); r:tick(0.1)
   T.near(r:view().totalDistanceKm,0.22,1e-6,'mileage keeps accumulating after resume')
   local before=r:view().totalDistanceKm; ra.pose=F.position(); r:reload(); r:tick(0.1)
-  T.eq(r.state,'RESUME_REQUIRED','reload requires arrival before mileage counts')
+  T.eq(r.state,'READY','reload restarts the session at the current position')
   T.near(r:view().totalDistanceKm,0.21,1e-6,'reload discards unsaved mileage'); T.check(before>0.21,'had unsaved mileage')
 end
 

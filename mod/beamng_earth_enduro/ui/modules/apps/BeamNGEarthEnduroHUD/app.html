@@ -11,19 +11,15 @@
     </label>
     <div ng-if="data.baseDistanceMetres != null">Current Distance from Base: {{data.baseDistanceMetres | number:1}} m</div>
   </div>
-  <div ng-if="data.target && !data.arrivalVerified && data.state !== 'READY'" style="margin-top:10px;">
-    <div style="font-weight:bold;" ng-if="data.mode === 'resume'">RESUME REQUIRED</div>
-    <div style="font-weight:bold;" ng-if="data.mode === 'start'">START LOCATION REQUIRED</div>
-    <label>{{data.mode === 'resume' ? 'Saved' : 'Target'}} Coordinates (lat, long):
+  <div ng-if="data.target && data.mode === 'resume'" style="margin-top:10px;">
+    <label>Last Saved Coordinates (lat, long):
       <div style="display:flex;gap:6px;">
-        <input aria-label="Target coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.target)" placeholder="Not configured" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
-        <button type="button" aria-label="Copy target coordinates" ng-click="copyCoordinates(data.target)" ng-disabled="!coordinates(data.target)">Copy</button>
+        <input aria-label="Last saved coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.target)" placeholder="Not saved" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
+        <button type="button" aria-label="Copy last saved coordinates" ng-click="copyCoordinates(data.target)" ng-disabled="!coordinates(data.target)">Copy</button>
       </div>
     </label>
-    <div ng-if="data.distanceMetres != null">Distance from {{data.mode === 'resume' ? 'Saved Location' : 'Target'}}: {{data.distanceMetres | number:1}} m</div>
-    <div ng-if="data.radiusMetres">Arrival radius: {{data.radiusMetres | number:0}} m</div>
+    <div ng-if="data.distanceMetres != null">Distance from Last Save: {{data.distanceMetres | number:1}} m</div>
   </div>
-  <p ng-if="data.instruction" style="margin:10px 0;">{{data.instruction}}</p>
   <div ng-if="data.current" style="margin-top:10px;">
     <label>Current Coordinates (lat, long):
       <div style="display:flex;gap:6px;">

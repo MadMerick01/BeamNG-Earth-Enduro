@@ -10,8 +10,7 @@ local MAX_DRIVING_SPEED = 150
 
 local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
-  START_LOCATION_REQUIRED = 'START LOCATION REQUIRED', RESUME_REQUIRED = 'RESUME REQUIRED',
-  READY = 'LOCATION VERIFIED — READY TO CONTINUE', ERROR = 'SAVE UNAVAILABLE',
+  READY = 'READY', ERROR = 'SAVE UNAVAILABLE',
 }
 local messages = {
   earth_missing = 'Enable BeamNG.Earth to continue.',
@@ -33,9 +32,6 @@ function M.new(deps)
 
   function c:transition(nextState, reason)
     if self.state == nextState and self.reason == reason then return end
-    if nextState == 'READY' and self.state ~= nextState then
-      self.diag:clear('verification_completed'); self.diag:event('verification_completed', self.mode)
-    end
     self.state, self.reason = nextState, reason
     self.diag:event('state', nextState .. ':' .. tostring(reason or ''))
   end
@@ -59,7 +55,7 @@ function M.new(deps)
     end
     if not self.configuration then self:transition('CONFIG_REQUIRED', 'configuration')
     elseif self.error then self:transition('ERROR', self.error)
-    else self:transition(self.profile and 'RESUME_REQUIRED' or 'START_LOCATION_REQUIRED', 'arrival') end
+    else self:transition('EARTH_UNAVAILABLE', 'position_invalid') end
   end
 
   function c:interrupt(reason)
@@ -92,22 +88,14 @@ function M.new(deps)
     if not sample.valid or not location.valid(sample) then
       self:interrupt(sample.reason or 'position_invalid'); return
     end
-    -- After arrival, driving anywhere is allowed and counts toward mileage.
-    if self.sessionVerified then
-      self:addMileage(sample, dt)
-      self:transition('READY', 'verified'); return
-    end
-    local distance = location.distance(sample, self.startupTarget)
-    if not distance or distance > self.configuration.resumeRadiusMetres then
-      self:transition(self.mode == 'resume' and 'RESUME_REQUIRED' or 'START_LOCATION_REQUIRED', 'arrival')
-      return
-    end
+    -- Any valid vehicle position starts the session: saving and mileage work wherever the vehicle is.
     if not self.profile then
       self.profile = persistence.newProfile(self.creationBase, sample, sample.vehicle)
       self.unsavedBase = location.copy(self.profile.base)
       self.diag:event('profile_initialised', 'default (in memory, not yet saved)')
     end
-    self.sessionVerified, self.odometer = true, location.copy(sample)
+    self.sessionVerified = true
+    self:addMileage(sample, dt)
     self:transition('READY', 'verified')
   end
 
@@ -121,20 +109,14 @@ function M.new(deps)
     elseif self.state == 'ERROR' then
       status = 'Your saved progress has been protected. Check your save files, then choose Reload Enduro.'
     elseif self.state == 'READY' then status = 'Session active. Save manually to keep your current location.'
-    elseif not status then status = 'Drive within the arrival radius of the target coordinates.' end
-    local instruction
-    if not self.sessionVerified and self.startupTarget then
-      instruction = self.mode == 'resume' and 'Use BeamNG.Earth to teleport to your saved location.'
-        or 'Use BeamNG.Earth to teleport to the displayed base coordinates.'
-    end
+    elseif not status then status = messages.position_invalid end
     return {
-      state = self.state, stateLabel = labels[self.state], mode = self.mode, arrivalVerified = self.sessionVerified,
-      sessionStatus = status, instruction = instruction,
+      state = self.state, stateLabel = labels[self.state], mode = self.mode,
+      sessionStatus = status,
       base = base,
       target = location.copy(target), current = current,
       distanceMetres = current and target and location.distance(current, target) or nil,
       baseDistanceMetres = current and location.distance(current, base) or nil,
-      radiusMetres = self.configuration and self.configuration.resumeRadiusMetres or nil,
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
       } or nil,
@@ -155,8 +137,8 @@ function M.new(deps)
 
   function c:manualSave()
     if self.state ~= 'READY' or not self.profile or self.error then
-      self.feedback = 'Save is locked until your vehicle reaches the target coordinates.'
-      self.diag:event('manual_save_rejected', 'location_not_verified', 'W')
+      self.feedback = 'Save is unavailable right now. Check the status above.'
+      self.diag:event('manual_save_rejected', tostring(self.state), 'W')
       return false
     end
     -- Read the vehicle position at click time so the saved location is current.
