@@ -61,14 +61,15 @@ T.check(not c:manualSave(),'save rechecks vehicle at click'); T.eq(io.writes,wri
 adapter.valid=true; c:tick(0.1); adapter.pose=F.position(6,7)
 T.check(c:manualSave(),'click saves the current position'); T.eq(c.profile.resume.latitude,6,'click-time position saved')
 io.writeFails=true
-T.check(not c:manualSave(),'write failure visible'); T.eq(c.state,'ERROR','uncertain write locks session')
+T.check(not c:manualSave(),'write failure visible'); T.eq(c.state,'READY','a failed save does not pause the session')
+T.check(c:view().saveFeedback:find('try again'),'failure message says to try again')
 T.eq(io.files[A].resume.latitude,6,'latest valid generation retained on failure')
-T.check(not c:manualSave(),'error does not retry unsafe write')
+T.check(c:view().saveAllowed,'save stays available after a failure')
+io.writeFails=false; T.check(c:manualSave(),'retrying save works without a reload')
 
 -- Missing configuration selects the built-in base; invalid overrides/saves stay locked.
 for _, scenario in ipairs({
   { files={[CONFIG]={base={}}}, state='CONFIG_REQUIRED' },
-  { files={[CONFIG]=F.config(),[A]='truncated'}, state='ERROR' },
   { files={[CONFIG]=F.config(),[A]={schemaVersion=2}}, state='ERROR' },
 }) do
   local localIO=F.io(scenario.files)
@@ -92,6 +93,18 @@ controller:tick(0.1); controller:endMission(); a.valid=false; a.reason='earth_le
 T.eq(controller.state,'EARTH_UNAVAILABLE','mission end pauses the session')
 T.check(not controller:manualSave(),'mission end locks saving')
 T.eq(localIO.writes,0,'mission end has no implicit save')
+
+-- An unreadable save file means a fresh start that saving replaces, not a locked game.
+do
+  local localIO=F.io({[CONFIG]=F.config(),[A]='truncated'}); local controller=F.controller({io=localIO})
+  T.check(controller:view().saveFeedback:find('fresh start'),'unreadable save explained')
+  F.advance(controller,5); T.eq(controller.state,'READY','unreadable save does not pause the game')
+  T.check(controller:manualSave(),'saving replaces the unreadable file'); T.eq(localIO.files[A].generation,1,'new save written')
+end
+do
+  local controller=F.controller({io=F.io({[CONFIG]=F.config(),[A]={schemaVersion=2}})})
+  T.check(controller:view().sessionStatus:find('newer version'),'newer save explained in plain words')
+end
 
 -- Missing configuration selects the built-in base and saving works straight away.
 do
@@ -162,7 +175,7 @@ do
   T.eq(r:view().balance,10051,'restart loads saved balance, unsaved money discarded')
   m:reload(); T.eq(m:view().balance,10051,'reload discards unsaved money')
   mio.writeFails=true; m:tick(0.1); m:manualSave()
-  T.check(not m:addTestMoney(),'test money locked after a save error')
+  T.check(m:addTestMoney(),'a failed save leaves money and spending available')
 end
 
 -- Repair: quote from overall damage, pay through spend(), refuse when short, never charge a failed repair.

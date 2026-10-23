@@ -1,7 +1,7 @@
 # BeamNG-Earth Enduro
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, mileage tracking, money earned by driving, paid vehicle repairs and paid part changes.
+**Task 004 prototype:** Enduro HUD, simple manual save of the vehicle's current location anywhere, mileage tracking, money earned by driving, paid vehicle repairs and paid part changes.
 Vehicle ownership and buying vehicles are deferred.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
@@ -59,12 +59,12 @@ If the vehicle position is temporarily unavailable (no vehicle, Earth not runnin
 
 ## Save files and recovery
 
-Enduro stores schema-1 profile `default` in `/settings/beamngEarthEnduro/save-a.json` and `save-b.json`. It alternates increasing generations, preserving the previously active slot, and reports success only after read-back validation. New profiles exist in memory until the first manual Save.
+Enduro stores schema-1 profile `default` in `/settings/beamngEarthEnduro/save-a.json` and `save-b.json`. Each Save writes the file that does not hold your newest save, then reads it back to check it, so a failed save never damages the last good one. On load, the newest readable file is used. New profiles exist in memory until the first manual Save.
 
-- One damaged slot: the highest remaining valid generation is loaded, with recovery feedback.
-- Both slots invalid, conflicting equal generations, unknown schema or storage access failure: saving stays locked; files are not silently replaced with a new profile.
-- A failed or uncertain write enters ERROR. The previous active slot remains intact. Fix the storage issue, then choose **Reload Enduro** to rescan both slots before retrying.
-- To recover manually, exit the game and back up the entire Enduro settings directory first. Restore a known-good pair of files, or move both invalid save files aside if deliberately starting over. Keep `config.json`. Reload/restart afterward.
+- **Save failed:** the HUD says *Could not save just now. Your last save is still safe. Press Save to try again.* Nothing is locked; keep playing and press Save again.
+- **One file damaged:** the other one is loaded, with no action needed. The next Save replaces the damaged file.
+- **Both files unreadable:** you get a fresh start, and the HUD says so. Saving replaces the unreadable files, so if you want them back, copy them somewhere else before you press Save.
+- **ENDURO PAUSED:** only for a save made by a newer version of Enduro (update the mod), a save folder the game cannot open, or an internal problem. The HUD says which. **Reload Enduro** loads your last save again; anything since then is lost.
 
 Two generations are recoverable storage, not a guarantee against power loss, external simultaneous edits, disk failure or malicious tampering. Save files contain geographic locations; treat them as your user data. Uninstalling the mod does not require deleting settings/saves.
 

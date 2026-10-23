@@ -70,7 +70,7 @@ end
 
 local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
-  READY = 'READY', ERROR = 'SAVE UNAVAILABLE',
+  READY = 'READY', ERROR = 'ENDURO PAUSED',
 }
 local messages = {
   earth_missing = 'Enable BeamNG.Earth to continue.',
@@ -79,6 +79,17 @@ local messages = {
   earth_interface_error = 'Earth information is unavailable. Reload Enduro when Earth is ready.',
   vehicle_required = 'Enter an active vehicle to continue.',
   position_invalid = 'Waiting for a valid geographic position.',
+}
+-- What the player sees for each problem that pauses Enduro.
+local errorMessages = {
+  newer_version = 'Your save was made by a newer version of Enduro. Update the mod to keep playing.',
+  storage_unavailable = 'Enduro could not open its save folder. Press Reload Enduro to try again.',
+  internal_error = 'Enduro hit a problem and paused. Press Reload Enduro to carry on from your last save.',
+}
+local loadMessages = {
+  loaded = 'Loaded your last save.',
+  missing = 'No save yet. Press Save to keep your progress.',
+  unreadable = 'Your save file could not be read, so this is a fresh start. Saving will replace it.',
 }
 
 -- Controller dependencies permit deterministic headless tests. No game globals below this factory.
@@ -106,8 +117,8 @@ function M.new(deps)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
     self.diag:event('save_loaded_or_rejected', self.loadStatus, self.profile and 'I' or 'W')
-    self.feedback = self.loadStatus == 'recovered' and 'Recovered the last readable save.' or 'Not saved this session.'
-    if self.loadStatus ~= 'missing' and not self.profile then self.error = self.loadStatus end
+    self.feedback = loadMessages[self.loadStatus] or ''
+    if not self.profile and not loadMessages[self.loadStatus] then self.error = self.loadStatus end
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     self.savedBalance = self.profile and self.profile.progression.balance or 0
     self.mode = self.profile and 'resume' or 'start'
@@ -412,7 +423,7 @@ function M.new(deps)
     if self.state == 'CONFIG_REQUIRED' then
       status = 'Set valid base coordinates in the Enduro configuration, then choose Reload Enduro.'
     elseif self.state == 'ERROR' then
-      status = 'Your saved progress has been protected. Check your save files, then choose Reload Enduro.'
+      status = errorMessages[self.error] or errorMessages.internal_error
     elseif self.state == 'READY' then status = 'Session active. Save manually to keep your current location.'
     elseif not status then status = messages.position_invalid end
     return {
@@ -477,9 +488,8 @@ function M.new(deps)
     }
     local saved, why = self.store:save(candidate)
     if not saved then
-      self.feedback = 'Save failed. Your previous save is retained. Reload Enduro before trying again.'
-      self.error = why
-      self:transition('ERROR', why)
+      -- Nothing is lost: the last save is untouched and the session carries on, so Save can be tried again.
+      self.feedback = 'Could not save just now. Your last save is still safe. Press Save to try again.'
       self.diag:clear('manual_save_failed'); self.diag:event('manual_save_failed', why, 'E')
       return false
     end
@@ -521,7 +531,8 @@ local function gameIO()
       if not FS:directoryExists(path) then FS:directoryCreate(path, true) end
       return FS:directoryExists(path)
     end,
-    write = function(path, data) return jsonWriteFile(path, data, true) end,
+    -- Compact JSON: the pretty writer may round coordinates.
+    write = function(path, data) return jsonWriteFile(path, data, false) end,
   }
 end
 local function ensure()
@@ -535,7 +546,7 @@ local function safely(f)
   local ok, result = pcall(f)
   if not ok then
     if active then
-      active.error, active.feedback = 'internal_error', 'Enduro paused safely. Choose Reload Enduro.'
+      active.error, active.feedback = 'internal_error', 'Anything since your last save is lost when you reload.'
       active:transition('ERROR', 'internal_error')
       active.diag:event('internal_error', tostring(result), 'E')
     elseif log then log('E', 'beamngEarthEnduro', tostring(result)) end

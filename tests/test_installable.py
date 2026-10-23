@@ -175,12 +175,16 @@ class InstalledHooksTest(unittest.TestCase):
         original = self.path('/settings/beamngEarthEnduro/save-a.json').read_bytes()
         self.partial_write = True
         self.assertFalse(self.core.save())
-        self.assertEqual(self.core.getState()['state'], 'ERROR')
+        self.assertEqual(self.core.getState()['state'], 'READY')
+        self.assertIn('try again', self.core.getState()['saveFeedback'])
         self.assertEqual(original, self.path('/settings/beamngEarthEnduro/save-a.json').read_bytes())
         self.core.onExtensionUnloaded()
         self.core.onExtensionLoaded()
         self.assertEqual(self.core.getState()['mode'], 'resume')
-        self.assertIn('Recovered', self.core.getState()['saveFeedback'])
+        self.assertIn('Loaded', self.core.getState()['saveFeedback'])
+        self.partial_write = False
+        self.arrive()
+        self.assertTrue(self.core.save())
 
     def test_mission_end_locks_saving_without_implicit_writes(self):
         self.configure()
