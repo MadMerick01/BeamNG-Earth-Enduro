@@ -15,12 +15,12 @@ This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tes
 
 ## Install on Windows
 
-1. [Download `beamng_earth_enduro-task002-ready.zip`](https://github.com/MadMerick01/BeamNG-Earth-Enduro/raw/refs/heads/task002-ready-download/beamng_earth_enduro-task002-ready.zip).
+1. [Download the latest `beamng_earth_enduro.zip`](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases/latest/download/beamng_earth_enduro.zip). Older builds are listed on the [Releases page](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases).
 2. Copy that single ZIP into your active **BeamNG user folder's `mods` directory**. Use the game launcher's user-folder tools to locate it; do not put the ZIP in Steam's game binaries. **Do not extract it.** Remove/disable an older Enduro mod copy to avoid duplicate extensions; keep your user settings and save files.
 3. With the supported Earth mod and its companion running separately, enable Enduro, load Earth Freeroam, and use **UI Apps → Add App → Enduro HUD**. Move/resize it as desired. Enduro never replaces the layout.
 4. The HUD shows the default base **`-33.60147222, 150.82288889`** for a new profile. As soon as Earth reports a valid position for your vehicle, wherever it is, Enduro enters READY and Save is available.
 
-No JSON edits, extraction, Python, Node.js or command-line commands are needed to install or play Enduro. The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. Enduro remains independent of Earth. ZIPs are hosted on a separate download-only branch, not committed to the implementation source tree.
+No JSON edits, extraction, Python, Node.js or command-line commands are needed to install or play Enduro. The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. Enduro remains independent of Earth. ZIPs are published as GitHub Releases, not committed to the implementation source tree.
 
 ## Default base and optional advanced configuration
 
@@ -76,7 +76,7 @@ python -m venv .venv
 
 On Linux/macOS use `.venv/bin/python` in place of `.venv\Scripts\python.exe`. Lupa is pinned and supplies LuaJIT 2.1 for tests; an installed native `luajit` can run the Lua suites instead, but the Python bridge tests still require Lupa. Python/Lupa/Node are not shipped in the mod.
 
-The archive is generated at `dist/beamng_earth_enduro-task002-ready.zip`. Packaging is deterministic and includes installation, architecture and acceptance documentation; it does not package user settings, saves or development dependencies. The Python/Node commands above are for developers rebuilding/testing the mod, not for players installing the supplied ZIP. Developers can alternatively copy `mod/beamng_earth_enduro/` into the user's `mods/unpacked/beamng_earth_enduro/`; do not install both copies.
+The archive is generated at `dist/beamng_earth_enduro-task002-ready.zip`. Packaging is deterministic and includes installation, architecture and acceptance documentation; it does not package user settings, saves or development dependencies. Every push to `main` runs the tests, builds the ZIP and publishes it as a new release tagged `build-<number>` (see `.github/workflows/release.yml`); if the tests fail, no release is made. The Python/Node commands above are for developers rebuilding/testing the mod, not for players installing the supplied ZIP. Developers can alternatively copy `mod/beamng_earth_enduro/` into the user's `mods/unpacked/beamng_earth_enduro/`; do not install both copies.
 
 After a BeamNG.Earth update, check that Enduro can still read positions from it (reads a local git clone of Earth; changes nothing):
 
