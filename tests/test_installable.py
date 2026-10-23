@@ -89,8 +89,8 @@ class InstalledHooksTest(unittest.TestCase):
         self.core.onExtensionLoaded()
         state = self.core.getState()
         self.assertEqual(state['state'], 'EARTH_UNAVAILABLE')
-        self.assertEqual(state['base']['latitude'], 34.224032)
-        self.assertEqual(state['base']['longitude'], 75.029787)
+        self.assertEqual(state['base']['latitude'], 34.271288)
+        self.assertEqual(state['base']['longitude'], 75.163671)
         self.assertFalse(self.core.save())
         self.arrive()
         self.assertFalse(list(self.user.rglob('save-*.json')))
@@ -98,7 +98,7 @@ class InstalledHooksTest(unittest.TestCase):
 
     def test_default_profile_save_restart_and_changed_resume_preserve_base(self):
         self.core.onExtensionLoaded()
-        self.lua.execute('fakeEarth.pose = {latitude=34.224032, longitude=75.029787}')
+        self.lua.execute('fakeEarth.pose = {latitude=34.271288, longitude=75.163671}')
         self.arrive()
         self.lua.execute('fakeEarth.pose = {latitude=34.3, longitude=74.9}')
         self.core.onPreRender(0.1)
@@ -108,7 +108,7 @@ class InstalledHooksTest(unittest.TestCase):
         self.core.onExtensionLoaded()
         state = self.core.getState()
         self.assertEqual(state['mode'], 'resume')
-        self.assertEqual(state['base']['latitude'], 34.224032)
+        self.assertEqual(state['base']['latitude'], 34.271288)
         self.assertEqual(state['resume']['latitude'], 34.3)
         self.assertEqual(state['resume']['longitude'], 74.9)
         self.assertEqual(original, self.path('/settings/beamngEarthEnduro/save-a.json').read_bytes())

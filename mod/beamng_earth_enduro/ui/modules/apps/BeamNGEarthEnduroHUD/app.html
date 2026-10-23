@@ -1,6 +1,6 @@
 <div class="bngApp" style="height:100%;width:100%;overflow:auto;box-sizing:border-box;padding:14px;background:rgba(12,19,24,.9);color:#f2f6f5;font:14px/1.4 sans-serif;border:1px solid #568d7a;border-radius:8px;">
   <div style="font-size:16px;font-weight:bold;letter-spacing:1px;">WORLD IRONMAN ENDURO RALLY</div>
-  <div ng-if="data.stage" style="margin-top:2px;color:#c9d6d2;">Stage: {{data.stage.name}}<span ng-if="data.stage.startTown && data.stage.finishTown">, {{data.stage.startTown}} to {{data.stage.finishTown}}</span></div>
+  <div ng-if="data.stage" style="margin-top:2px;color:#c9d6d2;">{{data.stage.name}}<span ng-if="data.stage.startTown && data.stage.finishTown">: {{data.stage.startTown}} to {{data.stage.finishTown}}</span></div>
   <style>@keyframes enduroPulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }</style>
   <div ng-if="data.timer" role="timer" ng-style="{borderColor: timerColor(data.timer), boxShadow: '0 0 12px ' + timerColor(data.timer)}" style="margin:10px 0 4px;padding:10px 12px;border:2px solid;border-radius:8px;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(12,19,24,.85));">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;">

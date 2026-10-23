@@ -120,7 +120,7 @@ end
 -- Missing configuration selects the built-in base and saving works straight away.
 do
   local localIO=F.io({}); local controller,_,a=F.controller({io=localIO})
-  a.pose=F.position(34.224032,75.029787); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
+  a.pose=F.position(34.271288,75.163671); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
   T.check(controller:manualSave(),'save works without configuration'); T.eq(localIO.writes,1,'one write')
 end
 
@@ -383,31 +383,35 @@ do
   m:tick(0.1); m:tick(0.1); T.eq(#g.spawns, 0, 'no spawn when resuming a save without a car')
 end
 
--- Stages: the first stage is Zoji La, the HUD shows the distance to its finish, and reaching the
+-- Stages: the first stage is Stage 1, Sind River to Dras, the HUD shows the distance to its finish, and reaching the
 -- finish completes the stage and saves it.
 do
   local S = require('beamngEarthEnduro/stages')
-  local zoji = S.get('zoji_la')
-  T.eq(zoji.name, 'Zoji La', 'Zoji La stage defined'); T.eq(S.first().id, 'zoji_la', 'Zoji La is the first stage')
-  T.eq(zoji.start.latitude, 34.224032, 'Zoji La start latitude'); T.eq(zoji.finish.longitude, 75.80991, 'Zoji La finish longitude')
+  local first = S.get('stage_1')
+  T.eq(first.name, 'Stage 1', 'Stage 1 defined'); T.eq(S.first().id, 'stage_1', 'Stage 1 is the first stage')
+  T.eq(first.start.latitude, 34.271288, 'Stage 1 start latitude'); T.eq(first.finish.longitude, 75.80991, 'Stage 1 finish longitude')
+  T.eq(S.get('zoji_la').id, 'stage_1', 'the stage old id still finds the stage')
   T.eq(S.get('nowhere'), nil, 'unknown stage')
   local m,mio,ma=F.controller()
-  T.eq(m:view().stage.name, 'Zoji La', 'HUD names the stage')
-  m:tick(0.1); T.eq(m.profile.stage, 'zoji_la', 'new profile is on the first stage')
+  T.eq(m:view().stage.name, 'Stage 1', 'HUD names the stage')
+  m:tick(0.1); T.eq(m.profile.stage, 'stage_1', 'new profile is on the first stage')
   T.check(m:view().finishDistanceMetres > 1000000, 'distance to the finish shown once on the stage')
-  T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Gund, Kashmir', 'HUD names the start town')
-  T.check(m:view().stage.briefing:find('Zoji La'), 'HUD has the stage briefing')
+  T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Sind River, Kashmir', 'HUD names the start town')
+  T.check(m:view().stage.briefing:find('Sind River, Kashmir'), 'HUD has the stage briefing')
   T.check(type(m:view().finishDirection) == 'string', 'HUD gives the direction to the finish')
   T.eq(m:view().stageFinished, false, 'stage not finished at the start')
-  ma.pose = F.position(zoji.finish.latitude + 0.0005, zoji.finish.longitude); m:tick(0.1)
+  ma.pose = F.position(first.finish.latitude + 0.0005, first.finish.longitude); m:tick(0.1)
   T.check(m:view().stageFinished, 'reaching the finish completes the stage')
   T.eq(m:view().stateLabel, 'STAGE COMPLETE', 'celebration label'); T.check(m:view().sessionStatus:find('conquered'), 'celebration message')
-  T.eq(mio.files[A].finished, true, 'finish saved straight away'); T.eq(mio.files[A].stage, 'zoji_la', 'stage saved')
+  T.eq(mio.files[A].finished, true, 'finish saved straight away'); T.eq(mio.files[A].stage, 'stage_1', 'stage saved')
   local r = F.controller({ io = mio })
   T.check(r:view().stageFinished, 'a loaded save remembers the finish')
   -- Saves from before stages belong to the first stage; a stage this version lacks pauses Enduro.
   r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) }) })
-  T.eq(r:view().stage.name, 'Zoji La', 'older save is on the first stage')
+  T.eq(r:view().stage.name, 'Stage 1', 'older save is on the first stage')
+  local renamed = F.save(1); renamed.stage = 'zoji_la'
+  r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = renamed }) })
+  T.eq(r.state ~= 'ERROR' and r:view().stage.name, 'Stage 1', 'a save under the old stage id still loads')
   local unknown = F.save(1); unknown.stage = 'later'
   r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = unknown }) })
   T.eq(r.state, 'ERROR', 'unknown stage pauses Enduro'); T.check(not r:view().restartAllowed, 'unknown stage cannot be restarted')
@@ -466,9 +470,9 @@ do
   F.advance(m, Core.GAME_OVER_DELAY + 0.5); T.check(m:view().gameOver, 'parts change does not escape game over')
 end
 
--- Each stage sets its starting money: Zoji La starts with $3000, on a fresh start and after a restart.
+-- Each stage sets its starting money: Stage 1 starts with $3000, on a fresh start and after a restart.
 do
-  T.eq(F.STARTING_MONEY, 3000, 'Zoji La starts with $3000')
+  T.eq(F.STARTING_MONEY, 3000, 'Stage 1 starts with $3000')
   local m,mio,ma=F.controller({ startingMoney = 3000 })
   T.eq(m:view().balance, 3000, 'starting money shown before the first position')
   m:tick(0.1); T.eq(m:view().balance, 3000, 'fresh start has the starting money')
