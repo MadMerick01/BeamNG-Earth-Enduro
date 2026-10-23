@@ -32,6 +32,9 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.revertParts = function () {
         if (scope.data.revertPartsAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.revertParts() end')
       }
+      scope.restartStage = function () {
+        if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
+      }
       scope.reloadEnduro = function () {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.reload() end')
       }

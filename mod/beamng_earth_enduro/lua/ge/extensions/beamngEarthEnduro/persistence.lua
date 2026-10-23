@@ -58,6 +58,12 @@ function M.validate(s)
   if damage ~= nil and (not location.finite(damage) or damage < 0 or damage > MAX_INTEGER) then
     return nil, 'invalid_vehicle'
   end
+  -- The stage the save belongs to, and how that stage stands; all optional, so older saves load.
+  -- atStart marks a restarted stage the player has not reached the start of yet.
+  if not optionalString(s.stage) then return nil, 'invalid_stage' end
+  for _, flag in ipairs({ 'finished', 'gameOver', 'atStart' }) do
+    if s[flag] ~= nil and s[flag] ~= true then return nil, 'invalid_stage' end
+  end
   local resume = location.copy(s.resume)
   if s.resume.altitude ~= nil then
     if not location.finite(s.resume.altitude) or s.resume.altitude < -20000
@@ -75,6 +81,7 @@ function M.validate(s)
     progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm },
     vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig,
       damage = damage },
+    stage = s.stage, finished = s.finished, gameOver = s.gameOver, atStart = s.atStart,
   }
 end
 
@@ -86,9 +93,9 @@ function M.equal(a, b)
   return true
 end
 
-function M.newProfile(base, pose, vehicle)
+function M.newProfile(base, pose, vehicle, stage)
   return {
-    schemaVersion = 1, profileId = 'default', generation = 0,
+    schemaVersion = 1, profileId = 'default', generation = 0, stage = stage,
     base = location.copy(base), resume = location.copy(pose),
     progression = { balance = 0, totalDistanceKm = 0 },
     vehicle = { model = vehicle and vehicle.model, configuration = vehicle and vehicle.configuration },
@@ -138,6 +145,7 @@ function M.new(io)
       schemaVersion = candidate.schemaVersion, profileId = candidate.profileId,
       generation = self.generation + 1, base = candidate.base, resume = candidate.resume,
       progression = candidate.progression, vehicle = candidate.vehicle,
+      stage = candidate.stage, finished = candidate.finished, gameOver = candidate.gameOver, atStart = candidate.atStart,
     }
     local clean, why = M.validate(prepared)
     if not clean then return nil, why end

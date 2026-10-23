@@ -120,7 +120,7 @@ end
 -- Missing configuration selects the built-in base and saving works straight away.
 do
   local localIO=F.io({}); local controller,_,a=F.controller({io=localIO})
-  a.pose=F.position(-33.60147222,150.82288889); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
+  a.pose=F.position(34.23713,74.80177); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
   T.check(controller:manualSave(),'save works without configuration'); T.eq(localIO.writes,1,'one write')
 end
 
@@ -384,6 +384,83 @@ do
   io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) })
   m,_,_,_,_,g=F.controller({ io = io })
   m:tick(0.1); m:tick(0.1); T.eq(#g.spawns, 0, 'no spawn when resuming a save without a car')
+end
+
+-- Stages: the first stage is Zoji La, the HUD shows the distance to its finish, and reaching the
+-- finish completes the stage and saves it.
+do
+  local S = require('beamngEarthEnduro/stages')
+  local zoji = S.get('zoji_la')
+  T.eq(zoji.name, 'Zoji La', 'Zoji La stage defined'); T.eq(S.first().id, 'zoji_la', 'Zoji La is the first stage')
+  T.eq(zoji.start.latitude, 34.23713, 'Zoji La start latitude'); T.eq(zoji.finish.longitude, 75.80991, 'Zoji La finish longitude')
+  T.eq(S.get('nowhere'), nil, 'unknown stage')
+  local m,mio,ma=F.controller()
+  T.eq(m:view().stage.name, 'Zoji La', 'HUD names the stage')
+  m:tick(0.1); T.eq(m.profile.stage, 'zoji_la', 'new profile is on the first stage')
+  T.check(m:view().finishDistanceMetres > 1000000, 'distance to the finish shown once on the stage')
+  T.eq(m:view().stageFinished, false, 'stage not finished at the start')
+  ma.pose = F.position(zoji.finish.latitude + 0.0005, zoji.finish.longitude); m:tick(0.1)
+  T.check(m:view().stageFinished, 'reaching the finish completes the stage')
+  T.eq(m:view().stateLabel, 'STAGE COMPLETE', 'celebration label'); T.check(m:view().sessionStatus:find('conquered'), 'celebration message')
+  T.eq(mio.files[A].finished, true, 'finish saved straight away'); T.eq(mio.files[A].stage, 'zoji_la', 'stage saved')
+  local r = F.controller({ io = mio })
+  T.check(r:view().stageFinished, 'a loaded save remembers the finish')
+  -- Saves from before stages belong to the first stage; a stage this version lacks pauses Enduro.
+  r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) }) })
+  T.eq(r:view().stage.name, 'Zoji La', 'older save is on the first stage')
+  local unknown = F.save(1); unknown.stage = 'later'
+  r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = unknown }) })
+  T.eq(r.state, 'ERROR', 'unknown stage pauses Enduro'); T.check(not r:view().restartAllowed, 'unknown stage cannot be restarted')
+end
+
+-- Ironman: a wrecked car the player cannot pay to repair ends the run after a short warning,
+-- the game over is saved, and Restart stage starts again from the stage start.
+do
+  local Core = require('beamngEarthEnduro/core')
+  local m,mio,ma,_,_,g=F.controller()
+  g.starter = { engine = 'burnside_engine_i6' }
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  g.damage = Core.WRECKED_DAMAGE - 1; m:tick(0.1)
+  T.eq(m:view().wreck, nil, 'heavy but not wrecked damage is no game over')
+  g.damage = Core.WRECKED_DAMAGE; m:tick(0.1)
+  T.check(m:view().wreck ~= nil, 'wrecked car the player cannot pay for starts the countdown')
+  T.eq(m:view().stateLabel, 'WRECKED', 'HUD warns of the wreck'); T.eq(m:view().wreck.cost, Core.repairCost(Core.WRECKED_DAMAGE), 'warning shows the repair')
+  m:addTestMoney(); m:tick(0.1); T.eq(m:view().wreck, nil, 'being able to pay ends the warning')
+  g.damage = 40000; m:tick(0.1); T.check(m:view().wreck ~= nil, 'a bigger wreck than the balance warns again')
+  F.advance(m, Core.GAME_OVER_DELAY + 0.5)
+  T.check(m:view().gameOver, 'still unable to pay after the warning: game over'); T.eq(m:view().stateLabel, 'GAME OVER', 'game over label')
+  T.check(m:view().sessionStatus:find('Restart stage'), 'player told how to go on')
+  T.eq(mio.files[A].gameOver, true, 'game over saved straight away')
+  T.check(not m:view().saveAllowed and not m:view().testMoneyAllowed and not m:view().repairQuoteAllowed, 'everything but restart locked')
+  T.check(not m:manualSave(), 'save refused after game over'); T.check(not m:addTestMoney(), 'no money after game over')
+  local distance = m:view().totalDistanceKm
+  ma.pose = F.position(0.0001, 0); m:tick(0.1); T.eq(m:view().totalDistanceKm, distance, 'no mileage after game over')
+  m:reload(); T.check(m:view().gameOver, 'reloading does not undo game over')
+  T.check(m:view().restartAllowed, 'restart offered')
+  local spawns = #g.spawns
+  T.check(m:restartStage(), 'game over restarts with one press')
+  T.eq(m:view().gameOver, false, 'restart clears game over'); T.eq(m:view().balance, 0, 'money reset')
+  T.eq(m:view().totalDistanceKm, 0, 'mileage reset'); T.eq(m.mode, 'start', 'player sent to the start')
+  T.eq(m:view().resume.latitude, 0, 'start coordinates shown'); T.eq(mio.files[B].atStart, true, 'restart saved')
+  g.spawnedFrom = nil; ma.pose = F.position(); m:tick(0.1)
+  T.eq(#g.spawns, spawns + 1, 'starter car given at the start again')
+  local r = F.controller({ io = mio }); T.eq(r.mode, 'start', 'a restarted save still sends the player to the start')
+  T.check(r:view().resume ~= nil and not r:view().gameOver, 'restarted save loads at the start')
+
+  -- Restarting by choice needs a confirming second press.
+  m:addTestMoney(); T.check(not m:restartStage(), 'first press only asks to confirm')
+  T.check(m:view().restartArmed, 'button asks to confirm'); T.eq(m:view().balance, 10000, 'nothing lost on the first press')
+  T.check(m:restartStage(), 'second press restarts'); T.eq(m:view().balance, 0, 'confirmed restart resets the money')
+  mio.writeFails = true; m:restartStage(); T.check(not m:restartStage(), 'failed restart reported')
+  T.check(m:view().saveFeedback:find('try again'), 'failed restart says to try again')
+
+  -- A part change cannot be used to mend a wreck the player cannot pay for.
+  m,_,_,_,_,g=F.controller()
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  g.damage = 40000; m:tick(0.1)
+  g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
+  T.check(not m:revertParts(false), 'revert refused for an unpaid wreck'); T.check(m:view().wreck ~= nil, 'wreck still counted after the change')
+  F.advance(m, Core.GAME_OVER_DELAY + 0.5); T.check(m:view().gameOver, 'parts change does not escape game over')
 end
 
 -- Display throttling and duplicate mount notifications do not write or spam logs.

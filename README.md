@@ -1,8 +1,23 @@
-# BeamNG-Earth Enduro
+# World Ironman Enduro Rally
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 004 prototype:** Enduro HUD that shows where to resume your trek, manual save of the vehicle's current location, mileage tracking, money earned by driving, paid vehicle repairs and paid part changes.
-Vehicle ownership and buying vehicles are deferred.
+An enduro rally of very long, treacherous stages across the real world. You start each stage in a humble starter car at the start coordinates and try to reach the finish coordinates, earning money as you drive and spending it on repairs and upgrades. It is **ironman**: wreck your car when you cannot afford to fix it and it is game over, and you start the stage again from the beginning.
+
+The mod (folder, ZIP and code names) is still called `beamng_earth_enduro` so existing installs, saves and HUD layouts keep working. Vehicle ownership and buying vehicles are deferred.
+
+## The rally
+
+**Stages.** The first stage is **Zoji La**, from `34.23713, 74.80177` to `34.43223, 75.80991`. More stages are added by adding an entry to `lua/ge/extensions/beamngEarthEnduro/stages.lua` (an id, a name, start and finish coordinates and a finish radius). The HUD shows the stage name and, once you are on the stage, the straight-line distance to the finish.
+
+**Starting a stage.** A fresh start (no save yet) or a restarted stage gives you the start coordinates to teleport to, $0 and no mileage. When you arrive you are put in the starter car.
+
+**Finishing.** Get within 100 m of the finish coordinates and the HUD celebrates with **STAGE COMPLETE**, showing your mileage and money. The finish is saved straight away.
+
+**Ironman rule: when is it game over?** Your car is **wrecked** when its damage reaches 10,000 points (BeamNG calls about 30,000 major damage; a wreck's repair costs at least $5,100). If your car is wrecked and the repair costs more than your balance, the HUD shows **WRECKED** with a 10-second countdown. If you still cannot pay when it runs out, it is **GAME OVER**. Damage below the wreck level never ends the run, however broke you are, because the car can still be driven to earn money. A part change, which mends the car, cannot be used to dodge the bill: Revert is refused for an unpaid wreck. Game over is saved at once, so **Reload Enduro** does not undo it; everything but **Restart stage** is locked.
+
+**Restart stage.** Starts the stage again from its start, in the starter car, with $0 and no mileage, and replaces your save. After game over one press does it. At any other time (for example when your car is stuck, or after finishing) the first press asks you to confirm, because your progress is lost.
+
+These numbers are constants at the top of `core.lua` (`WRECKED_DAMAGE`, `GAME_OVER_DELAY`) and in `stages.lua` (`finishRadiusMetres`), so they are easy to tune after testing in game.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
 **Windows BeamNG.drive acceptance is not yet tested.** Enduro only needs a valid vehicle position from Earth; it does not wait for Earth's terrain, roads or streaming to finish.
@@ -17,20 +32,20 @@ This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tes
 
 1. [Download the latest `beamng_earth_enduro.zip`](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases/latest/download/beamng_earth_enduro.zip). Older builds are listed on the [Releases page](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases).
 2. Copy that single ZIP into your active **BeamNG user folder's `mods` directory**. Use the game launcher's user-folder tools to locate it; do not put the ZIP in Steam's game binaries. **Do not extract it.** Remove/disable an older Enduro mod copy to avoid duplicate extensions; keep your user settings and save files.
-3. With the supported Earth mod and its companion running separately, enable Enduro, load Earth Freeroam, and use **UI Apps → Add App → Enduro HUD**. Move/resize it as desired. Enduro never replaces the layout.
-4. The HUD shows the start coordinates, the default base **`-33.60147222, 150.82288889`** for a new profile. Copy them, paste them into the BeamNG.Earth map and teleport there. Once you arrive, the HUD says you are in the right place and Save is available.
+3. With the supported Earth mod and its companion running separately, enable Enduro, load Earth Freeroam, and use **UI Apps → Add App → World Ironman Enduro Rally**. Move/resize it as desired. Enduro never replaces the layout.
+4. The HUD shows the start coordinates, the Zoji La start **`34.23713, 74.80177`** for a new profile. Copy them, paste them into the BeamNG.Earth map and teleport there. Once you arrive, the HUD says you are in the right place and Save is available.
 
 No JSON edits, extraction, Python, Node.js or command-line commands are needed to install or play Enduro. The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. Enduro remains independent of Earth. ZIPs are published as GitHub Releases, not committed to the implementation source tree.
 
 ## Default base and optional advanced configuration
 
-The permanent built-in default is **33°36'05.3"S 150°49'22.4"E**, decimal **latitude `-33.60147222`, longitude `150.82288889`**. It is used automatically when no user configuration exists. No settings files are created on load, and no existing configuration or saved profile is overwritten.
+The built-in base (where a new profile starts) is the first stage's start, Zoji La: **latitude `34.23713`, longitude `74.80177`**. It is used automatically when no user configuration exists. A `base` in the configuration moves the first stage's start, which is mainly useful for testing; the finish stays where the stage puts it. No settings files are created on load, and no existing configuration or saved profile is overwritten.
 
 Optional overrides remain available at `<user folder>/settings/beamngEarthEnduro/config.json` (VFS `/settings/beamngEarthEnduro/config.json`). Only users who want an override need to copy/edit the included `config.example.json`:
 
 ```json
 {
-  "base": { "latitude": -33.60147222, "longitude": 150.82288889 },
+  "base": { "latitude": 34.23713, "longitude": 74.80177 },
   "resumeRadiusMetres": 50
 }
 ```
@@ -43,7 +58,7 @@ An existing profile retains its original base even when the configuration change
 
 1. Load Earth Freeroam and enter an active vehicle. The HUD shows one set of coordinates: your last save, or the start (the base) if you have not saved yet. Press **Copy**, paste them into the BeamNG.Earth map and teleport there; Enduro never submits the teleport itself. When the vehicle is within `resumeRadiusMetres` (50 m) of them, the HUD says *You're in the right place* and you carry on from there. Until then, Save is locked and driving earns no mileage or money, so a Save cannot overwrite your trek with wherever the game happened to spawn you.
 
-   **Starter car:** on a fresh start (no save yet, or both save files unreadable) Enduro swaps your vehicle, when you arrive at the start, for the **WorldIronManEnduro Starter**, a 1950s Burnside coupe with a stock inline-six. Its parts count as paid for; upgrade it from there with **Parts** and keep it running with **Repair**. The config also appears under Burnside in the game's vehicle selector.
+   **Starter car:** on a fresh start (no save yet, or both save files unreadable) or after **Restart stage** Enduro swaps your vehicle, when you arrive at the start, for the **WorldIronManEnduro Starter**, a 1950s Burnside coupe with a stock inline-six. Its parts count as paid for; upgrade it from there with **Parts** and keep it running with **Repair**. The config also appears under Burnside in the game's vehicle selector.
 
    **Your car is saved:** **Save** also keeps your car: its paid-for parts (an open parts bill is left out), paint and tuning. Each time a save loads (game start, level load or **Reload Enduro**) your vehicle is swapped for that car when you arrive at the last save coordinates, so you carry on in the car you saved. Like money, part changes made since the last Save are undone by a reload; before the first Save, a reload puts you back in the starter car. Saves made before this version have no car stored, and Enduro leaves your vehicle alone until your next Save.
 

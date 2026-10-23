@@ -40,13 +40,13 @@ class PackageTest(unittest.TestCase):
             manifest = json.loads(archive.read(prefix + 'app.json'))
             config = json.loads(archive.read('config.example.json'))
             self.assertEqual(manifest['appName'], 'BeamNGEarthEnduroHUD')
-            self.assertEqual(manifest['name'], 'Enduro HUD')
+            self.assertEqual(manifest['name'], 'World Ironman Enduro Rally')
             self.assertEqual(manifest['directive'], 'beamngEarthEnduroHud')
             self.assertIn('beamng-earth-enduro-hud', manifest['domElement'])
-            self.assertEqual(config['base']['latitude'], -33.60147222)
-            self.assertEqual(config['base']['longitude'], 150.82288889)
+            self.assertEqual(config['base']['latitude'], 34.23713)
+            self.assertEqual(config['base']['longitude'], 74.80177)
             self.assertIn(b'/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', archive.read(prefix + 'app.js'))
-            self.assertIn(b'BEAMNG-EARTH ENDURO', archive.read(prefix + 'app.html'))
+            self.assertIn(b'WORLD IRONMAN ENDURO RALLY', archive.read(prefix + 'app.html'))
             self.assertIn(b'beamngEarthEnduro_core', archive.read('scripts/beamngEarthEnduro/modScript.lua'))
 
     def test_starter_car_config_is_packaged(self):
@@ -102,8 +102,8 @@ class PackageTest(unittest.TestCase):
           })
         ''')
         defaults = lua.globals().packagedDefaults
-        self.assertEqual(defaults['base']['latitude'], -33.60147222)
-        self.assertEqual(defaults['base']['longitude'], 150.82288889)
+        self.assertEqual(defaults['base']['latitude'], 34.23713)
+        self.assertEqual(defaults['base']['longitude'], 74.80177)
         self.assertEqual(defaults['resumeRadiusMetres'], 50)
 
     def test_package_is_reproducible(self):
