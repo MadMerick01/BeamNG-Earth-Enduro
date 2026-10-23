@@ -120,7 +120,7 @@ end
 -- Missing configuration selects the built-in base and saving works straight away.
 do
   local localIO=F.io({}); local controller,_,a=F.controller({io=localIO})
-  a.pose=F.position(34.23713,74.80177); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
+  a.pose=F.position(34.224032,75.029787); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
   T.check(controller:manualSave(),'save works without configuration'); T.eq(localIO.writes,1,'one write')
 end
 
@@ -392,13 +392,13 @@ do
   local S = require('beamngEarthEnduro/stages')
   local zoji = S.get('zoji_la')
   T.eq(zoji.name, 'Zoji La', 'Zoji La stage defined'); T.eq(S.first().id, 'zoji_la', 'Zoji La is the first stage')
-  T.eq(zoji.start.latitude, 34.23713, 'Zoji La start latitude'); T.eq(zoji.finish.longitude, 75.80991, 'Zoji La finish longitude')
+  T.eq(zoji.start.latitude, 34.224032, 'Zoji La start latitude'); T.eq(zoji.finish.longitude, 75.80991, 'Zoji La finish longitude')
   T.eq(S.get('nowhere'), nil, 'unknown stage')
   local m,mio,ma=F.controller()
   T.eq(m:view().stage.name, 'Zoji La', 'HUD names the stage')
   m:tick(0.1); T.eq(m.profile.stage, 'zoji_la', 'new profile is on the first stage')
   T.check(m:view().finishDistanceMetres > 1000000, 'distance to the finish shown once on the stage')
-  T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Ganderbal, Kashmir', 'HUD names the start town')
+  T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Gund, Kashmir', 'HUD names the start town')
   T.check(m:view().stage.briefing:find('Zoji La'), 'HUD has the stage briefing')
   T.check(type(m:view().finishDirection) == 'string', 'HUD gives the direction to the finish')
   T.eq(m:view().stageFinished, false, 'stage not finished at the start')

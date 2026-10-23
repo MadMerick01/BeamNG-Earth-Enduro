@@ -9,10 +9,10 @@ local M = {}
 M.list = {
   {
     id = 'zoji_la', name = 'Zoji La',
-    startTown = 'Ganderbal, Kashmir', finishTown = 'Dras, Ladakh',
-    briefing = 'Drive from Ganderbal, Kashmir, up the Sind valley and over the Zoji La pass to Dras, Ladakh. '
+    startTown = 'Gund, Kashmir', finishTown = 'Dras, Ladakh',
+    briefing = 'Drive from Gund, Kashmir, up the Sind valley past Sonamarg and over the Zoji La pass to Dras, Ladakh. '
       .. 'Reach the finish to complete the stage.',
-    start = { latitude = 34.23713, longitude = 74.80177 },
+    start = { latitude = 34.224032, longitude = 75.029787 },
     finish = { latitude = 34.43223, longitude = 75.80991 },
     finishRadiusMetres = 100,
   },
