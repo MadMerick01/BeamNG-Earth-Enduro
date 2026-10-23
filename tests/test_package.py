@@ -49,6 +49,20 @@ class PackageTest(unittest.TestCase):
             self.assertIn(b'BEAMNG-EARTH ENDURO', archive.read(prefix + 'app.html'))
             self.assertIn(b'beamngEarthEnduro_core', archive.read('scripts/beamngEarthEnduro/modScript.lua'))
 
+    def test_starter_car_config_is_packaged(self):
+        prefix = 'vehicles/burnside/'
+        with ZipFile(self.output) as archive:
+            config = json.loads(archive.read(prefix + 'worldironmanenduro_starter.pc'))
+            info = json.loads(archive.read(prefix + 'info_worldironmanenduro_starter.json'))
+            thumbnail = archive.read(prefix + 'worldironmanenduro_starter.jpg')
+            core = archive.read('lua/ge/extensions/beamngEarthEnduro/core.lua')
+        self.assertEqual(config['model'], 'burnside')
+        self.assertEqual(config['mainPartName'], 'burnside')
+        self.assertIsInstance(config['parts'], dict)
+        self.assertEqual(info['Configuration'], 'WorldIronManEnduro_Starter')
+        self.assertEqual(thumbnail[:3], b'\xff\xd8\xff')
+        self.assertIn(b"'" + (prefix + 'worldironmanenduro_starter.pc').encode() + b"'", core)
+
     def test_png_is_complete_with_valid_checksums(self):
         with ZipFile(self.output) as archive:
             data = archive.read('ui/modules/apps/BeamNGEarthEnduroHUD/app.png')

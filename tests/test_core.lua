@@ -275,6 +275,67 @@ do
   g.partsUnreadable = true; m:vehicleSpawned(); m:tick(0.1); T.check(m.partsCheckDue, 'unreadable parts retried')
 end
 
+-- A fresh start swaps the first vehicle for the starter car, once, and its parts come free.
+do
+  local Core = require('beamngEarthEnduro/core')
+  local m,_,ma,_,_,g=F.controller()
+  g.starter = { engine = 'burnside_engine_i6', intake = 'burnside_intake_i6' }
+  ma.valid = false; m:tick(0.1); T.eq(#g.spawns, 0, 'no starter car before a vehicle position')
+  ma.valid = true; m:tick(0.1); m:tick(0.1)
+  T.eq(#g.spawns, 1, 'starter car spawned once on a fresh start')
+  T.eq(g.spawns[1].model, Core.STARTER_MODEL, 'starter model'); T.eq(g.spawns[1].config, 'vehicles/burnside/worldironmanenduro_starter.pc', 'starter config file')
+  m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m.ownedParts.parts.engine, 'burnside_engine_i6', 'starter parts taken as paid for'); T.eq(m:view().partsChange, nil, 'starter car is free')
+  m:tick(0.1); T.eq(#g.spawns, 1, 'starter spawned only once per load')
+  m:reload(); m:tick(0.1); T.eq(#g.spawns, 1, 'already in the starter car, so not respawned')
+  g.spawnedFrom = nil; m:reload(); m:tick(0.1); T.eq(#g.spawns, 2, 'reload before saving goes back to the starter car')
+
+  -- Replacing a car of the same model is still free.
+  m,_,_,_,_,g=F.controller()
+  g.model = Core.STARTER_MODEL; g.starter = { engine = 'burnside_engine_i6' }
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().partsChange, nil, 'same-model starter swap is not billed'); T.eq(m.ownedParts.parts.engine, 'burnside_engine_i6', 'starter adopted')
+  g:fit('engine', 'pickup_engine_v8'); m:vehicleSpawned(); m:tick(0.1)
+  T.check(m:view().partsChange ~= nil, 'later part changes are billed')
+
+  -- A failed spawn is logged and not retried every frame.
+  local logs
+  m,_,_,_,logs,g=F.controller(); g.accepts = false
+  m:tick(0.1); m:tick(0.1); m:tick(0.1)
+  T.eq(#g.spawns, 0, 'nothing spawned'); T.check(m.vehicleProvided, 'not retried')
+  local logged = false
+  for _, line in ipairs(logs) do logged = logged or line:find('starter_car_failed', 1, true) ~= nil end
+  T.check(logged, 'failure logged'); T.eq(m.state, 'READY', 'play carries on')
+
+  -- Save keeps the paid-for car, and loading the save puts the player back in it.
+  local io = F.io({ [CONFIG] = F.config() })
+  m,_,_,_,_,g=F.controller({ io = io })
+  g.starter = { engine = 'burnside_engine_i6', intake = 'burnside_intake_i6' }
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1); m:addTestMoney()
+  g:fit('intake', 'burnside_intake_race'); m:vehicleSpawned(); m:tick(0.1)
+  T.check(m:buyParts(), 'upgrade bought')
+  g:fit('engine', 'burnside_engine_v8'); m:vehicleSpawned(); m:tick(0.1)
+  T.check(m:view().partsChange ~= nil, 'unpaid change pending')
+  T.check(m:manualSave(), 'saved with a parts bill open')
+  local saved = io.files[A].vehicle.config
+  T.eq(saved.model, Core.STARTER_MODEL, 'car model saved'); T.eq(saved.parts.intake, 'burnside_intake_race', 'bought part saved')
+  T.eq(saved.parts.engine, 'burnside_engine_i6', 'unpaid part not saved')
+  local balance = m:view().balance
+  local r,_,_,_,_,rg=F.controller({ io = io })
+  r:tick(0.1)
+  T.eq(#rg.spawns, 1, 'saved car spawned on load'); T.eq(rg.spawns[1].model, Core.STARTER_MODEL, 'saved model spawned')
+  T.eq(rg.fitted.intake, 'burnside_intake_race', 'saved parts fitted')
+  r:vehicleSpawned(); r:tick(0.1)
+  T.eq(r:view().partsChange, nil, 'saved car is not billed'); T.eq(r.ownedParts.parts.intake, 'burnside_intake_race', 'saved parts owned')
+  T.eq(r:view().balance, balance, 'balance restored')
+  r:tick(0.1); T.eq(#rg.spawns, 1, 'saved car spawned once per load')
+
+  -- An older save without a car config keeps the player's own vehicle.
+  io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) })
+  m,_,_,_,_,g=F.controller({ io = io })
+  m:tick(0.1); m:tick(0.1); T.eq(#g.spawns, 0, 'no spawn when resuming a save without a car')
+end
+
 -- Display throttling and duplicate mount notifications do not write or spam logs.
 local events,logs
 controller,localIO,a,events,logs=F.controller(); controller:mount(true)
