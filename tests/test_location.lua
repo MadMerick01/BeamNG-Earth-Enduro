@@ -15,6 +15,13 @@ T.near(L.distance(F.position(0,179.9999),F.position(0,-179.9999)),22.239,0.01,'a
 T.near(L.distance(F.position(90,0),F.position(90,180)),0,1e-6,'pole longitudes coincide')
 T.near(L.distance(F.position(),F.position(0,180)),20015114.44,0.1,'antipodal numeric stability')
 T.eq(L.distance({},F.position()),nil,'invalid distance not zero')
+T.near(L.bearing(F.position(),F.position(1,0)),0,1e-9,'bearing north')
+T.near(L.bearing(F.position(),F.position(0,1)),90,1e-9,'bearing east')
+T.near(L.bearing(F.position(),F.position(-1,0)),180,1e-9,'bearing south')
+T.eq(L.bearing({},F.position()),nil,'invalid bearing')
+T.eq(L.compassPoint(0),'north','compass north'); T.eq(L.compassPoint(350),'north','compass wraps')
+T.eq(L.compassPoint(80),'east','compass east'); T.eq(L.compassPoint(225),'south-west','compass south-west')
+T.eq(L.compassPoint(0/0),nil,'invalid compass point')
 T.check(C.validate(F.config()) ~= nil,'valid config')
 local cfg = F.config(); cfg.base.latitude=nil; T.eq(C.validate(cfg),nil,'unset base rejected')
 for _, patch in ipairs({ { 'resumeRadiusMetres',0 }, {'resumeRadiusMetres',math.huge},

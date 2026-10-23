@@ -1,5 +1,6 @@
 -- The rally's stages. To add one, add an entry to the list: an id that never changes (saves
--- store it), the name the HUD shows, and the start and finish coordinates. The finish counts
+-- store it), the name the HUD shows, the start and finish coordinates, and the towns nearest the
+-- start and finish, which the HUD shows so the player can find them on the map. The finish counts
 -- once the vehicle is within finishRadiusMetres of it. The first stage is where a new player starts.
 local location = require('beamngEarthEnduro/location')
 local M = {}
@@ -7,6 +8,7 @@ local M = {}
 M.list = {
   {
     id = 'zoji_la', name = 'Zoji La',
+    startTown = 'Ganderbal, Kashmir', finishTown = 'Dras, Ladakh',
     start = { latitude = 34.23713, longitude = 74.80177 },
     finish = { latitude = 34.43223, longitude = 75.80991 },
     finishRadiusMetres = 100,
@@ -15,7 +17,7 @@ M.list = {
 
 local function copy(stage)
   return {
-    id = stage.id, name = stage.name, start = location.copy(stage.start), finish = location.copy(stage.finish),
+    id = stage.id, name = stage.name, startTown = stage.startTown, finishTown = stage.finishTown, start = location.copy(stage.start), finish = location.copy(stage.finish),
     finishRadiusMetres = stage.finishRadiusMetres,
   }
 end

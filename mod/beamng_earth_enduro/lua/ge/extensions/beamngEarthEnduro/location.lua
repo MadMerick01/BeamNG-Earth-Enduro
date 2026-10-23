@@ -25,4 +25,21 @@ function M.distance(a, b)
   return 2 * EARTH_MEAN_RADIUS * atan2(sqrt(h), sqrt(1 - h))
 end
 
+-- Initial great-circle bearing from a to b in degrees clockwise from north (0 to 360).
+function M.bearing(a, b)
+  if not M.valid(a) or not M.valid(b) then return nil end
+  local lat1, lat2, dlon = rad(a.latitude), rad(b.latitude), rad(b.longitude - a.longitude)
+  local y = sin(dlon) * cos(lat2)
+  local x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
+  return (math.deg(atan2(y, x)) + 360) % 360
+end
+
+local POINTS = { 'north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west' }
+
+-- The nearest of the eight compass points to a bearing in degrees.
+function M.compassPoint(bearing)
+  if not M.finite(bearing) then return nil end
+  return POINTS[math.floor(((bearing % 360) + 22.5) / 45) % 8 + 1]
+end
+
 return M

@@ -7,7 +7,7 @@ The mod (folder, ZIP and code names) is still called `beamng_earth_enduro` so ex
 
 ## The rally
 
-**Stages.** The first stage is **Zoji La**, from `34.23713, 74.80177` to `34.43223, 75.80991`. More stages are added by adding an entry to `lua/ge/extensions/beamngEarthEnduro/stages.lua` (an id, a name, start and finish coordinates and a finish radius). The HUD shows the stage name and, once you are on the stage, the straight-line distance to the finish.
+**Stages.** The first stage is **Zoji La**, from `34.23713, 74.80177` near Ganderbal, Kashmir, to `34.43223, 75.80991` near Dras, Ladakh. More stages are added by adding an entry to `lua/ge/extensions/beamngEarthEnduro/stages.lua` (an id, a name, start and finish towns, start and finish coordinates and a finish radius). The HUD shows the stage name and the finish town, so you can search the town on the map to plan a route, and, once you are on the stage, the straight-line distance and compass direction to the finish.
 
 **Starting a stage.** A fresh start (no save yet) or a restarted stage gives you the start coordinates to teleport to, $0 and no mileage. When you arrive you are put in the starter car.
 
