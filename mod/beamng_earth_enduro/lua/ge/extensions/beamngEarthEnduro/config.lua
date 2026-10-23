@@ -1,10 +1,12 @@
 local location = require('beamngEarthEnduro/location')
+local stages = require('beamngEarthEnduro/stages')
 local M = { FILE = '/settings/beamngEarthEnduro/config.json' }
 
 function M.defaults()
-  -- Permanent first-profile base. Each caller receives a fresh table.
+  -- A new profile starts at the first stage's start. Each caller receives a fresh table.
+  -- A base in config.json replaces it, which is handy for testing a start somewhere else.
   return {
-    base = { latitude = -33.60147222, longitude = 150.82288889 },
+    base = stages.first().start,
     resumeRadiusMetres = 50,
   }
 end

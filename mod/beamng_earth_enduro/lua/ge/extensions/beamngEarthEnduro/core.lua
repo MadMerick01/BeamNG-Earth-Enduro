@@ -5,6 +5,7 @@ local diagnostics = require('beamngEarthEnduro/diagnostics')
 local hud = require('beamngEarthEnduro/hud')
 local earthAdapter = require('beamngEarthEnduro/earthAdapter')
 local garage = require('beamngEarthEnduro/garage')
+local stages = require('beamngEarthEnduro/stages')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -28,6 +29,12 @@ local UNPAID_PARTS_DRIVE_LIMIT = 25
 local STARTER_MODEL = 'burnside'
 local STARTER_CONFIG = 'vehicles/burnside/worldironmanenduro_starter.pc'
 M.STARTER_MODEL, M.STARTER_CONFIG = STARTER_MODEL, STARTER_CONFIG
+-- Ironman: a car with this much damage counts as wrecked (a third of what BeamNG calls major
+-- damage). When a wrecked car's repair costs more than the balance, the run is over unless the
+-- player can pay within GAME_OVER_DELAY seconds; then the only way on is to restart the stage.
+local WRECKED_DAMAGE = 10000
+local GAME_OVER_DELAY = 10
+M.WRECKED_DAMAGE, M.GAME_OVER_DELAY = WRECKED_DAMAGE, GAME_OVER_DELAY
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
@@ -99,6 +106,7 @@ local errorMessages = {
   newer_version = 'Your save was made by a newer version of Enduro. Update the mod to keep playing.',
   storage_unavailable = 'Enduro could not open its save folder. Press Reload Enduro to try again.',
   internal_error = 'Enduro hit a problem and paused. Press Reload Enduro to carry on from your last save.',
+  unknown_stage = 'Your save is for a stage this version does not have. Update the mod to keep playing.',
 }
 local loadMessages = {
   loaded = 'Loaded your last save.',
@@ -128,17 +136,25 @@ function M.new(deps)
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback = nil
     self.vehicleProvided, self.arrivingModel, self.arrived = false, nil, false
+    self.wreck, self.restartArmed = nil, false
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
     self.diag:event('save_loaded_or_rejected', self.loadStatus, self.profile and 'I' or 'W')
     self.feedback = loadMessages[self.loadStatus] or ''
     if not self.profile and not loadMessages[self.loadStatus] then self.error = self.loadStatus end
+    -- Saves from before stages belong to the first stage.
+    local stageId = self.profile and self.profile.stage
+    self.stage = stageId and stages.get(stageId) or (not stageId and stages.first()) or nil
+    if not self.stage and not self.error then self.error = 'unknown_stage' end
+    self.stageFinished = self.profile ~= nil and self.profile.finished == true
+    self.gameOver = self.profile ~= nil and self.profile.gameOver == true
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     self.savedBalance = self.profile and self.profile.progression.balance or 0
     -- A restored car looks new, but the repair it needed when saved is still owed.
     self.owedDamage = self.profile and self.profile.vehicle and self.profile.vehicle.damage or 0
-    self.mode = self.profile and 'resume' or 'start'
+    -- A restarted stage sends the player back to its start for a new starter car.
+    self.mode = (self.profile and not self.profile.atStart) and 'resume' or 'start'
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
     self.startupTarget = location.copy(self.profile and self.profile.resume or self.creationBase)
@@ -171,7 +187,7 @@ function M.new(deps)
   end
 
   function c:canAfford(amount)
-    return self.profile ~= nil and not self.error and type(amount) == 'number' and amount >= 0
+    return self.profile ~= nil and not self.error and not self.gameOver and type(amount) == 'number' and amount >= 0
       and amount == math.floor(amount) and amount <= self.profile.progression.balance
   end
 
@@ -196,7 +212,7 @@ function M.new(deps)
 
   -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
   function c:priceRepair()
-    if not self.profile or self.error then return nil, 'unavailable' end
+    if not self.profile or self.error or self.gameOver then return nil, 'unavailable' end
     if not self.garage then return nil, 'repair_unavailable' end
     local vehicle, why = self:inspectDamage()
     if not vehicle then return nil, why end
@@ -328,7 +344,7 @@ function M.new(deps)
   -- Called every tick: checks parts after a spawn or vehicle switch, notes the damage the vehicle has
   -- before a change, and puts the paid parts back if the player drives off without paying.
   function c:watchParts()
-    if not self.garage then return end
+    if not self.garage or self.gameOver then return end
     local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
     if vehicleId ~= nil and self.ownedParts and vehicleId ~= self.ownedParts.id then self.partsCheckDue = true end
     if not self.ownedParts then self.partsCheckDue = true end
@@ -397,6 +413,11 @@ function M.new(deps)
       self.partsFeedback = 'No part changes to revert.'
       return false
     end
+    -- Ironman: a part change, which mends the car, cannot be used to fix a wreck the player cannot pay for.
+    if pending.damage >= WRECKED_DAMAGE and not self:canAfford(pending.repair) then
+      self.partsFeedback = 'Your car is wrecked and you cannot pay for its repair, so the paid parts cannot go back.'
+      return false
+    end
     local ok, why, detail = self.garage:repair(self.ownedParts.config)
     if not ok then
       self.partsFeedback = 'Could not put the paid parts back. Try again in a moment.'
@@ -415,7 +436,7 @@ function M.new(deps)
   -- stands, for the car of the last save, or the starter car on a fresh start. Like money, part
   -- changes since the last Save are undone by a reload. A save without a car config leaves the vehicle alone.
   function c:provideVehicle()
-    if self.vehicleProvided or not self.garage or self.state ~= 'READY' or not self.arrived then return end
+    if self.vehicleProvided or self.gameOver or not self.garage or self.state ~= 'READY' or not self.arrived then return end
     self.vehicleProvided = true
     local model, config, label
     if self.mode == 'start' then
@@ -484,7 +505,7 @@ function M.new(deps)
     end
     -- Any valid vehicle position starts the session: saving and mileage work wherever the vehicle is.
     if not self.profile then
-      self.profile = persistence.newProfile(self.creationBase, sample, sample.vehicle)
+      self.profile = persistence.newProfile(self.creationBase, sample, sample.vehicle, self.stage.id)
       self.unsavedBase = location.copy(self.profile.base)
       self.diag:event('profile_initialised', 'default (in memory, not yet saved)')
     end
@@ -499,14 +520,106 @@ function M.new(deps)
       end
     end
     -- Driving before then is not part of the trek.
-    if self.arrived then self:addMileage(sample, dt) else self.odometer = nil end
+    if self.arrived and not self.gameOver then self:addMileage(sample, dt) else self.odometer = nil end
     self:transition('READY', 'verified')
+    -- Reaching the finish completes the stage, and the finish is saved straight away.
+    if self.arrived and not self.stageFinished and not self.gameOver then
+      local left = location.distance(sample, self.stage.finish)
+      if left and left <= self.stage.finishRadiusMetres then
+        self.stageFinished, self.wreck = true, nil
+        self.diag:event('stage_finished', self.stage.id .. string.format(' %.1f km', self.profile.progression.totalDistanceKm))
+        self:manualSave()
+      end
+    end
+  end
+
+  -- Ironman: watches for a wrecked car the player cannot pay to repair, and ends the run when the
+  -- player still cannot pay after GAME_OVER_DELAY seconds. With a parts bill open, the damage the
+  -- part change mended counts.
+  function c:watchIronman(dt)
+    if self.gameOver or self.stageFinished or not self.garage or self.state ~= 'READY' or not self.arrived then
+      self.wreck = nil
+      return
+    end
+    local damage = self.pendingParts and self.pendingParts.damage
+    if not damage then
+      local inspected = self:inspectDamage()
+      damage = inspected and inspected.damage
+    end
+    local cost = damage and damage >= WRECKED_DAMAGE and M.repairCost(damage) or 0
+    if cost == 0 or self:canAfford(cost) then
+      if self.wreck then self.diag:event('wreck_cleared', tostring(cost)) end
+      self.wreck = nil
+      return
+    end
+    if not self.wreck then
+      self.wreck = { left = GAME_OVER_DELAY }
+      self.diag:event('wrecked', string.format('%.1f damage, %d', damage, cost), 'W')
+    end
+    self.wreck.cost = cost
+    self.wreck.left = self.wreck.left - dt
+    if self.wreck.left <= 0 then self:endRun(cost) end
+  end
+
+  -- Writes a save of this profile and makes it the loaded one. Returns it, or nil and why.
+  function c:record(candidate)
+    candidate.schemaVersion, candidate.profileId = 1, 'default'
+    local saved, why = self.store:save(candidate)
+    if not saved then return nil, why end
+    self.profile, self.unsavedBase = saved, nil
+    self.savedDistanceKm = saved.progression.totalDistanceKm
+    self.savedBalance = saved.progression.balance
+    return saved
+  end
+
+  -- Game over. It is saved straight away, so reloading the last save does not undo it.
+  function c:endRun(cost)
+    self.gameOver, self.wreck, self.quote, self.restartArmed = true, nil, nil, false
+    self.diag:event('game_over', tostring(cost), 'W')
+    local saved, why = self:record({ base = self.profile.base, resume = self.profile.resume,
+      progression = self.profile.progression, stage = self.stage.id, vehicle = {}, gameOver = true })
+    if not saved then self.diag:event('game_over_unsaved', tostring(why), 'E') end
+  end
+
+  -- Where the stage starts. config.json's base, when set, moves the first stage's start.
+  function c:stageStart()
+    if self.stage.id == stages.first().id then return location.copy(self.configuration.base) end
+    return location.copy(self.stage.start)
+  end
+
+  -- Starts the stage again: money, mileage and car go back to the start, and the save is replaced.
+  -- After game over one press does it; otherwise a second press confirms, since progress is lost.
+  function c:restartStage()
+    if self.error or not self.configuration or not self.stage then
+      self.feedback = 'Restart is unavailable right now. Check the status above.'
+      return false
+    end
+    if not self.gameOver and not self.restartArmed then
+      self.restartArmed = true
+      self.feedback = 'Press Confirm restart to start ' .. self.stage.name
+        .. ' again. Your car, money and mileage go back to the start.'
+      return false
+    end
+    local start = self:stageStart()
+    local saved, why = self:record({ base = start, resume = start, progression = { balance = 0, totalDistanceKm = 0 },
+      stage = self.stage.id, vehicle = {}, atStart = true })
+    if not saved then
+      self.restartArmed = false
+      self.feedback = 'Could not restart just now. Press Restart stage to try again.'
+      self.diag:event('stage_restart_failed', tostring(why), 'E')
+      return false
+    end
+    self.diag:event('stage_restarted', self.stage.id)
+    self:reload()
+    self.feedback = 'Stage restarted. Go to the start to get your starter car.'
+    return true
   end
 
   function c:view()
     local current = self.lastSample and self.lastSample.valid and location.copy(self.lastSample) or nil
     -- Where the player goes to carry on: the last save, or the start before the first save.
-    local resume = not self.arrived and not self.error and location.copy(self.startupTarget) or nil
+    local resume = not self.arrived and not self.error and not self.gameOver and location.copy(self.startupTarget) or nil
+    local stageName = self.stage and self.stage.name or ''
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
     -- A quote only stands for the vehicle it was made for.
@@ -517,11 +630,25 @@ function M.new(deps)
       status = 'Set valid base coordinates in the Enduro configuration, then choose Reload Enduro.'
     elseif self.state == 'ERROR' then
       status = errorMessages[self.error] or errorMessages.internal_error
+    elseif self.gameOver then
+      status = 'Ironman rule: your car was wrecked and you could not pay for the repair, so this run is over. '
+        .. 'Press Restart stage to start ' .. stageName .. ' again in the starter car with no money.'
+    elseif self.state == 'READY' and self.stageFinished then
+      status = 'You conquered the ' .. stageName .. ' stage! More stages are coming. Press Restart stage to run it again.'
+    elseif self.state == 'READY' and self.wreck then
+      status = 'Your car is wrecked. The repair costs ' .. dollars(self.wreck.cost) .. ' and you have '
+        .. dollars(self.profile.progression.balance) .. '. Unless you can pay, it is game over in '
+        .. math.max(0, math.ceil(self.wreck.left)) .. ' s.'
     elseif self.state == 'READY' then
       status = self.arrived and arrivedMessages[self.mode] or goMessages[self.mode]
     elseif not status then status = messages.position_invalid end
     local label = labels[self.state]
-    if self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
+    if self.state == 'CONFIG_REQUIRED' or self.state == 'ERROR' then -- keep the label
+    elseif self.gameOver then label = 'GAME OVER'
+    elseif self.state == 'READY' and self.stageFinished then label = 'STAGE COMPLETE'
+    elseif self.state == 'READY' and self.wreck then label = 'WRECKED'
+    elseif self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
+    local active = self.profile ~= nil and not self.error and not self.gameOver
     return {
       state = self.state, stateLabel = label, mode = self.mode,
       sessionStatus = status, arrived = self.arrived,
@@ -529,6 +656,14 @@ function M.new(deps)
       base = base,
       resume = resume,
       resumeDistanceMetres = current and resume and location.distance(current, resume) or nil,
+      stage = self.stage and { name = self.stage.name, finish = location.copy(self.stage.finish) } or nil,
+      -- Straight-line distance, shown once the player is on the stage.
+      finishDistanceMetres = current and self.arrived and self.stage and not self.gameOver
+        and location.distance(current, self.stage.finish) or nil,
+      stageFinished = self.stageFinished, gameOver = self.gameOver,
+      wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)) } or nil,
+      restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error,
+      restartArmed = self.restartArmed,
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
       } or nil,
@@ -537,20 +672,20 @@ function M.new(deps)
       unsavedDistanceKm = self.profile and math.max(0, self.profile.progression.totalDistanceKm - self.savedDistanceKm) or 0,
       unsavedBalance = self.profile and math.max(0, self.profile.progression.balance - self.savedBalance) or 0,
       unsavedSpending = self.profile and math.max(0, self.savedBalance - self.profile.progression.balance) or 0,
-      testMoneyAllowed = self.profile ~= nil and not self.error,
-      repairQuoteAllowed = self.profile ~= nil and not self.error and self.garage ~= nil,
+      testMoneyAllowed = active,
+      repairQuoteAllowed = active and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
       repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage) or nil,
-      repairAllowed = quote ~= nil and not self.pendingParts,
+      repairAllowed = quote ~= nil and not self.pendingParts and not self.gameOver,
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
         added = self.pendingParts.added, removed = self.pendingParts.removed,
         partsCost = self.pendingParts.partsCost, repair = self.pendingParts.repair, cost = self.pendingParts.cost,
       } or nil,
       buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
-      revertPartsAllowed = self.pendingParts ~= nil,
+      revertPartsAllowed = self.pendingParts ~= nil and not self.gameOver,
       partsFeedback = self.partsFeedback,
-      saveAllowed = self.state == 'READY' and self.arrived,
+      saveAllowed = self.state == 'READY' and self.arrived and not self.gameOver,
       saveFeedback = self.feedback,
     }
   end
@@ -561,11 +696,12 @@ function M.new(deps)
     self:observe(self.adapter:sample(), dt)
     self:provideVehicle()
     self:watchParts()
+    self:watchIronman(dt)
     self.ui:publish(self:view(), self.clock)
   end
 
   function c:manualSave()
-    if self.state ~= 'READY' or not self.profile or self.error then
+    if self.state ~= 'READY' or not self.profile or self.error or self.gameOver then
       self.feedback = 'Save is unavailable right now. Check the status above.'
       self.diag:event('manual_save_rejected', tostring(self.state), 'W')
       return false
@@ -586,30 +722,27 @@ function M.new(deps)
       self.diag:event('manual_save_rejected', fresh.reason or 'position_invalid', 'W')
       return false
     end
-    local candidate = {
-      schemaVersion = 1, profileId = self.profile.profileId, base = self.profile.base,
-      resume = location.copy(fresh), progression = self.profile.progression,
+    local saved, why = self:record({
+      base = self.profile.base, resume = location.copy(fresh), progression = self.profile.progression,
       vehicle = { model = fresh.vehicle and fresh.vehicle.model, config = self:savedVehicleConfig(),
         damage = self:savedVehicleDamage() },
-    }
-    local saved, why = self.store:save(candidate)
+      stage = self.stage.id, finished = self.stageFinished or nil,
+    })
     if not saved then
       -- Nothing is lost: the last save is untouched and the session carries on, so Save can be tried again.
       self.feedback = 'Could not save just now. Your last save is still safe. Press Save to try again.'
       self.diag:clear('manual_save_failed'); self.diag:event('manual_save_failed', why, 'E')
       return false
     end
-    self.profile, self.lastSample, self.unsavedBase = saved, fresh, nil
-    self.savedDistanceKm = saved.progression.totalDistanceKm
-    self.savedBalance = saved.progression.balance
-    self.feedback = 'Saved successfully.'
+    self.lastSample = fresh
+    self.feedback = self.stageFinished and 'Your finish is saved.' or 'Saved successfully.'
     self.diag:clear('manual_save_succeeded'); self.diag:event('manual_save_succeeded', 'generation ' .. saved.generation)
     return true
   end
 
   -- Testing aid: adds money to the in-memory balance. Like driving earnings, it is kept by Save.
   function c:addTestMoney()
-    if not self.profile or self.error then
+    if not self.profile or self.error or self.gameOver then
       self.diag:event('test_money_rejected', tostring(self.state), 'W')
       return false
     end
@@ -662,7 +795,7 @@ local function safely(f)
 end
 
 function M.onExtensionLoaded()
-  return safely(function() local c = ensure(); c.diag:event('extension_loaded', 'BeamNG-Earth Enduro Task 004') end)
+  return safely(function() local c = ensure(); c.diag:event('extension_loaded', 'World Ironman Enduro Rally') end)
 end
 function M.onPreRender(dtReal)
   return safely(function() ensure():tick(dtReal) end)
@@ -673,6 +806,7 @@ function M.requestRepairQuote() return safely(function() return ensure():request
 function M.repairVehicle() return safely(function() return ensure():repairVehicle() end) end
 function M.buyParts() return safely(function() return ensure():buyParts() end) end
 function M.revertParts() return safely(function() return ensure():revertParts(false) end) end
+function M.restartStage() return safely(function() return ensure():restartStage() end) end
 function M.onVehicleSpawned() return safely(function() if active then active:vehicleSpawned() end end) end
 function M.reload() return safely(function() ensure():reload() end) end
 function M.uiMounted(on) return safely(function() ensure():mount(on == true) end) end

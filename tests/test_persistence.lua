@@ -16,6 +16,7 @@ local edits = {
   function(s) s.vehicle.config='pickup.pc' end, function(s) s.vehicle.config={ parts = {} } end,
   function(s) s.vehicle.config={ model = 'pickup', vars = { x = 0/0 } } end,
   function(s) s.vehicle.config={ model = 'pickup', [true] = 1 } end,
+  function(s) s.stage={} end, function(s) s.finished='yes' end, function(s) s.gameOver=false end,
 }
 for _, edit in ipairs(edits) do local s=F.save(); edit(s); T.eq(P.validate(s),nil,'invalid save rejected') end
 -- A saved car config is kept as plain data.

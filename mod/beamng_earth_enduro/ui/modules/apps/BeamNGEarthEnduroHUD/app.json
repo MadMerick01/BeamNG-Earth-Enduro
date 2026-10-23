@@ -1,9 +1,9 @@
 {
   "domElement": "<beamng-earth-enduro-hud></beamng-earth-enduro-hud>",
-  "name": "Enduro HUD",
+  "name": "World Ironman Enduro Rally",
   "types": ["ui.apps.categories.utility"],
-  "description": "Manual geographic start, save and resume for BeamNG-Earth Enduro.",
-  "css": {"width": "360px", "height": "510px", "top": "100px", "left": "20px"},
+  "description": "World Ironman Enduro Rally: long BeamNG.Earth stages where a wreck you cannot pay for ends the run.",
+  "css": {"width": "360px", "height": "600px", "top": "100px", "left": "20px"},
   "author": "BeamNG-Earth Enduro",
   "version": "0.1.0",
   "directive": "beamngEarthEnduroHud",
