@@ -73,6 +73,31 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.reloadEnduro = function () {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.reload() end')
       }
+      // Stage clock: h:mm:ss of the size of a number of seconds; the sign is shown by the caller.
+      scope.clock = function (seconds) {
+        if (typeof seconds !== 'number' || !isFinite(seconds)) return '-:--:--'
+        var total = Math.floor(Math.abs(seconds))
+        var pad = function (n) { return (n < 10 ? '0' : '') + n }
+        return Math.floor(total / 3600) + ':' + pad(Math.floor(total / 60) % 60) + ':' + pad(total % 60)
+      }
+      scope.pace = function (seconds) {
+        if (typeof seconds !== 'number' || !isFinite(seconds)) return ''
+        return (seconds > 0 ? '+' : (seconds < 0 ? '\u2212' : '')) + Math.abs(seconds) + ' s'
+      }
+      scope.paceColor = function (seconds) { return seconds > 0 ? '#6fcf97' : (seconds < 0 ? '#eb5757' : '#f2f6f5') }
+      // Green with time in hand, amber in the last tenth of the limit, red in overtime.
+      scope.timerColor = function (timer) {
+        if (!timer) return '#a7e5c9'
+        if (timer.remainingSeconds < 0) return '#eb5757'
+        if (timer.remainingSeconds < timer.targetSeconds * 0.1) return '#f2c94c'
+        return '#a7e5c9'
+      }
+      scope.timerLabel = function (d) {
+        var t = d.timer || {}
+        if (d.stageFinished) return t.remainingSeconds < 0 ? 'FINISHED OVER THE LIMIT BY' : 'FINISHED WITH TIME TO SPARE'
+        if (t.remainingSeconds < 0) return 'OVERTIME'
+        return t.started ? 'TIME LEFT' : 'TIME LIMIT'
+      }
       scope.coordinates = function (position) {
         if (!position || typeof position.latitude !== 'number' || typeof position.longitude !== 'number' ||
             !isFinite(position.latitude) || !isFinite(position.longitude) ||
