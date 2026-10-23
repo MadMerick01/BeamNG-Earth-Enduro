@@ -659,7 +659,7 @@ function M.new(deps)
       resumeDistanceMetres = current and resume and location.distance(current, resume) or nil,
       stage = self.stage and {
         name = self.stage.name, finish = location.copy(self.stage.finish),
-        startTown = self.stage.startTown, finishTown = self.stage.finishTown,
+        startTown = self.stage.startTown, finishTown = self.stage.finishTown, briefing = self.stage.briefing,
       } or nil,
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,

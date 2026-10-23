@@ -14,6 +14,9 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var mount = function (on) {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.uiMounted(' + (on ? 'true' : 'false') + ') end')
       }
+      // The briefing stays hidden for the rest of the session once the player dismisses it.
+      scope.briefingDismissed = false
+      scope.dismissBriefing = function () { scope.briefingDismissed = true }
       scope.save = function () {
         if (scope.data.saveAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.save() end')
       }

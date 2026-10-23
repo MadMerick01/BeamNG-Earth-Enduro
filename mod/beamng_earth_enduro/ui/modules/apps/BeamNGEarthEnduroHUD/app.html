@@ -1,7 +1,21 @@
 <div class="bngApp" style="height:100%;width:100%;overflow:auto;box-sizing:border-box;padding:14px;background:rgba(12,19,24,.9);color:#f2f6f5;font:14px/1.4 sans-serif;border:1px solid #568d7a;border-radius:8px;">
   <div style="font-size:16px;font-weight:bold;letter-spacing:1px;">WORLD IRONMAN ENDURO RALLY</div>
   <div ng-if="data.stage" style="margin-top:2px;color:#c9d6d2;">Stage: {{data.stage.name}}<span ng-if="data.stage.startTown && data.stage.finishTown">, {{data.stage.startTown}} to {{data.stage.finishTown}}</span></div>
-  <div ng-if="data.stage.finishTown && !data.stageFinished" style="margin:8px 0;padding:8px;border:1px solid #f2c94c;border-radius:6px;"><span style="font-weight:bold;color:#f2c94c;">Finish town: {{data.stage.finishTown}}</span><div style="font-size:12px;color:#c9d6d2;">Search it on the map to plan your route.</div></div>
+  <div ng-if="data.mode === 'start' && data.stage.briefing && !data.stageFinished && !data.gameOver && !briefingDismissed" role="note" style="margin:8px 0;padding:10px;border:2px solid #a7e5c9;border-radius:6px;background:rgba(167,229,201,.1);">
+    <div style="font-weight:bold;color:#a7e5c9;">STAGE BRIEFING: {{data.stage.name}}</div>
+    <div style="margin-top:4px;">{{data.stage.briefing}}</div>
+    <button type="button" ng-click="dismissBriefing()" style="margin-top:6px;padding:5px 10px;">Got it</button>
+  </div>
+  <div ng-if="data.stage && !data.stageFinished && (data.stage.finishTown || coordinates(data.stage.finish))" style="margin:8px 0;padding:8px;border:1px solid #f2c94c;border-radius:6px;">
+    <div ng-if="data.stage.finishTown" style="font-weight:bold;color:#f2c94c;">Finish town: {{data.stage.finishTown}}</div>
+    <label ng-if="coordinates(data.stage.finish)">Finish coordinates (lat, long):
+      <div style="display:flex;gap:6px;margin-top:4px;">
+        <input aria-label="Finish coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.stage.finish)" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
+        <button type="button" aria-label="Copy finish coordinates" ng-click="copyCoordinates(data.stage.finish)">Copy</button>
+      </div>
+    </label>
+    <div style="margin-top:6px;font-size:12px;color:#c9d6d2;">Navigation tip: paste the finish coordinates into the map search and click the finish point. The map plots a route from where you are and shows arrows and road markers in game.</div>
+  </div>
   <div role="status" style="margin:10px 0;color:#a7e5c9;font-weight:bold;">{{data.stateLabel}}</div>
   <div ng-if="data.stageFinished && !data.gameOver" role="status" style="margin:10px 0;padding:10px;border:2px solid #f2c94c;border-radius:6px;background:rgba(242,201,76,.15);color:#f2c94c;font-size:18px;font-weight:bold;text-align:center;">&#127937; STAGE COMPLETE &#127937;<div style="font-size:13px;font-weight:normal;color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left.</div></div>
   <div ng-if="data.gameOver" role="alert" style="margin:10px 0;padding:10px;border:2px solid #eb5757;border-radius:6px;background:rgba(235,87,87,.15);color:#eb5757;font-size:18px;font-weight:bold;text-align:center;">GAME OVER</div>

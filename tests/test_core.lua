@@ -399,6 +399,7 @@ do
   m:tick(0.1); T.eq(m.profile.stage, 'zoji_la', 'new profile is on the first stage')
   T.check(m:view().finishDistanceMetres > 1000000, 'distance to the finish shown once on the stage')
   T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Ganderbal, Kashmir', 'HUD names the start town')
+  T.check(m:view().stage.briefing:find('Zoji La'), 'HUD has the stage briefing')
   T.check(type(m:view().finishDirection) == 'string', 'HUD gives the direction to the finish')
   T.eq(m:view().stageFinished, false, 'stage not finished at the start')
   ma.pose = F.position(zoji.finish.latitude + 0.0005, zoji.finish.longitude); m:tick(0.1)
