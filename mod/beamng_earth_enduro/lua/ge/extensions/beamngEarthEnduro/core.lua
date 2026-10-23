@@ -158,6 +158,8 @@ function M.new(deps)
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
     self.startupTarget = location.copy(self.profile and self.profile.resume or self.creationBase)
+    -- A restarted save goes to where the stage starts now, even if an update moved it.
+    if self.profile and self.mode == 'start' and self.configuration and self.stage then self.startupTarget = self:stageStart() end
     if self.startupTarget then
       self.diag:event('target', self.mode .. ':' .. string.format('%.8f,%.8f', self.startupTarget.latitude, self.startupTarget.longitude))
     end
