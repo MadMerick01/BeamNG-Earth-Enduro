@@ -383,17 +383,17 @@ do
   m:tick(0.1); m:tick(0.1); T.eq(#g.spawns, 0, 'no spawn when resuming a save without a car')
 end
 
--- Stages: the first stage is Stage 1, Sind River to Dras, the HUD shows the distance to its finish, and reaching the
+-- Stages: the first stage is Stage 1: Zoji La Pass, the HUD shows the distance to its finish, and reaching the
 -- finish completes the stage and saves it.
 do
   local S = require('beamngEarthEnduro/stages')
   local first = S.get('stage_1')
-  T.eq(first.name, 'Stage 1', 'Stage 1 defined'); T.eq(S.first().id, 'stage_1', 'Stage 1 is the first stage')
+  T.eq(first.name, 'Stage 1: Zoji La Pass', 'Stage 1 defined'); T.eq(S.first().id, 'stage_1', 'Stage 1 is the first stage')
   T.eq(first.start.latitude, 34.271288, 'Stage 1 start latitude'); T.eq(first.finish.longitude, 75.80991, 'Stage 1 finish longitude')
   T.eq(S.get('zoji_la').id, 'stage_1', 'the stage old id still finds the stage')
   T.eq(S.get('nowhere'), nil, 'unknown stage')
   local m,mio,ma=F.controller()
-  T.eq(m:view().stage.name, 'Stage 1', 'HUD names the stage')
+  T.eq(m:view().stage.name, 'Stage 1: Zoji La Pass', 'HUD names the stage')
   m:tick(0.1); T.eq(m.profile.stage, 'stage_1', 'new profile is on the first stage')
   T.check(m:view().finishDistanceMetres > 1000000, 'distance to the finish shown once on the stage')
   T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Sind River, Kashmir', 'HUD names the start town')
@@ -408,10 +408,10 @@ do
   T.check(r:view().stageFinished, 'a loaded save remembers the finish')
   -- Saves from before stages belong to the first stage; a stage this version lacks pauses Enduro.
   r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) }) })
-  T.eq(r:view().stage.name, 'Stage 1', 'older save is on the first stage')
+  T.eq(r:view().stage.name, 'Stage 1: Zoji La Pass', 'older save is on the first stage')
   local renamed = F.save(1); renamed.stage = 'zoji_la'
   r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = renamed }) })
-  T.eq(r.state ~= 'ERROR' and r:view().stage.name, 'Stage 1', 'a save under the old stage id still loads')
+  T.eq(r.state ~= 'ERROR' and r:view().stage.name, 'Stage 1: Zoji La Pass', 'a save under the old stage id still loads')
   local unknown = F.save(1); unknown.stage = 'later'
   r = F.controller({ io = F.io({ [CONFIG] = F.config(), [A] = unknown }) })
   T.eq(r.state, 'ERROR', 'unknown stage pauses Enduro'); T.check(not r:view().restartAllowed, 'unknown stage cannot be restarted')

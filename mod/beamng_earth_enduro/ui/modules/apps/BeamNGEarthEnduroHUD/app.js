@@ -21,7 +21,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.tabs = [
         { id: 'stage', label: 'Stage' }, { id: 'nav', label: 'Navigation' },
         { id: 'parts', label: 'Parts' }, { id: 'car', label: 'New Car' },
-        { id: 'repair', label: 'Repair' }, { id: 'about', label: 'About' }
+        { id: 'repair', label: 'Repair' }, { id: 'tips', label: 'Tips' }
       ]
       scope.tab = 'stage'
       scope.setTab = function (id) { scope.tab = id }

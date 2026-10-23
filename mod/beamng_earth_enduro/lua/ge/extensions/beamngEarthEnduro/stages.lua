@@ -9,9 +9,9 @@ local M = {}
 
 M.list = {
   {
-    id = 'stage_1', oldIds = { 'zoji_la' }, name = 'Stage 1',
+    id = 'stage_1', oldIds = { 'zoji_la' }, name = 'Stage 1: Zoji La Pass',
     startTown = 'Sind River, Kashmir', finishTown = 'Dras, Ladakh',
-    briefing = 'Drive from the Sind River, Kashmir, up the Sind valley past Sonamarg and over the high mountain pass to Dras, Ladakh. '
+    briefing = 'Drive from the Sind River, Kashmir, up the Sind valley past Sonamarg and over the Zoji La Pass to Dras, Ladakh. '
       .. 'Reach the finish to complete the stage.',
     start = { latitude = 34.271288, longitude = 75.163671 },
     finish = { latitude = 34.43223, longitude = 75.80991 },
