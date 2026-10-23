@@ -93,11 +93,11 @@ function M.equal(a, b)
   return true
 end
 
-function M.newProfile(base, pose, vehicle, stage)
+function M.newProfile(base, pose, vehicle, stage, balance)
   return {
     schemaVersion = 1, profileId = 'default', generation = 0, stage = stage,
     base = location.copy(base), resume = location.copy(pose),
-    progression = { balance = 0, totalDistanceKm = 0 },
+    progression = { balance = balance or 0, totalDistanceKm = 0 },
     vehicle = { model = vehicle and vehicle.model, configuration = vehicle and vehicle.configuration },
   }
 end

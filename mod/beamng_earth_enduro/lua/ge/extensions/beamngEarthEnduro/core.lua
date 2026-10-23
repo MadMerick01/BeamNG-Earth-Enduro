@@ -150,7 +150,9 @@ function M.new(deps)
     self.stageFinished = self.profile ~= nil and self.profile.finished == true
     self.gameOver = self.profile ~= nil and self.profile.gameOver == true
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
-    self.savedBalance = self.profile and self.profile.progression.balance or 0
+    -- Before the first save the stage's starting money counts as saved, since it was not earned.
+    self.savedBalance = self.profile and self.profile.progression.balance
+      or (self.stage and self.stage.startingMoney) or 0
     -- A restored car looks new, but the repair it needed when saved is still owed.
     self.owedDamage = self.profile and self.profile.vehicle and self.profile.vehicle.damage or 0
     -- A restarted stage sends the player back to its start for a new starter car.
@@ -507,7 +509,8 @@ function M.new(deps)
     end
     -- Any valid vehicle position starts the session: saving and mileage work wherever the vehicle is.
     if not self.profile then
-      self.profile = persistence.newProfile(self.creationBase, sample, sample.vehicle, self.stage.id)
+      self.profile = persistence.newProfile(self.creationBase, sample, sample.vehicle, self.stage.id,
+        self.stage.startingMoney)
       self.unsavedBase = location.copy(self.profile.base)
       self.diag:event('profile_initialised', 'default (in memory, not yet saved)')
     end
@@ -603,7 +606,7 @@ function M.new(deps)
       return false
     end
     local start = self:stageStart()
-    local saved, why = self:record({ base = start, resume = start, progression = { balance = 0, totalDistanceKm = 0 },
+    local saved, why = self:record({ base = start, resume = start, progression = { balance = self.stage.startingMoney, totalDistanceKm = 0 },
       stage = self.stage.id, vehicle = {}, atStart = true })
     if not saved then
       self.restartArmed = false
@@ -634,7 +637,7 @@ function M.new(deps)
       status = errorMessages[self.error] or errorMessages.internal_error
     elseif self.gameOver then
       status = 'Ironman rule: your car was wrecked and you could not pay for the repair, so this run is over. '
-        .. 'Press Restart stage to start ' .. stageName .. ' again in the starter car with no money.'
+        .. 'Press Restart stage to start ' .. stageName .. ' again in the starter car with ' .. dollars(self.stage and self.stage.startingMoney or 0) .. '.'
     elseif self.state == 'READY' and self.stageFinished then
       status = 'You conquered the ' .. stageName .. ' stage! More stages are coming. Press Restart stage to run it again.'
     elseif self.state == 'READY' and self.wreck then
@@ -673,7 +676,7 @@ function M.new(deps)
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
       } or nil,
-      balance = self.profile and self.profile.progression.balance or 0,
+      balance = self.profile and self.profile.progression.balance or (self.stage and self.stage.startingMoney) or 0,
       totalDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0,
       unsavedDistanceKm = self.profile and math.max(0, self.profile.progression.totalDistanceKm - self.savedDistanceKm) or 0,
       unsavedBalance = self.profile and math.max(0, self.profile.progression.balance - self.savedBalance) or 0,

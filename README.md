@@ -9,15 +9,15 @@ The mod (folder, ZIP and code names) is still called `beamng_earth_enduro` so ex
 
 **Stages.** The first stage is **Zoji La**, from `34.224032, 75.029787` near Gund, Kashmir, to `34.43223, 75.80991` near Dras, Ladakh. More stages are added by adding an entry to `lua/ge/extensions/beamngEarthEnduro/stages.lua` (an id, a name, start and finish towns, start and finish coordinates and a finish radius). The HUD shows the stage name, a briefing when the stage starts, and the finish town and coordinates with a Copy button. **Navigation tip:** paste the finish coordinates into the map search and click the finish point; the map plots a route from where you are and shows arrows and road markers in game. Once you are on the stage the HUD also shows the straight-line distance and compass direction to the finish.
 
-**Starting a stage.** A fresh start (no save yet) or a restarted stage gives you the start coordinates to teleport to, $0 and no mileage. When you arrive you are put in the starter car.
+**Starting a stage.** A fresh start (no save yet) or a restarted stage gives you the start coordinates to teleport to, the stage's starting money ($3,000 on Zoji La) and no mileage. When you arrive you are put in the starter car.
 
 **Finishing.** Get within 100 m of the finish coordinates and the HUD celebrates with **STAGE COMPLETE**, showing your mileage and money. The finish is saved straight away.
 
 **Ironman rule: when is it game over?** Your car is **wrecked** when its damage reaches 10,000 points (BeamNG calls about 30,000 major damage; a wreck's repair costs at least $5,100). If your car is wrecked and the repair costs more than your balance, the HUD shows **WRECKED** with a 10-second countdown. If you still cannot pay when it runs out, it is **GAME OVER**. Damage below the wreck level never ends the run, however broke you are, because the car can still be driven to earn money. A part change, which mends the car, cannot be used to dodge the bill: Revert is refused for an unpaid wreck. Game over is saved at once, so **Reload rally** does not undo it; everything but **Restart stage** is locked.
 
-**Restart stage.** Starts the stage again from its start, in the starter car, with $0 and no mileage, and replaces your save. After game over one press does it. At any other time (for example when your car is stuck, or after finishing) the first press asks you to confirm, because your progress is lost.
+**Restart stage.** Starts the stage again from its start, in the starter car, with the starting money and no mileage, and replaces your save. After game over one press does it. At any other time (for example when your car is stuck, or after finishing) the first press asks you to confirm, because your progress is lost.
 
-These numbers are constants at the top of `core.lua` (`WRECKED_DAMAGE`, `GAME_OVER_DELAY`) and in `stages.lua` (`finishRadiusMetres`), so they are easy to tune after testing in game.
+These numbers are constants at the top of `core.lua` (`WRECKED_DAMAGE`, `GAME_OVER_DELAY`) and in `stages.lua` (`finishRadiusMetres`, `startingMoney` per stage), so they are easy to tune after testing in game.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
 **Windows BeamNG.drive acceptance is not yet tested.** The mod only needs a valid vehicle position from Earth; it does not wait for Earth's terrain, roads or streaming to finish.
