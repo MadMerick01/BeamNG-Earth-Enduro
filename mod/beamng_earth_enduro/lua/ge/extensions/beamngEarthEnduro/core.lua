@@ -10,7 +10,7 @@ local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
 -- Money earned per kilometre of counted driving, and the amount the HUD test button adds.
-local EARNINGS_PER_KM = 50
+local EARNINGS_PER_KM = 100
 local TEST_MONEY = 10000
 local MAX_BALANCE = 9007199254740991
 -- Repair pricing from the vehicle's overall damage (BeamNG's own traffic code treats about 50 as a

@@ -171,30 +171,30 @@ do
   T.near(m:view().totalDistanceKm,0.01,1e-6,'mileage counts from arrival, not from the teleport')
 end
 
--- Money: $50 per counted kilometre, plus a +$10000 test button; both kept by manual Save.
+-- Money: $100 per counted kilometre, plus a +$10000 test button; both kept by manual Save.
 do
   local m,mio,ma=F.controller()
   local north = 1 / 111195.0802
   T.check(not m:addTestMoney(),'test money needs an active profile'); T.eq(m:view().testMoneyAllowed,false,'test button disabled before a position')
   m:tick(0.1)
   for i=1,100 do ma.pose=F.position(i*10*north); m:tick(0.5) end -- 1 km at 20 m/s
-  T.eq(m:view().balance,50,'driving 1 km earns $50')
-  T.eq(m:view().unsavedBalance,50,'earned money shown as unsaved')
+  T.eq(m:view().balance,100,'driving 1 km earns $100')
+  T.eq(m:view().unsavedBalance,100,'earned money shown as unsaved')
+  ma.pose=F.position(1005*north); m:tick(0.5)
+  T.eq(m:view().balance,100,'5 m earns 50 cents, not yet a whole dollar')
   ma.pose=F.position(1010*north); m:tick(0.5)
-  T.eq(m:view().balance,50,'10 m earns 50 cents, not yet a whole dollar')
-  ma.pose=F.position(1020*north); m:tick(0.5)
-  T.eq(m:view().balance,51,'fractions of a dollar carry over')
+  T.eq(m:view().balance,101,'fractions of a dollar carry over')
   ma.pose=F.position(60000*north); m:tick(0.1)
-  T.eq(m:view().balance,51,'teleports earn no money')
+  T.eq(m:view().balance,101,'teleports earn no money')
   T.check(m:view().testMoneyAllowed,'test button enabled while active')
-  T.check(m:addTestMoney(),'test money added'); T.eq(m:view().balance,10051,'test button adds $10000')
+  T.check(m:addTestMoney(),'test money added'); T.eq(m:view().balance,10101,'test button adds $10000')
   T.eq(mio.writes,0,'earning money never writes to disk')
-  T.check(m:manualSave(),'money saved'); T.eq(mio.files[A].progression.balance,10051,'save file holds balance')
+  T.check(m:manualSave(),'money saved'); T.eq(mio.files[A].progression.balance,10101,'save file holds balance')
   T.eq(m:view().unsavedBalance,0,'nothing unsaved after save')
   m:addTestMoney()
   local r=F.controller({io=mio})
-  T.eq(r:view().balance,10051,'restart loads saved balance, unsaved money discarded')
-  m:reload(); T.eq(m:view().balance,10051,'reload discards unsaved money')
+  T.eq(r:view().balance,10101,'restart loads saved balance, unsaved money discarded')
+  m:reload(); T.eq(m:view().balance,10101,'reload discards unsaved money')
   mio.writeFails=true; m:tick(0.1); m:manualSave()
   T.check(m:addTestMoney(),'a failed save leaves money and spending available')
 end
@@ -288,7 +288,7 @@ do
   T.check(m:view().partsChange ~= nil, 'failed revert keeps the bill'); T.eq(g.fitted.turbo, 'pickup_turbo', 'parts unchanged on failed revert')
   g.accepts = true; ma.pose = F.position(0, 0.002); m:tick(0.1)
   T.eq(g.fitted.turbo, nil, 'driving off puts the paid parts back'); T.eq(m:view().partsChange, nil, 'bill cleared after driving off')
-  T.eq(m:view().balance, 10000 - 1370 - 200, 'driving off still pays the repair')
+  T.eq(m:view().balance, 10000 - 1370 - 200 + 1, 'driving off still pays the repair (the first 11 m driven earned $1)')
 
   g.partsUnreadable = true; m:vehicleSpawned(); m:tick(0.1); T.check(m.partsCheckDue, 'unreadable parts retried')
 end
