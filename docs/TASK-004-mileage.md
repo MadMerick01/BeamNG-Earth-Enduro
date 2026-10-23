@@ -4,7 +4,7 @@ Scope: count the distance driven and keep it in the save file. No money, rewards
 
 ## How it counts
 
-- Mileage only counts while the HUD is READY, i.e. after arriving at the base or saved location.
+- Mileage only counts while the HUD is READY, i.e. while Earth reports a valid vehicle position. (Originally this also required arriving at the base or saved location first; that check has since been removed so Save works anywhere straight away.)
 - Each frame, the geographic (haversine) distance between the previous and current vehicle reading is added to `progression.totalDistanceKm`.
 - A step faster than 150 m/s (540 km/h) is treated as a teleport: it is not counted, and counting continues from the new position.
 - A frame with zero elapsed time is not counted.
