@@ -46,4 +46,20 @@
     </div>
     <p role="status" ng-if="data.repairFeedback" style="margin:8px 0 0;">{{data.repairFeedback}}</p>
   </div>
+  <div style="margin-top:12px;padding-top:10px;border-top:1px solid #568d7a;">
+    <div style="font-weight:bold;">Parts</div>
+    <div ng-if="!data.partsChange">Change parts in the game's parts menu. The HUD prices the change here.</div>
+    <div ng-if="data.partsChange">
+      <div ng-repeat="part in data.partsChange.added">+ {{part.name}}: ${{part.price | number:0}}</div>
+      <div ng-repeat="part in data.partsChange.removed">&minus; {{part.name}} (trade-in)</div>
+      <div>Parts: ${{data.partsChange.partsCost | number:0}}</div>
+      <div ng-if="data.partsChange.repair > 0">Repair: ${{data.partsChange.repair | number:0}}</div>
+      <div style="font-weight:bold;">Total: ${{data.partsChange.cost | number:0}}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button type="button" ng-click="buyParts()" ng-disabled="!data.buyPartsAllowed" style="padding:7px 12px;">Buy</button>
+      <button type="button" ng-click="revertParts()" ng-disabled="!data.revertPartsAllowed" style="padding:7px 12px;">Revert</button>
+    </div>
+    <p role="status" ng-if="data.partsFeedback" style="margin:8px 0 0;">{{data.partsFeedback}}</p>
+  </div>
 </div>

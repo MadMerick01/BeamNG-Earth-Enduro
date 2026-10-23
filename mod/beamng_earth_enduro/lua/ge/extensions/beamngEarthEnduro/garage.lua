@@ -10,7 +10,26 @@ local function defaults()
     objects = function() local m = rawget(_G, 'map'); return type(m) == 'table' and m.objects or nil end,
     manager = function() return rawget(_G, 'core_vehicle_manager') or (extensions and extensions.core_vehicle_manager) end,
     vehicles = function() return rawget(_G, 'core_vehicles') or (extensions and extensions.core_vehicles) end,
+    -- jbeam/io looks up a part's jbeam data, whose information.value is the price career uses.
+    jbeam = function() return require('jbeam/io') end,
   }
+end
+
+local function copy(value)
+  if type(value) ~= 'table' then return value end
+  local out = {}
+  for k, v in pairs(value) do out[k] = copy(v) end
+  return out
+end
+
+-- Flattens a 0.39 partsTree into { [slot path] = part name }; an empty slot has part name ''.
+local function fitted(node, out)
+  if type(node) ~= 'table' then return out end
+  if type(node.chosenPartName) == 'string' then out[tostring(node.path or node.id or '')] = node.chosenPartName end
+  if type(node.children) == 'table' then
+    for _, child in pairs(node.children) do fitted(child, out) end
+  end
+  return out
 end
 
 function M.new(environment)
@@ -36,19 +55,65 @@ function M.new(environment)
     return { id = id, damage = damage }
   end
 
-  -- Respawns the vehicle where it stands with its current parts, tuning and paint, which
-  -- leaves every part new. Returns true once the game accepted the respawn.
-  function g:repair()
+  local function vehicleData(id)
+    local manager = env.manager()
+    if type(manager) ~= 'table' or type(manager.getVehicleData) ~= 'function' then return nil end
+    local ok, data = pcall(manager.getVehicleData, id)
+    return ok and type(data) == 'table' and type(data.config) == 'table' and data or nil
+  end
+
+  -- Returns { value, name } from the part's jbeam information, or nothing when unreadable.
+  local function partInfo(data, partName)
+    local ok, jbeam = pcall(env.jbeam)
+    if not ok or type(jbeam) ~= 'table' or type(jbeam.getPart) ~= 'function' or data.ioCtx == nil then return nil end
+    local partOK, part = pcall(jbeam.getPart, data.ioCtx, partName)
+    local info = partOK and type(part) == 'table' and part.information or nil
+    if type(info) ~= 'table' then return nil end
+    local value = tonumber(info.value)
+    if value and (value ~= value or value < 0 or value == math.huge) then value = nil end
+    return value, type(info.name) == 'string' and info.name or nil
+  end
+
+  -- Returns the player vehicle's fitted parts:
+  -- { id, model, config, parts = { [slot] = part }, values = { [part] = price or nil }, names = { [part] = name } }.
+  function g:parts()
+    local vehicle, id = current()
+    if not vehicle then return nil, 'vehicle_required' end
+    local data = vehicleData(id)
+    if not data or type(data.config.partsTree) ~= 'table' then return nil, 'parts_unavailable' end
+    local parts = fitted(data.config.partsTree, {})
+    local values, names = {}, {}
+    for _, partName in pairs(parts) do
+      if partName ~= '' and names[partName] == nil then
+        local value, name = partInfo(data, partName)
+        values[partName], names[partName] = value, name or partName
+      end
+    end
+    local model = data.config.model
+    if type(model) ~= 'string' or model == '' then
+      local ok, filename = pcall(function() return vehicle:getJBeamFilename() end)
+      model = ok and filename or nil
+    end
+    return { id = id, model = model, config = copy(data.config), parts = parts, values = values, names = names }
+  end
+
+  -- Respawns the vehicle where it stands, which leaves every part new. With no config it keeps the
+  -- current parts, tuning and paint; with one, it fits that config's parts but keeps the current
+  -- tuning and paint. Returns true once the game accepted the respawn.
+  function g:repair(withConfig)
     local vehicle, id = current()
     if not vehicle then return false, 'vehicle_required' end
-    local manager, vehicles = env.manager(), env.vehicles()
-    if type(manager) ~= 'table' or type(manager.getVehicleData) ~= 'function'
-        or type(vehicles) ~= 'table' or type(vehicles.replaceVehicle) ~= 'function' then
+    local vehicles = env.vehicles()
+    if type(env.manager()) ~= 'table' or type(vehicles) ~= 'table' or type(vehicles.replaceVehicle) ~= 'function' then
       return false, 'repair_unavailable'
     end
-    local dataOK, data = pcall(manager.getVehicleData, id)
-    local config = dataOK and type(data) == 'table' and data.config or nil
-    if type(config) ~= 'table' then return false, 'config_unavailable' end
+    local data = vehicleData(id)
+    if not data then return false, 'config_unavailable' end
+    local config = data.config
+    if type(withConfig) == 'table' then
+      config = copy(withConfig)
+      config.vars, config.paints = copy(data.config.vars), copy(data.config.paints)
+    end
     local modelOK, model = pcall(function() return vehicle:getJBeamFilename() end)
     if not modelOK or type(model) ~= 'string' or model == '' then model = config.model end
     if type(model) ~= 'string' or model == '' then return false, 'config_unavailable' end

@@ -18,11 +18,45 @@ local REPAIR_MIN_DAMAGE = 50
 local REPAIR_CALLOUT_FEE = 100
 local REPAIR_COST_PER_DAMAGE = 0.5
 local MAX_REPAIR_COST = 20000
+-- Part pricing: a part's jbeam value, or a flat price when it has none. Parts taken off in the same
+-- change are traded in for a share of their value, which can lower the bill but never pays out.
+local DEFAULT_PART_PRICE = 250
+local PART_TRADE_IN_SHARE = 0.3
+-- Driving this far from where the parts were changed, without paying, puts the paid parts back.
+local UNPAID_PARTS_DRIVE_LIMIT = 25
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
   if type(damage) ~= 'number' or damage ~= damage or damage < REPAIR_MIN_DAMAGE then return 0 end
   return math.min(MAX_REPAIR_COST, math.floor(REPAIR_CALLOUT_FEE + damage * REPAIR_COST_PER_DAMAGE + 0.5))
+end
+
+-- Compares the paid-for parts with the fitted ones. Returns { added, removed, cost } or nil when
+-- they match; added and removed list { name, price }.
+function M.partsDiff(owned, fitted)
+  local added, removed, seen = {}, {}, {}
+  local function price(snapshot, part)
+    local value = snapshot.values and snapshot.values[part]
+    return math.floor((value or DEFAULT_PART_PRICE) + 0.5)
+  end
+  local function name(snapshot, part) return snapshot.names and snapshot.names[part] or part end
+  local function compare(slot)
+    if seen[slot] then return end
+    seen[slot] = true
+    local before, after = owned.parts[slot] or '', fitted.parts[slot] or ''
+    if before == after then return end
+    if after ~= '' then added[#added + 1] = { name = name(fitted, after), price = price(fitted, after) } end
+    if before ~= '' then removed[#removed + 1] = { name = name(owned, before), price = price(owned, before) } end
+  end
+  for slot in pairs(owned.parts) do compare(slot) end
+  for slot in pairs(fitted.parts) do compare(slot) end
+  if #added == 0 and #removed == 0 then return nil end
+  local byName = function(a, b) return a.name < b.name end
+  table.sort(added, byName); table.sort(removed, byName)
+  local total = 0
+  for _, part in ipairs(added) do total = total + part.price end
+  for _, part in ipairs(removed) do total = total - part.price * PART_TRADE_IN_SHARE end
+  return { added = added, removed = removed, cost = math.max(0, math.floor(total + 0.5)) }
 end
 
 local function dollars(amount)
@@ -67,6 +101,7 @@ function M.new(deps)
     self.sessionVerified, self.lastSample, self.error, self.odometer = false, nil, nil, nil
     self.earningsCarry = 0
     self.quote, self.repairFeedback = nil, nil
+    self.partsFeedback = nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -162,6 +197,10 @@ function M.new(deps)
   -- Charges the quoted price and repairs. A changed vehicle or new damage needs a fresh quote first,
   -- and the player is only charged once the game has accepted the repair.
   function c:repairVehicle()
+    if self.pendingParts then
+      self.repairFeedback = 'Buy or revert your part changes first. Their bill includes the repair.'
+      return false
+    end
     if not self.quote then
       self.repairFeedback = 'Get a repair quote first.'
       return false
@@ -194,6 +233,138 @@ function M.new(deps)
     self:spend(cost, 'repair')
     self.quote = nil
     self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. Save to keep the new balance.'
+    return true
+  end
+
+  -- Parts. The parts menu is BeamNG's own and changes parts for free; every change respawns the
+  -- vehicle, so the HUD compares the fitted parts with the ones paid for after each spawn. The
+  -- difference is billed on Buy, or the paid parts are put back on Revert. The respawn also mends
+  -- all damage, so the bill includes the repair the car needed just before its first change.
+  function c:vehicleSpawned()
+    self.partsCheckDue = true
+  end
+
+  -- Adopts the fitted parts as paid for, when there is nothing to charge against.
+  function c:adoptParts(snapshot)
+    self.ownedParts, self.pendingParts = snapshot, nil
+    self.diag:event('parts_owned', tostring(snapshot.model) .. ' #' .. tostring(snapshot.id))
+  end
+
+  function c:checkParts()
+    local snapshot = self.garage:parts()
+    if not snapshot then return false end
+    self.fittedParts = snapshot
+    local owned = self.ownedParts
+    -- Buying vehicles is not part of Enduro yet, so a different vehicle or model is simply taken as owned.
+    if not self.profile or self.error or not owned or owned.id ~= snapshot.id or owned.model ~= snapshot.model then
+      self:adoptParts(snapshot)
+      return true
+    end
+    local diff = M.partsDiff(owned, snapshot)
+    if not diff then
+      if self.pendingParts then self.partsFeedback = 'Part changes undone. Nothing to pay.' end
+      self.pendingParts = nil
+      return true
+    end
+    local previous = self.pendingParts
+    local repair = previous and previous.repair
+      or (self.lastDamage and self.lastDamage.id == snapshot.id and M.repairCost(self.lastDamage.damage)) or 0
+    local position = previous and previous.position
+      or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil
+    self.pendingParts = {
+      id = snapshot.id, added = diff.added, removed = diff.removed, partsCost = diff.cost,
+      repair = repair, cost = diff.cost + repair, position = position,
+    }
+    self.quote = nil
+    self.partsFeedback = self:canAfford(self.pendingParts.cost) and 'Press Buy to keep these parts, or Revert.'
+      or ('Not enough money. You need ' .. dollars(self.pendingParts.cost - self.profile.progression.balance)
+        .. ' more. Revert, or the parts go back when you drive off.')
+    self.diag:event('parts_quote', string.format('%d parts, %d repair', diff.cost, repair))
+    return true
+  end
+
+  -- Called every tick: checks parts after a spawn or vehicle switch, notes the damage the vehicle has
+  -- before a change, and puts the paid parts back if the player drives off without paying.
+  function c:watchParts()
+    if not self.garage then return end
+    local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
+    if vehicleId ~= nil and self.ownedParts and vehicleId ~= self.ownedParts.id then self.partsCheckDue = true end
+    if not self.ownedParts then self.partsCheckDue = true end
+    if self.partsCheckDue then
+      -- Damage is frozen until the check: the respawn has already reset it.
+      if self:checkParts() then self.partsCheckDue = false end
+      return
+    end
+    local inspected = self.garage:inspect()
+    if inspected then self.lastDamage = inspected end
+    local pending = self.pendingParts
+    if pending and self.lastSample and self.lastSample.valid then
+      if not pending.position then pending.position = location.copy(self.lastSample)
+      else
+        local moved = location.distance(pending.position, self.lastSample)
+        -- A failed revert is retried after another stretch of driving, not every frame.
+        if moved and moved > UNPAID_PARTS_DRIVE_LIMIT and not self:revertParts(true) then
+          pending.position = location.copy(self.lastSample)
+        end
+      end
+    end
+  end
+
+  -- Confirms the bill still matches what is fitted. Returns the pending change, or nil after re-quoting.
+  local function currentBill(self)
+    local pending = self.pendingParts
+    if not pending then
+      self.partsFeedback = 'No part changes to pay for.'
+      return nil
+    end
+    local before = pending.cost
+    if not self:checkParts() then
+      self.partsFeedback = 'Could not read the fitted parts. Try again in a moment.'
+      return nil
+    end
+    if not self.pendingParts then return nil end
+    if self.pendingParts.cost ~= before then
+      self.partsFeedback = 'The parts changed, so the bill was updated. Press Buy again to accept it.'
+      return nil
+    end
+    return self.pendingParts
+  end
+
+  function c:buyParts()
+    if not self.profile or self.error then
+      self.partsFeedback = 'Buying parts is unavailable right now. Check the status above.'
+      return false
+    end
+    local pending = currentBill(self)
+    if not pending then return false end
+    if not self:spend(pending.cost, 'parts') then
+      self.partsFeedback = 'Not enough money. You need ' .. dollars(pending.cost - self.profile.progression.balance) .. ' more.'
+      return false
+    end
+    self:adoptParts(self.fittedParts)
+    self.partsFeedback = 'Bought for ' .. dollars(pending.cost) .. '. Save to keep the new balance.'
+    return true
+  end
+
+  -- Respawns the vehicle with the paid parts. The change already mended the damage, so the repair
+  -- part of the bill is still charged, as far as the balance allows.
+  function c:revertParts(droveOff)
+    local pending = self.pendingParts
+    if not pending or not self.ownedParts then
+      self.partsFeedback = 'No part changes to revert.'
+      return false
+    end
+    local ok, why, detail = self.garage:repair(self.ownedParts.config)
+    if not ok then
+      self.partsFeedback = 'Could not put the paid parts back. Try again in a moment.'
+      self.diag:event('parts_revert_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+      return false
+    end
+    self.pendingParts = nil
+    local charged = self.profile and math.min(pending.repair, self.profile.progression.balance) or 0
+    if charged > 0 then self:spend(charged, 'repair') end
+    self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
+      or 'The paid parts were put back.') .. (charged > 0 and (' The repair cost ' .. dollars(charged) .. '.') or '')
     return true
   end
 
@@ -262,8 +433,15 @@ function M.new(deps)
       testMoneyAllowed = self.profile ~= nil and not self.error,
       repairQuoteAllowed = self.profile ~= nil and not self.error and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
-      repairAllowed = quote ~= nil,
+      repairAllowed = quote ~= nil and not self.pendingParts,
       repairFeedback = self.repairFeedback,
+      partsChange = self.pendingParts and {
+        added = self.pendingParts.added, removed = self.pendingParts.removed,
+        partsCost = self.pendingParts.partsCost, repair = self.pendingParts.repair, cost = self.pendingParts.cost,
+      } or nil,
+      buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
+      revertPartsAllowed = self.pendingParts ~= nil,
+      partsFeedback = self.partsFeedback,
       saveAllowed = self.state == 'READY',
       saveFeedback = self.feedback,
     }
@@ -273,6 +451,7 @@ function M.new(deps)
     local dt = location.finite(dtReal) and math.max(0, dtReal) or 0
     self.clock = self.clock + dt
     self:observe(self.adapter:sample(), dt)
+    self:watchParts()
     self.ui:publish(self:view(), self.clock)
   end
 
@@ -375,6 +554,9 @@ function M.save() return safely(function() return ensure():manualSave() end) end
 function M.addTestMoney() return safely(function() return ensure():addTestMoney() end) end
 function M.requestRepairQuote() return safely(function() return ensure():requestRepairQuote() end) end
 function M.repairVehicle() return safely(function() return ensure():repairVehicle() end) end
+function M.buyParts() return safely(function() return ensure():buyParts() end) end
+function M.revertParts() return safely(function() return ensure():revertParts(false) end) end
+function M.onVehicleSpawned() return safely(function() if active then active:vehicleSpawned() end end) end
 function M.reload() return safely(function() ensure():reload() end) end
 function M.uiMounted(on) return safely(function() ensure():mount(on == true) end) end
 function M.getState() return safely(function() return ensure():view() end) end
