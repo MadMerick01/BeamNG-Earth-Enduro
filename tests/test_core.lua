@@ -449,6 +449,9 @@ do
   T.eq(#g.spawns, spawns + 1, 'starter car given at the start again')
   local r = F.controller({ io = mio }); T.eq(r.mode, 'start', 'a restarted save still sends the player to the start')
   T.check(r:view().resume ~= nil and not r:view().gameOver, 'restarted save loads at the start')
+  local config = mio.files[CONFIG]; mio.files[CONFIG] = { base = F.position(0.5, 0.5), resumeRadiusMetres = 50 }
+  r = F.controller({ io = mio }); T.eq(r:view().resume.latitude, 0.5, 'a restarted save goes to the stage start after it moves')
+  mio.files[CONFIG] = config
 
   -- Restarting by choice needs a confirming second press.
   m:addTestMoney(); T.check(not m:restartStage(), 'first press only asks to confirm')
