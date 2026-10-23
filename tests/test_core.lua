@@ -275,6 +275,42 @@ do
   g.partsUnreadable = true; m:vehicleSpawned(); m:tick(0.1); T.check(m.partsCheckDue, 'unreadable parts retried')
 end
 
+-- A fresh start swaps the first vehicle for the starter car, once, and its parts come free.
+do
+  local Core = require('beamngEarthEnduro/core')
+  local m,_,ma,_,_,g=F.controller()
+  g.starter = { engine = 'burnside_engine_i6', intake = 'burnside_intake_i6' }
+  ma.valid = false; m:tick(0.1); T.eq(#g.spawns, 0, 'no starter car before a vehicle position')
+  ma.valid = true; m:tick(0.1); m:tick(0.1)
+  T.eq(#g.spawns, 1, 'starter car spawned once on a fresh start')
+  T.eq(g.spawns[1].model, Core.STARTER_MODEL, 'starter model'); T.eq(g.spawns[1].path, 'vehicles/burnside/worldironmanenduro_starter.pc', 'starter config file')
+  m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m.ownedParts.parts.engine, 'burnside_engine_i6', 'starter parts taken as paid for'); T.eq(m:view().partsChange, nil, 'starter car is free')
+  m:reload(); m:tick(0.1); T.eq(#g.spawns, 1, 'reload before saving keeps the car')
+
+  -- Replacing a car of the same model is still free.
+  m,_,_,_,_,g=F.controller()
+  g.model = Core.STARTER_MODEL; g.starter = { engine = 'burnside_engine_i6' }
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().partsChange, nil, 'same-model starter swap is not billed'); T.eq(m.ownedParts.parts.engine, 'burnside_engine_i6', 'starter adopted')
+  g:fit('engine', 'pickup_engine_v8'); m:vehicleSpawned(); m:tick(0.1)
+  T.check(m:view().partsChange ~= nil, 'later part changes are billed')
+
+  -- A failed spawn is logged and not retried every frame.
+  local logs
+  m,_,_,_,logs,g=F.controller(); g.accepts = false
+  m:tick(0.1); m:tick(0.1); m:tick(0.1)
+  T.eq(#g.spawns, 0, 'nothing spawned'); T.check(m.starterGiven, 'not retried')
+  local logged = false
+  for _, line in ipairs(logs) do logged = logged or line:find('starter_car_failed', 1, true) ~= nil end
+  T.check(logged, 'failure logged'); T.eq(m.state, 'READY', 'play carries on')
+
+  -- A loaded save keeps the player's own vehicle.
+  local io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) })
+  m,_,_,_,_,g=F.controller({ io = io })
+  m:tick(0.1); m:tick(0.1); T.eq(#g.spawns, 0, 'no starter car when resuming a save')
+end
+
 -- Display throttling and duplicate mount notifications do not write or spam logs.
 local events,logs
 controller,localIO,a,events,logs=F.controller(); controller:mount(true)

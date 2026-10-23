@@ -24,6 +24,10 @@ local DEFAULT_PART_PRICE = 250
 local PART_TRADE_IN_SHARE = 0.3
 -- Driving this far from where the parts were changed, without paying, puts the paid parts back.
 local UNPAID_PARTS_DRIVE_LIMIT = 25
+-- A fresh start, with no save, puts the player in this car; they upgrade it from there.
+local STARTER_MODEL = 'burnside'
+local STARTER_CONFIG = 'vehicles/burnside/worldironmanenduro_starter.pc'
+M.STARTER_MODEL, M.STARTER_CONFIG = STARTER_MODEL, STARTER_CONFIG
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
@@ -266,6 +270,12 @@ function M.new(deps)
     if not snapshot then return false end
     self.fittedParts = snapshot
     local owned = self.ownedParts
+    -- The starter car comes free, even when it replaced a car of the same model.
+    if self.starterArriving and snapshot.model == STARTER_MODEL then
+      self.starterArriving = nil
+      self:adoptParts(snapshot)
+      return true
+    end
     -- Buying vehicles is not part of Enduro yet, so a different vehicle or model is simply taken as owned.
     if not self.profile or self.error or not owned or owned.id ~= snapshot.id or owned.model ~= snapshot.model then
       self:adoptParts(snapshot)
@@ -379,6 +389,22 @@ function M.new(deps)
     return true
   end
 
+  -- On a fresh start the first vehicle Enduro sees is swapped, where it stands, for the starter car.
+  -- Only once per game session, so Reload Enduro before the first Save does not take a car away.
+  function c:giveStarterCar()
+    if self.starterGiven or not self.garage or self.mode ~= 'start' or self.state ~= 'READY' then return end
+    self.starterGiven = true
+    self.starterArriving = true
+    local ok, why, detail = self.garage:spawnConfig(STARTER_MODEL, STARTER_CONFIG)
+    if not ok then
+      self.starterArriving = nil
+      self.diag:event('starter_car_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+      return
+    end
+    if why == 'already_fitted' then self.starterArriving = nil end
+    self.diag:event('starter_car', why or 'spawned')
+  end
+
   -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
   function c:addMileage(sample, dt)
     if self.odometer and location.finite(dt) and dt > 0 then
@@ -462,6 +488,7 @@ function M.new(deps)
     local dt = location.finite(dtReal) and math.max(0, dtReal) or 0
     self.clock = self.clock + dt
     self:observe(self.adapter:sample(), dt)
+    self:giveStarterCar()
     self:watchParts()
     self.ui:publish(self:view(), self.clock)
   end

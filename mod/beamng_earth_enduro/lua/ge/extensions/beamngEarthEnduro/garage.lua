@@ -122,6 +122,24 @@ function M.new(environment)
     return true
   end
 
+  -- Replaces the player vehicle where it stands with a .pc config file, such as the starter car.
+  -- Returns true once the game accepted the spawn, or true and 'already_fitted' when the vehicle
+  -- was already spawned from that file.
+  function g:spawnConfig(model, configPath)
+    local vehicle, id = current()
+    if not vehicle then return false, 'vehicle_required' end
+    local vehicles = env.vehicles()
+    if type(vehicles) ~= 'table' or type(vehicles.replaceVehicle) ~= 'function' then return false, 'spawn_unavailable' end
+    local data = vehicleData(id)
+    local spawnedFrom = data and data.config.partConfigFilename
+    if type(spawnedFrom) == 'string' and spawnedFrom:gsub('^/', ''):lower() == configPath:gsub('^/', ''):lower() then
+      return true, 'already_fitted'
+    end
+    local ok, why = pcall(vehicles.replaceVehicle, model, { config = configPath, keepOtherVehRotation = true }, vehicle)
+    if not ok then return false, 'spawn_failed', tostring(why) end
+    return true
+  end
+
   return g
 end
 
