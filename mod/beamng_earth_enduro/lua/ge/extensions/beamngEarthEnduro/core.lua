@@ -76,6 +76,16 @@ local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
   READY = 'READY', ERROR = 'ENDURO PAUSED',
 }
+-- What the HUD asks of the player until they reach the resume point.
+local goLabels = { resume = 'GO TO YOUR LAST SAVE', start = 'GO TO THE START' }
+local goMessages = {
+  resume = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to carry on your enduro.',
+  start = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start your enduro. You get your starter car when you arrive.',
+}
+local arrivedMessages = {
+  resume = "You're in the right place. Continue your trek, and press Save to keep your progress.",
+  start = "You're at the start. Begin your trek, and press Save to keep your progress.",
+}
 local messages = {
   earth_missing = 'Enable BeamNG.Earth to continue.',
   earth_starting = 'Waiting for BeamNG.Earth to finish starting.',
@@ -117,7 +127,7 @@ function M.new(deps)
     self.earningsCarry = 0
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback = nil
-    self.vehicleProvided, self.arrivingModel = false, nil
+    self.vehicleProvided, self.arrivingModel, self.arrived = false, nil, false
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -390,11 +400,11 @@ function M.new(deps)
     return true
   end
 
-  -- Once per load, the first vehicle Enduro sees is swapped, where it stands, for the car of the
-  -- last save, or the starter car on a fresh start. Like money, part changes since the last Save
-  -- are undone by a reload. A save without a car config leaves the vehicle alone.
+  -- Once per load, when the player reaches the resume point, their vehicle is swapped, where it
+  -- stands, for the car of the last save, or the starter car on a fresh start. Like money, part
+  -- changes since the last Save are undone by a reload. A save without a car config leaves the vehicle alone.
   function c:provideVehicle()
-    if self.vehicleProvided or not self.garage or self.state ~= 'READY' then return end
+    if self.vehicleProvided or not self.garage or self.state ~= 'READY' or not self.arrived then return end
     self.vehicleProvided = true
     local model, config, label
     if self.mode == 'start' then
@@ -456,14 +466,24 @@ function M.new(deps)
       self.diag:event('profile_initialised', 'default (in memory, not yet saved)')
     end
     self.sessionVerified = true
-    self:addMileage(sample, dt)
+    -- Arriving within the radius of the resume point, usually by teleporting there from the map,
+    -- confirms the player is back on their trek.
+    if not self.arrived and self.startupTarget then
+      local away = location.distance(sample, self.startupTarget)
+      if away and away <= self.configuration.resumeRadiusMetres then
+        self.arrived = true
+        self.diag:event('arrived', string.format('%.1f m', away))
+      end
+    end
+    -- Driving before then is not part of the trek.
+    if self.arrived then self:addMileage(sample, dt) else self.odometer = nil end
     self:transition('READY', 'verified')
   end
 
   function c:view()
     local current = self.lastSample and self.lastSample.valid and location.copy(self.lastSample) or nil
-    -- The last location written to disk, shown for reference only.
-    local target = self.profile and self.profile.generation > 0 and self.profile.resume or nil
+    -- Where the player goes to carry on: the last save, or the start before the first save.
+    local resume = not self.arrived and not self.error and location.copy(self.startupTarget) or nil
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
     -- A quote only stands for the vehicle it was made for.
@@ -474,15 +494,18 @@ function M.new(deps)
       status = 'Set valid base coordinates in the Enduro configuration, then choose Reload Enduro.'
     elseif self.state == 'ERROR' then
       status = errorMessages[self.error] or errorMessages.internal_error
-    elseif self.state == 'READY' then status = 'Session active. Save manually to keep your current location.'
+    elseif self.state == 'READY' then
+      status = self.arrived and arrivedMessages[self.mode] or goMessages[self.mode]
     elseif not status then status = messages.position_invalid end
+    local label = labels[self.state]
+    if self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
     return {
-      state = self.state, stateLabel = labels[self.state], mode = self.mode,
-      sessionStatus = status,
+      state = self.state, stateLabel = label, mode = self.mode,
+      sessionStatus = status, arrived = self.arrived,
+      -- The base is not shown; it stays in the state for tools and tests.
       base = base,
-      target = location.copy(target), current = current,
-      distanceMetres = current and target and location.distance(current, target) or nil,
-      baseDistanceMetres = current and location.distance(current, base) or nil,
+      resume = resume,
+      resumeDistanceMetres = current and resume and location.distance(current, resume) or nil,
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
       } or nil,
@@ -503,7 +526,7 @@ function M.new(deps)
       buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
       revertPartsAllowed = self.pendingParts ~= nil,
       partsFeedback = self.partsFeedback,
-      saveAllowed = self.state == 'READY',
+      saveAllowed = self.state == 'READY' and self.arrived,
       saveFeedback = self.feedback,
     }
   end
@@ -521,6 +544,13 @@ function M.new(deps)
     if self.state ~= 'READY' or not self.profile or self.error then
       self.feedback = 'Save is unavailable right now. Check the status above.'
       self.diag:event('manual_save_rejected', tostring(self.state), 'W')
+      return false
+    end
+    -- Until the player reaches the resume point they are not in their own car, so a Save would
+    -- replace the saved car and location with the stand-in vehicle and wherever it is.
+    if not self.arrived then
+      self.feedback = 'Go to the coordinates above before saving.'
+      self.diag:event('manual_save_rejected', 'not_arrived', 'W')
       return false
     end
     -- Read the vehicle position at click time so the saved location is current.
