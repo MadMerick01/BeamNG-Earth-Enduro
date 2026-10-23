@@ -100,9 +100,14 @@ function F.garage()
   end
   return g
 end
+-- The first stage's starting money as shipped. Controllers start with $0 unless a test asks for
+-- starting money, so the money arithmetic in the tests stays simple.
+local firstStage = require('beamngEarthEnduro/stages').list[1]
+F.STARTING_MONEY = firstStage.startingMoney
 function F.controller(options)
   local Core = require('beamngEarthEnduro/core')
   options = options or {}
+  firstStage.startingMoney = options.startingMoney or 0
   local io = options.io or F.io({ ['/settings/beamngEarthEnduro/config.json'] = F.config() })
   local adapter = options.adapter or F.adapter()
   local garage = options.garage or F.garage()

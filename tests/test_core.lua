@@ -466,6 +466,18 @@ do
   F.advance(m, Core.GAME_OVER_DELAY + 0.5); T.check(m:view().gameOver, 'parts change does not escape game over')
 end
 
+-- Each stage sets its starting money: Zoji La starts with $3000, on a fresh start and after a restart.
+do
+  T.eq(F.STARTING_MONEY, 3000, 'Zoji La starts with $3000')
+  local m,mio,ma=F.controller({ startingMoney = 3000 })
+  T.eq(m:view().balance, 3000, 'starting money shown before the first position')
+  m:tick(0.1); T.eq(m:view().balance, 3000, 'fresh start has the starting money')
+  T.eq(m:view().unsavedBalance, 0, 'starting money is not shown as unsaved earnings')
+  m:addTestMoney(); T.check(m:manualSave(), 'saved'); T.eq(mio.files[A].progression.balance, 13000, 'saved balance')
+  m:restartStage(); T.check(m:restartStage(), 'restarted')
+  T.eq(m:view().balance, 3000, 'restart resets to the starting money'); T.eq(mio.files[B].progression.balance, 3000, 'restart saved with the starting money')
+end
+
 -- Cars: a car picked in the vehicle selector is billed at its game Value less the trade-in of the
 -- player's car; Buy keeps it, Revert or driving off brings the player's car back.
 do
