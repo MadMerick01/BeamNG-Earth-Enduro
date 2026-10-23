@@ -109,8 +109,8 @@ class InstalledHooksTest(unittest.TestCase):
         state = self.core.getState()
         self.assertEqual(state['mode'], 'resume')
         self.assertEqual(state['base']['latitude'], -33.60147222)
-        self.assertEqual(state['target']['latitude'], -33.7)
-        self.assertEqual(state['target']['longitude'], 150.9)
+        self.assertEqual(state['resume']['latitude'], -33.7)
+        self.assertEqual(state['resume']['longitude'], 150.9)
         self.assertEqual(original, self.path('/settings/beamngEarthEnduro/save-a.json').read_bytes())
         self.assertFalse(self.path('/settings/beamngEarthEnduro/config.json').exists())
 

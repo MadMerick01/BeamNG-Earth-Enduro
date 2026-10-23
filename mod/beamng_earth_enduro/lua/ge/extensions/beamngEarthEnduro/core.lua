@@ -76,6 +76,16 @@ local labels = {
   CONFIG_REQUIRED = 'BASE CONFIGURATION REQUIRED', EARTH_UNAVAILABLE = 'EARTH UNAVAILABLE',
   READY = 'READY', ERROR = 'ENDURO PAUSED',
 }
+-- What the HUD asks of the player until they reach the resume point.
+local goLabels = { resume = 'GO TO YOUR LAST SAVE', start = 'GO TO THE START' }
+local goMessages = {
+  resume = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to carry on your enduro.',
+  start = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start your enduro. You get your starter car when you arrive.',
+}
+local arrivedMessages = {
+  resume = "You're in the right place. Continue your trek, and press Save to keep your progress.",
+  start = "You're at the start. Begin your trek, and press Save to keep your progress.",
+}
 local messages = {
   earth_missing = 'Enable BeamNG.Earth to continue.',
   earth_starting = 'Waiting for BeamNG.Earth to finish starting.',
@@ -117,7 +127,7 @@ function M.new(deps)
     self.earningsCarry = 0
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback = nil
-    self.vehicleProvided, self.arrivingModel = false, nil
+    self.vehicleProvided, self.arrivingModel, self.arrived = false, nil, false
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -126,6 +136,8 @@ function M.new(deps)
     if not self.profile and not loadMessages[self.loadStatus] then self.error = self.loadStatus end
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     self.savedBalance = self.profile and self.profile.progression.balance or 0
+    -- A restored car looks new, but the repair it needed when saved is still owed.
+    self.owedDamage = self.profile and self.profile.vehicle and self.profile.vehicle.damage or 0
     self.mode = self.profile and 'resume' or 'start'
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
@@ -175,11 +187,18 @@ function M.new(deps)
     return true
   end
 
+  -- The vehicle's damage now, plus the damage still owed from the last save.
+  function c:inspectDamage()
+    local vehicle, why = self.garage:inspect()
+    if not vehicle then return nil, why end
+    return { id = vehicle.id, damage = vehicle.damage + self.owedDamage }
+  end
+
   -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
   function c:priceRepair()
     if not self.profile or self.error then return nil, 'unavailable' end
     if not self.garage then return nil, 'repair_unavailable' end
-    local vehicle, why = self.garage:inspect()
+    local vehicle, why = self:inspectDamage()
     if not vehicle then return nil, why end
     return vehicle, M.repairCost(vehicle.damage)
   end
@@ -247,7 +266,7 @@ function M.new(deps)
       return false
     end
     self:spend(cost, 'repair')
-    self.quote = nil
+    self.quote, self.owedDamage = nil, 0
     self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. Save to keep the new balance.'
     return true
   end
@@ -289,13 +308,14 @@ function M.new(deps)
       return true
     end
     local previous = self.pendingParts
-    local repair = previous and previous.repair
-      or (self.lastDamage and self.lastDamage.id == snapshot.id and M.repairCost(self.lastDamage.damage)) or 0
+    local damage = previous and previous.damage
+      or (self.lastDamage and self.lastDamage.id == snapshot.id and self.lastDamage.damage) or self.owedDamage
+    local repair = M.repairCost(damage)
     local position = previous and previous.position
       or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil
     self.pendingParts = {
       id = snapshot.id, added = diff.added, removed = diff.removed, partsCost = diff.cost,
-      repair = repair, cost = diff.cost + repair, position = position,
+      repair = repair, damage = damage, cost = diff.cost + repair, position = position,
     }
     self.quote = nil
     self.partsFeedback = self:canAfford(self.pendingParts.cost) and 'Press Buy to keep these parts, or Revert.'
@@ -317,7 +337,7 @@ function M.new(deps)
       if self:checkParts() then self.partsCheckDue = false end
       return
     end
-    local inspected = self.garage:inspect()
+    local inspected = self:inspectDamage()
     if inspected then self.lastDamage = inspected end
     local pending = self.pendingParts
     if pending and self.lastSample and self.lastSample.valid then
@@ -364,6 +384,7 @@ function M.new(deps)
       return false
     end
     self:adoptParts(self.fittedParts)
+    self.owedDamage = 0
     self.partsFeedback = 'Bought for ' .. dollars(pending.cost) .. '. Save to keep the new balance.'
     return true
   end
@@ -382,7 +403,7 @@ function M.new(deps)
       self.diag:event('parts_revert_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
       return false
     end
-    self.pendingParts = nil
+    self.pendingParts, self.owedDamage = nil, 0
     local charged = self.profile and math.min(pending.repair, self.profile.progression.balance) or 0
     if charged > 0 then self:spend(charged, 'repair') end
     self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
@@ -390,11 +411,11 @@ function M.new(deps)
     return true
   end
 
-  -- Once per load, the first vehicle Enduro sees is swapped, where it stands, for the car of the
-  -- last save, or the starter car on a fresh start. Like money, part changes since the last Save
-  -- are undone by a reload. A save without a car config leaves the vehicle alone.
+  -- Once per load, when the player reaches the resume point, their vehicle is swapped, where it
+  -- stands, for the car of the last save, or the starter car on a fresh start. Like money, part
+  -- changes since the last Save are undone by a reload. A save without a car config leaves the vehicle alone.
   function c:provideVehicle()
-    if self.vehicleProvided or not self.garage or self.state ~= 'READY' then return end
+    if self.vehicleProvided or not self.garage or self.state ~= 'READY' or not self.arrived then return end
     self.vehicleProvided = true
     local model, config, label
     if self.mode == 'start' then
@@ -429,6 +450,18 @@ function M.new(deps)
     return config
   end
 
+  -- The damage Save keeps with the car: what it has now plus what is still owed, or, with a parts
+  -- bill open, what it had before the change mended it. A restored car owes its repair.
+  function c:savedVehicleDamage()
+    local damage = self.owedDamage
+    if self.pendingParts then damage = self.pendingParts.damage
+    elseif self.garage and self.ownedParts then
+      local inspected = self:inspectDamage()
+      if inspected and inspected.id == self.ownedParts.id then damage = inspected.damage end
+    end
+    return damage > 0 and math.min(MAX_BALANCE, damage) or nil
+  end
+
   -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
   function c:addMileage(sample, dt)
     if self.odometer and location.finite(dt) and dt > 0 then
@@ -456,14 +489,24 @@ function M.new(deps)
       self.diag:event('profile_initialised', 'default (in memory, not yet saved)')
     end
     self.sessionVerified = true
-    self:addMileage(sample, dt)
+    -- Arriving within the radius of the resume point, usually by teleporting there from the map,
+    -- confirms the player is back on their trek.
+    if not self.arrived and self.startupTarget then
+      local away = location.distance(sample, self.startupTarget)
+      if away and away <= self.configuration.resumeRadiusMetres then
+        self.arrived = true
+        self.diag:event('arrived', string.format('%.1f m', away))
+      end
+    end
+    -- Driving before then is not part of the trek.
+    if self.arrived then self:addMileage(sample, dt) else self.odometer = nil end
     self:transition('READY', 'verified')
   end
 
   function c:view()
     local current = self.lastSample and self.lastSample.valid and location.copy(self.lastSample) or nil
-    -- The last location written to disk, shown for reference only.
-    local target = self.profile and self.profile.generation > 0 and self.profile.resume or nil
+    -- Where the player goes to carry on: the last save, or the start before the first save.
+    local resume = not self.arrived and not self.error and location.copy(self.startupTarget) or nil
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
     -- A quote only stands for the vehicle it was made for.
@@ -474,15 +517,18 @@ function M.new(deps)
       status = 'Set valid base coordinates in the Enduro configuration, then choose Reload Enduro.'
     elseif self.state == 'ERROR' then
       status = errorMessages[self.error] or errorMessages.internal_error
-    elseif self.state == 'READY' then status = 'Session active. Save manually to keep your current location.'
+    elseif self.state == 'READY' then
+      status = self.arrived and arrivedMessages[self.mode] or goMessages[self.mode]
     elseif not status then status = messages.position_invalid end
+    local label = labels[self.state]
+    if self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
     return {
-      state = self.state, stateLabel = labels[self.state], mode = self.mode,
-      sessionStatus = status,
+      state = self.state, stateLabel = label, mode = self.mode,
+      sessionStatus = status, arrived = self.arrived,
+      -- The base is not shown; it stays in the state for tools and tests.
       base = base,
-      target = location.copy(target), current = current,
-      distanceMetres = current and target and location.distance(current, target) or nil,
-      baseDistanceMetres = current and location.distance(current, base) or nil,
+      resume = resume,
+      resumeDistanceMetres = current and resume and location.distance(current, resume) or nil,
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
       } or nil,
@@ -494,6 +540,7 @@ function M.new(deps)
       testMoneyAllowed = self.profile ~= nil and not self.error,
       repairQuoteAllowed = self.profile ~= nil and not self.error and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
+      repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage) or nil,
       repairAllowed = quote ~= nil and not self.pendingParts,
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
@@ -503,7 +550,7 @@ function M.new(deps)
       buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
       revertPartsAllowed = self.pendingParts ~= nil,
       partsFeedback = self.partsFeedback,
-      saveAllowed = self.state == 'READY',
+      saveAllowed = self.state == 'READY' and self.arrived,
       saveFeedback = self.feedback,
     }
   end
@@ -523,6 +570,13 @@ function M.new(deps)
       self.diag:event('manual_save_rejected', tostring(self.state), 'W')
       return false
     end
+    -- Until the player reaches the resume point they are not in their own car, so a Save would
+    -- replace the saved car and location with the stand-in vehicle and wherever it is.
+    if not self.arrived then
+      self.feedback = 'Go to the coordinates above before saving.'
+      self.diag:event('manual_save_rejected', 'not_arrived', 'W')
+      return false
+    end
     -- Read the vehicle position at click time so the saved location is current.
     local fresh = self.adapter:sample()
     if not fresh.valid or not location.valid(fresh) then
@@ -535,7 +589,8 @@ function M.new(deps)
     local candidate = {
       schemaVersion = 1, profileId = self.profile.profileId, base = self.profile.base,
       resume = location.copy(fresh), progression = self.profile.progression,
-      vehicle = { model = fresh.vehicle and fresh.vehicle.model, config = self:savedVehicleConfig() },
+      vehicle = { model = fresh.vehicle and fresh.vehicle.model, config = self:savedVehicleConfig(),
+        damage = self:savedVehicleDamage() },
     }
     local saved, why = self.store:save(candidate)
     if not saved then

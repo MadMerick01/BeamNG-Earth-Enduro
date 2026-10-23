@@ -95,10 +95,8 @@ test('coordinates copy as one latitude, longitude pair through the game clipboar
   }
   assert.equal(a.commands.length, count)
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
-  assert.equal((html.match(/type="text" readonly/g) || []).length, 3)
-  for (const key of ['base', 'target', 'current']) {
-    assert.ok(html.includes('ng-click="copyCoordinates(data.' + key + ')"'))
-    assert.ok(html.includes('ng-disabled="!coordinates(data.' + key + ')"'))
-  }
+  assert.equal((html.match(/type="text" readonly/g) || []).length, 1)
+  assert.ok(html.includes('ng-click="copyCoordinates(data.resume)"'))
+  assert.ok(html.includes('ng-disabled="!coordinates(data.resume)"'))
   assert.doesNotMatch(html, /ng-bind-html|engineLua/)
 })

@@ -1,7 +1,7 @@
 # BeamNG-Earth Enduro
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 004 prototype:** Enduro HUD, simple manual save of the vehicle's current location anywhere, mileage tracking, money earned by driving, paid vehicle repairs and paid part changes.
+**Task 004 prototype:** Enduro HUD that shows where to resume your trek, manual save of the vehicle's current location, mileage tracking, money earned by driving, paid vehicle repairs and paid part changes.
 Vehicle ownership and buying vehicles are deferred.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
@@ -18,7 +18,7 @@ This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tes
 1. [Download the latest `beamng_earth_enduro.zip`](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases/latest/download/beamng_earth_enduro.zip). Older builds are listed on the [Releases page](https://github.com/MadMerick01/BeamNG-Earth-Enduro/releases).
 2. Copy that single ZIP into your active **BeamNG user folder's `mods` directory**. Use the game launcher's user-folder tools to locate it; do not put the ZIP in Steam's game binaries. **Do not extract it.** Remove/disable an older Enduro mod copy to avoid duplicate extensions; keep your user settings and save files.
 3. With the supported Earth mod and its companion running separately, enable Enduro, load Earth Freeroam, and use **UI Apps → Add App → Enduro HUD**. Move/resize it as desired. Enduro never replaces the layout.
-4. The HUD shows the default base **`-33.60147222, 150.82288889`** for a new profile. As soon as Earth reports a valid position for your vehicle, wherever it is, Enduro enters READY and Save is available.
+4. The HUD shows the start coordinates, the default base **`-33.60147222, 150.82288889`** for a new profile. Copy them, paste them into the BeamNG.Earth map and teleport there. Once you arrive, the HUD says you are in the right place and Save is available.
 
 No JSON edits, extraction, Python, Node.js or command-line commands are needed to install or play Enduro. The ZIP has `scripts/`, `lua/` and `ui/` directly at its root. Enduro remains independent of Earth. ZIPs are published as GitHub Releases, not committed to the implementation source tree.
 
@@ -35,18 +35,20 @@ Optional overrides remain available at `<user folder>/settings/beamngEarthEnduro
 }
 ```
 
-Latitude must be -90..90 and longitude -180..180. `resumeRadiusMetres` (1..1000, default 50) is still validated but no longer used, since Save no longer requires arriving at a location first. A legacy `stabilitySeconds` value is ignored. A present but invalid/unreadable override blocks activation and saving rather than being silently replaced by defaults. Choose **Reload Enduro** after changing an override; file-change handling is also included.
+Latitude must be -90..90 and longitude -180..180. `resumeRadiusMetres` (1..1000, default 50) is how close the vehicle must get to the start or last save coordinates to count as arrived. A legacy `stabilitySeconds` value is ignored. A present but invalid/unreadable override blocks activation and saving rather than being silently replaced by defaults. Choose **Reload Enduro** after changing an override; file-change handling is also included.
 
 An existing profile retains its original base even when the configuration changes. For a new profile, the base becomes fixed when the session first gets a valid vehicle position, including across configuration reloads in that running instance. An unsaved profile does not survive exiting the game. Back up existing profile files before intentionally starting a different profile; there is no reset/delete button in this prototype.
 
 ## Start, save and resume
 
-1. Load Earth Freeroam and enter an active vehicle. As soon as Earth reports a valid position, the HUD shows **READY** and Save is available, wherever the vehicle is.
+1. Load Earth Freeroam and enter an active vehicle. The HUD shows one set of coordinates: your last save, or the start (the base) if you have not saved yet. Press **Copy**, paste them into the BeamNG.Earth map and teleport there; Enduro never submits the teleport itself. When the vehicle is within `resumeRadiusMetres` (50 m) of them, the HUD says *You're in the right place* and you carry on from there. Until then, Save is locked and driving earns no mileage or money, so a Save cannot overwrite your trek with wherever the game happened to spawn you.
 
-   **Starter car:** on a fresh start (no save yet, or both save files unreadable) Enduro swaps that first vehicle, where it stands, for the **WorldIronManEnduro Starter**, a 1950s Burnside coupe with a stock inline-six. Its parts count as paid for; upgrade it from there with **Parts** and keep it running with **Repair**. The config also appears under Burnside in the game's vehicle selector.
+   **Starter car:** on a fresh start (no save yet, or both save files unreadable) Enduro swaps your vehicle, when you arrive at the start, for the **WorldIronManEnduro Starter**, a 1950s Burnside coupe with a stock inline-six. Its parts count as paid for; upgrade it from there with **Parts** and keep it running with **Repair**. The config also appears under Burnside in the game's vehicle selector.
 
-   **Your car is saved:** **Save** also keeps your car: its paid-for parts (an open parts bill is left out), paint and tuning. Each time a save loads (game start, level load or **Reload Enduro**) the first vehicle Enduro sees is swapped, where it stands, for that car, so you carry on in the car you saved. Like money, part changes made since the last Save are undone by a reload; before the first Save, a reload puts you back in the starter car. Saves made before this version have no car stored, and Enduro leaves your vehicle alone until your next Save.
-2. Drive anywhere. Click **Save** to keep the vehicle's current valid geographic position. No periodic or shutdown autosave occurs.
+   **Your car is saved:** **Save** also keeps your car: its paid-for parts (an open parts bill is left out), paint and tuning. Each time a save loads (game start, level load or **Reload Enduro**) your vehicle is swapped for that car when you arrive at the last save coordinates, so you carry on in the car you saved. Like money, part changes made since the last Save are undone by a reload; before the first Save, a reload puts you back in the starter car. Saves made before this version have no car stored, and Enduro leaves your vehicle alone until your next Save.
+
+   **Damage is owed, not forgiven:** Save also records how damaged the car is. The restored car comes back looking undamaged, but that repair is still owed: the HUD shows *Owed from your last save*, every repair quote and parts bill includes it, and it is carried through later saves until you pay it with **Repair** or a parts bill. Restarting the game therefore never gives a free repair. Dents are not put back on the restored car.
+2. Drive anywhere. Saving is not locked to the spot you arrived at. Click **Save** to keep the vehicle's current valid geographic position. No periodic or shutdown autosave occurs.
 
    While READY, the HUD's **Mileage** counts the distance your vehicle covers between readings. Jumps faster than 150 m/s (540 km/h), such as teleports, are not counted, and nothing is counted while the vehicle position is unavailable. Mileage driven since the last Save is shown as *unsaved*; it is stored by **Save** and lost if you exit or choose **Reload Enduro** without saving.
 
@@ -55,11 +57,11 @@ An existing profile retains its original base even when the configuration change
    **Repair:** press **Get repair quote** to price the damage to the vehicle you are in. The price comes from the vehicle's overall damage: $100 call-out plus $0.50 per damage point, nothing under 50 points (a scratch), capped at $20,000. Press **Repair** to pay it; the vehicle is respawned where it stands with its current parts, tuning and paint, so every part is new. If you cannot afford it, nothing is charged or repaired and the HUD says how much more you need. If the damage changes or you switch vehicle after the quote, Repair re-quotes instead of charging. Money spent is shown as *spent, unsaved* until you **Save**.
 
    **Parts:** change parts in BeamNG's own parts menu as usual. The parts the vehicle had when you got in count as paid for. After each change the HUD's **Parts** section lists the parts added and taken off and the bill. A part costs its value from the game's part files, or $250 if it has none; parts taken off in the same change are traded in for 30% of their value, which lowers the bill but never pays out. Press **Buy** to pay and keep the parts (it is disabled when you cannot afford it), or **Revert** to put the paid parts back; tuning and paint are free and kept either way. Trying parts on and swapping back costs nothing. If you drive more than 25 m without paying, the paid parts are put back automatically. A part change respawns the vehicle and mends all damage, so when the vehicle was damaged the repair price is added to the bill, and it is still charged on Revert or driving off, as far as your balance allows. Repair is locked while a parts bill is open. Switching to a different vehicle takes its parts as paid for, since buying vehicles is not part of Enduro yet.
-3. Restart the game. The HUD shows your last saved coordinates and your distance from them. To continue from there, copy them and use **Earth's own teleport interface**; Enduro never submits the teleport. Saving is not locked to that spot, so the next Save records wherever the vehicle is.
+3. Restart the game. The HUD shows your last saved coordinates and your distance from them; go there as in step 1 to continue.
 
-The Save button reads the vehicle position again at click time and saves that. It cannot save with no vehicle or invalid coordinates. Vehicle model and the paid-for car config are saved when available. Altitude and heading are omitted because a reliable native retrieval contract for those values has not been established for this task. Loading a save respawns the saved car in place; it does not move you to the saved location.
+The Save button reads the vehicle position again at click time and saves that. It cannot save with no vehicle or invalid coordinates. Vehicle model and the paid-for car config are saved when available. Altitude and heading are omitted because a reliable native retrieval contract for those values has not been established for this task. Loading a save does not move you to the saved location; the saved car is respawned where you stand once you arrive.
 
-If the vehicle position is temporarily unavailable (no vehicle, Earth not running), the HUD shows EARTH UNAVAILABLE and returns to READY wherever the vehicle is as soon as a position is available again. This never changes the saved location or base. A mission start, extension reload or **Reload Enduro** reloads the save and discards unsaved mileage and money.
+If the vehicle position is temporarily unavailable (no vehicle, Earth not running), the HUD shows EARTH UNAVAILABLE and returns to READY wherever the vehicle is as soon as a position is available again; once you have arrived, you do not have to go back. This never changes the saved location or base. A mission start, extension reload or **Reload Enduro** reloads the save and discards unsaved mileage and money.
 
 ## Save files and recovery
 
@@ -95,4 +97,4 @@ git clone https://github.com/TecnaGamer/BeamNG.Earth.git
 .venv\Scripts\python.exe tools/check_earth_versions.py BeamNG.Earth
 ```
 
-See [Task 004 mileage tracking](docs/TASK-004-mileage.md) and the [Task 003 simplified arrival check](docs/TASK-003-simplified-checks.md) (that arrival check has since been removed; Save now works wherever the vehicle is). The [Task 002 architecture](docs/TASK-002-architecture.md) and [Task 002 testing](docs/TASK-002-testing.md) documents describe the earlier, stricter checks and are kept as historical records, as is Task 001.
+See [Task 004 mileage tracking](docs/TASK-004-mileage.md) and the [Task 003 simplified arrival check](docs/TASK-003-simplified-checks.md) (that arrival check was removed, and a simpler one returned with the resume coordinates: arrive once per load, then Save works anywhere). The [Task 002 architecture](docs/TASK-002-architecture.md) and [Task 002 testing](docs/TASK-002-testing.md) documents describe the earlier, stricter checks and are kept as historical records, as is Task 001.

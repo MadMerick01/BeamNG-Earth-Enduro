@@ -82,4 +82,13 @@ local normalized=P.validate(s); T.eq(normalized.resume.altitude,123,'optional al
 normalized.base.latitude=7; T.eq(s.base.latitude,0,'validation returns detached copy')
 io=F.io(); io.writeReturnsNil=true; store=P.new(io); store:load()
 T.check(store:save(F.save())~=nil,'nil native write result accepted only after successful readback')
+do
+  local good = F.save(1); good.vehicle.damage = 250.5
+  T.eq(P.validate(good).vehicle.damage, 250.5, 'saved damage kept')
+  T.eq(P.validate(F.save(1)).vehicle.damage, nil, 'older saves have no damage')
+  for _, bad in ipairs({ -1, 0/0, math.huge, 'lots' }) do
+    local s = F.save(1); s.vehicle.damage = bad
+    T.eq(P.validate(s), nil, 'invalid damage rejected')
+  end
+end
 T.done('persistence')
