@@ -46,16 +46,31 @@ function F.adapter(pose)
   end
   return a
 end
+-- Stand-in for the garage: damage to report and whether the game accepts a repair.
+function F.garage()
+  local g = { damage = 0, vehicleId = 1, repairs = 0, accepts = true }
+  function g:inspect()
+    if self.unreadable then return nil, 'damage_unavailable' end
+    return { id = self.vehicleId, damage = self.damage }
+  end
+  function g:repair()
+    if not self.accepts then return false, 'repair_failed', 'rejected' end
+    self.repairs, self.damage = self.repairs + 1, 0
+    return true
+  end
+  return g
+end
 function F.controller(options)
   local Core = require('beamngEarthEnduro/core')
   options = options or {}
   local io = options.io or F.io({ ['/settings/beamngEarthEnduro/config.json'] = F.config() })
   local adapter = options.adapter or F.adapter()
+  local garage = options.garage or F.garage()
   local events, logs = {}, {}
-  local c = Core.new({ io = io, adapter = adapter,
+  local c = Core.new({ io = io, adapter = adapter, garage = garage,
     trigger = function(name, view) events[#events + 1] = { name = name, data = F.copy(view) } end,
     log = function(level, tag, message) logs[#logs + 1] = message end })
-  return c, io, adapter, events, logs
+  return c, io, adapter, events, logs, garage
 end
 function F.advance(c, seconds)
   for _ = 1, math.ceil(seconds * 10) do c:tick(0.1) end

@@ -1,8 +1,8 @@
 # BeamNG-Earth Enduro
 
 Independent single-player mod alongside [BeamNG.Earth](https://github.com/TecnaGamer/BeamNG.Earth).
-**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, mileage tracking and money earned by driving.
-Spending money, vehicle ownership/condition, repairs and upgrades are deferred.
+**Task 004 prototype:** Enduro HUD, recoverable manual save of the vehicle's current location anywhere, mileage tracking, money earned by driving, and paid vehicle repairs.
+Vehicle ownership, buying vehicles and upgrades are deferred.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.
 **Windows BeamNG.drive acceptance is not yet tested.** Enduro only needs a valid vehicle position from Earth; it does not wait for Earth's terrain, roads or streaming to finish.
@@ -47,6 +47,8 @@ An existing profile retains its original base even when the configuration change
    While READY, the HUD's **Mileage** counts the distance your vehicle covers between readings. Jumps faster than 150 m/s (540 km/h), such as teleports, are not counted, and nothing is counted while the vehicle position is unavailable. Mileage driven since the last Save is shown as *unsaved*; it is stored by **Save** and lost if you exit or choose **Reload Enduro** without saving.
 
    The HUD's **Money** goes up by **$50 for every kilometre** counted as mileage, so teleports earn nothing. The balance is whole dollars; part-dollars carry over while you keep driving. For testing, the **+$10000 (test)** button adds $10,000 straight away. Like mileage, money earned since the last Save is shown as *unsaved*, kept by **Save** and lost on exit or **Reload Enduro** without saving.
+
+   **Repair:** press **Get repair quote** to price the damage to the vehicle you are in. The price comes from the vehicle's overall damage: $100 call-out plus $0.50 per damage point, nothing under 50 points (a scratch), capped at $20,000. Press **Repair** to pay it; the vehicle is respawned where it stands with its current parts, tuning and paint, so every part is new. If you cannot afford it, nothing is charged or repaired and the HUD says how much more you need. If the damage changes or you switch vehicle after the quote, Repair re-quotes instead of charging. Money spent is shown as *spent, unsaved* until you **Save**.
 3. Restart the game. The HUD shows your last saved coordinates and your distance from them. To continue from there, copy them and use **Earth's own teleport interface**; Enduro never submits the teleport. Saving is not locked to that spot, so the next Save records wherever the vehicle is.
 
 The Save button reads the vehicle position again at click time and saves that. It cannot save with no vehicle or invalid coordinates. Vehicle model is saved when available. Configuration, altitude and heading are omitted because a reliable native retrieval contract for those values has not been established for this task. Enduro does not spawn or restore vehicles.

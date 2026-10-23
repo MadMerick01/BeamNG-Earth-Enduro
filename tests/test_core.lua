@@ -165,6 +165,44 @@ do
   T.check(not m:addTestMoney(),'test money locked after a save error')
 end
 
+-- Repair: quote from overall damage, pay through spend(), refuse when short, never charge a failed repair.
+do
+  local Core = require('beamngEarthEnduro/core')
+  T.eq(Core.repairCost(0),0,'undamaged vehicle costs nothing'); T.eq(Core.repairCost(49),0,'below a scratch costs nothing')
+  T.eq(Core.repairCost(1000),600,'moderate damage priced from the damage'); T.eq(Core.repairCost(1e9),20000,'repair price capped')
+  T.eq(Core.repairCost(0/0),0,'unreadable damage costs nothing')
+  local m,mio,ma,_,_,g=F.controller()
+  T.check(not m:spend(1,'x'),'spending needs an active profile'); T.check(not m:requestRepairQuote(),'no quote before a position')
+  m:tick(0.1)
+  T.check(m:view().repairQuoteAllowed,'quote button enabled while active'); T.check(not m:view().repairAllowed,'repair button needs a quote')
+  T.check(not m:canAfford(1),'cannot afford anything with $0'); T.check(not m:spend(1,'x'),'spend refused when short')
+  T.check(not m:spend(-5,'x'),'negative spend refused'); T.check(not m:spend(0.5,'x'),'part-dollar spend refused')
+  T.check(m:requestRepairQuote(),'undamaged quote succeeds'); T.eq(m:view().repairFeedback,'No damage to repair.','no damage message')
+  T.eq(m:view().repairAllowed,false,'nothing to repair')
+  g.damage=1000; T.check(m:requestRepairQuote(),'damaged quote'); T.eq(m:view().repairQuote,600,'HUD shows the quote')
+  T.check(m:view().repairAllowed,'repair button enabled with a quote')
+  T.eq(m:view().repairFeedback,'Not enough money yet. You need $600 more.','quote warns when short')
+  T.check(not m:repairVehicle(),'repair refused when short'); T.eq(g.repairs,0,'no repair when short')
+  T.eq(m:view().balance,0,'balance untouched when short')
+  m:addTestMoney()
+  g.damage=2000; T.check(not m:repairVehicle(),'new damage needs a new quote'); T.eq(g.repairs,0,'no repair on a stale quote')
+  T.eq(m:view().repairQuote,1100,'quote updated to the new damage')
+  g.accepts=false; T.check(not m:repairVehicle(),'failed repair reported'); T.eq(m:view().balance,10000,'failed repair is not charged')
+  g.accepts=true; T.check(m:repairVehicle(),'repair succeeds'); T.eq(g.repairs,1,'game repair called once')
+  T.eq(m:view().balance,8900,'repair charged the quote'); T.eq(m:view().repairQuote,nil,'quote used up')
+  T.eq(m:view().repairFeedback,'Repaired for $1,100. Save to keep the new balance.','repair confirmed')
+  T.eq(m:view().unsavedSpending,0,'nothing spent from the saved balance yet')
+  T.check(not m:repairVehicle(),'repair needs a new quote after repairing')
+  m:manualSave(); g.damage=3000; m:requestRepairQuote(); m:repairVehicle()
+  T.eq(m:view().unsavedSpending,1600,'spending since the last save shown'); T.eq(mio.files[A].progression.balance,8900,'spending is not saved without Save')
+  g.damage=500; m:requestRepairQuote(); ma.vehicle.id=2; m:tick(0.1)
+  T.eq(m:view().repairQuote,nil,'quote hidden after switching vehicle'); T.check(not m:view().repairAllowed,'repair locked after switching vehicle')
+  g.vehicleId=2; T.check(not m:repairVehicle(),'old quote does not repair a different vehicle'); T.eq(m:view().repairQuote,350,'requoted for the new vehicle')
+  g.unreadable=true; T.check(not m:requestRepairQuote(),'unreadable damage reported')
+  T.eq(m:view().repairQuote,nil,'no quote when damage unreadable')
+  m:reload(); T.eq(m.quote,nil,'reload clears the quote')
+end
+
 -- Display throttling and duplicate mount notifications do not write or spam logs.
 local events,logs
 controller,localIO,a,events,logs=F.controller(); controller:mount(true)

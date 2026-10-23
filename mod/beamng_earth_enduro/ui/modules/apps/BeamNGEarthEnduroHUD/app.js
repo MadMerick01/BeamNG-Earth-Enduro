@@ -20,6 +20,12 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.addTestMoney = function () {
         if (scope.data.testMoneyAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.addTestMoney() end')
       }
+      scope.requestRepairQuote = function () {
+        if (scope.data.repairQuoteAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.requestRepairQuote() end')
+      }
+      scope.repairVehicle = function () {
+        if (scope.data.repairAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.repairVehicle() end')
+      }
       scope.reloadEnduro = function () {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.reload() end')
       }
