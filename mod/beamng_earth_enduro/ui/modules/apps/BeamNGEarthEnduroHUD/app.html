@@ -11,7 +11,7 @@
     </label>
     <div ng-if="data.baseDistanceMetres != null">Current Distance from Base: {{data.baseDistanceMetres | number:1}} m</div>
   </div>
-  <div ng-if="data.target && data.mode === 'resume'" style="margin-top:10px;">
+  <div ng-if="data.target" style="margin-top:10px;">
     <label>Last Saved Coordinates (lat, long):
       <div style="display:flex;gap:6px;">
         <input aria-label="Last saved coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.target)" placeholder="Not saved" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />

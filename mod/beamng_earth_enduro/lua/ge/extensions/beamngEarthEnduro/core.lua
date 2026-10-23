@@ -101,7 +101,8 @@ function M.new(deps)
 
   function c:view()
     local current = self.lastSample and self.lastSample.valid and location.copy(self.lastSample) or nil
-    local target = self.startupTarget
+    -- The last location written to disk, shown for reference only.
+    local target = self.profile and self.profile.generation > 0 and self.profile.resume or nil
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
     if self.state == 'CONFIG_REQUIRED' then
