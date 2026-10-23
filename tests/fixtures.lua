@@ -28,7 +28,8 @@ function F.io(files)
     io.writes = io.writes + 1
     if io.writeFails then io.files[path] = 'partial JSON'; return false end
     io.files[path] = F.copy(data)
-    if io.writeMismatch then io.files[path].resume.latitude = 5 end
+    if io.writeMismatch then io.files[path].generation = 99 end
+    if io.writeRounds then io.files[path].resume.latitude = io.files[path].resume.latitude + 1e-9 end
     if io.readbackFails then io.readFails = path end
     if io.writeReturnsNil then return nil end
     return true

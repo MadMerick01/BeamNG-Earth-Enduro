@@ -1,4 +1,4 @@
--- Two alternating JSON generations. Loading never writes, repairs or deletes files.
+-- Two alternating JSON save slots; the newest readable one is loaded. Loading never writes files.
 local location = require('beamngEarthEnduro/location')
 local M = { DIRECTORY = '/settings/beamngEarthEnduro/', SCHEMA = 1 }
 local MAX_INTEGER = 9007199254740991
@@ -60,41 +60,41 @@ function M.new(io)
   local store = { generation = 0, slot = nil, blocked = true }
   local paths = { a = M.DIRECTORY .. 'save-a.json', b = M.DIRECTORY .. 'save-b.json' }
 
+  -- Returns the newest readable save, or nil and why: 'missing' (no save files), 'unreadable'
+  -- (files exist but none can be read; saving replaces them), 'newer_version' or 'storage_unavailable'.
   function store:load()
     self.generation, self.slot, self.blocked = 0, nil, true
-    local valid, bad, exists = {}, {}, false
+    local valid, unreadable = {}, false
     for _, slot in ipairs({ 'a', 'b' }) do
       local ok, present = pcall(io.exists, paths[slot])
       if not ok or type(present) ~= 'boolean' then return nil, 'storage_unavailable' end
       if present then
-        exists = true
         local readOK, data = pcall(io.read, paths[slot])
-        -- Preserve every unsupported schema, even if another older slot is valid.
-        if readOK and type(data) == 'table' and data.schemaVersion ~= nil and data.schemaVersion ~= 1 then
-          return nil, 'unsupported_schema'
+        -- A save from a newer Enduro is never overwritten, even if the other slot is readable.
+        if readOK and type(data) == 'table' and data.schemaVersion ~= nil and data.schemaVersion ~= M.SCHEMA then
+          return nil, 'newer_version'
         end
-        local save, why
-        if readOK then save, why = M.validate(data) else why = 'unreadable' end
-        if save then valid[#valid + 1] = { slot = slot, data = save } else bad[#bad + 1] = why end
+        local save = readOK and M.validate(data) or nil
+        if save then valid[#valid + 1] = { slot = slot, data = save } else unreadable = true end
       end
     end
-    if #valid == 0 then
-      if exists then return nil, 'corrupt_saves' end
-      self.blocked = false
-      return nil, 'missing'
-    end
-    table.sort(valid, function(a, b) return a.data.generation > b.data.generation end)
-    if #valid == 2 and valid[1].data.generation == valid[2].data.generation
-        and not M.equal(valid[1].data, valid[2].data) then return nil, 'conflicting_generations' end
+    self.blocked = false
+    if #valid == 0 then return nil, unreadable and 'unreadable' or 'missing' end
+    table.sort(valid, function(a, b)
+      if a.data.generation ~= b.data.generation then return a.data.generation > b.data.generation end
+      return a.slot < b.slot
+    end)
     local best = valid[1]
-    self.generation, self.slot, self.blocked = best.data.generation, best.slot, false
-    return best.data, #bad > 0 and 'recovered' or 'loaded'
+    self.generation, self.slot = best.data.generation, best.slot
+    return best.data, 'loaded'
   end
 
+  -- Writes the slot not holding the newest save, so a failed write never touches it. A failure
+  -- changes nothing here, so Save can simply be tried again.
   function store:save(candidate)
     if self.blocked then return nil, 'storage_locked' end
     if self.generation >= MAX_INTEGER then return nil, 'generation_limit' end
-    -- Build a new value: never change the caller's profile or last valid generation on failure.
+    -- Build a new value: never change the caller's profile.
     local prepared = {
       schemaVersion = candidate.schemaVersion, profileId = candidate.profileId,
       generation = self.generation + 1, base = candidate.base, resume = candidate.resume,
@@ -106,13 +106,16 @@ function M.new(io)
     if not dirOK or made == false then return nil, 'directory_failed' end
     local slot = self.slot == 'a' and 'b' or 'a'
     local ok, result = pcall(io.write, paths[slot], clean)
-    -- Any uncertain write requires a reload before another write. The prior active slot survives.
-    self.blocked = true
     if not ok or result == false then return nil, 'write_failed' end
+    -- The file must read back as a valid save of this generation. Decimals are not compared
+    -- exactly, because the game's JSON writer may round them.
     local readOK, readback = pcall(io.read, paths[slot])
     local checked = readOK and M.validate(readback) or nil
-    if not checked or not M.equal(clean, checked) then return nil, 'verification_failed' end
-    self.slot, self.generation, self.blocked = slot, clean.generation, false
+    if not checked or checked.generation ~= clean.generation
+        or checked.progression.balance ~= clean.progression.balance then
+      return nil, 'verification_failed'
+    end
+    self.slot, self.generation = slot, clean.generation
     return clean, 'saved'
   end
   return store
