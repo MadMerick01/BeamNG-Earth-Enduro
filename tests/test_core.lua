@@ -120,7 +120,7 @@ end
 -- Missing configuration selects the built-in base and saving works straight away.
 do
   local localIO=F.io({}); local controller,_,a=F.controller({io=localIO})
-  a.pose=F.position(34.224032,75.029787); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
+  a.pose=F.position(34.271288,75.163671); F.advance(controller,5); T.eq(controller.state,'READY','built-in base session is ready')
   T.check(controller:manualSave(),'save works without configuration'); T.eq(localIO.writes,1,'one write')
 end
 
@@ -383,21 +383,21 @@ do
   m:tick(0.1); m:tick(0.1); T.eq(#g.spawns, 0, 'no spawn when resuming a save without a car')
 end
 
--- Stages: the first stage is Stage 1, Gund to Dras, the HUD shows the distance to its finish, and reaching the
+-- Stages: the first stage is Stage 1, Sind River to Dras, the HUD shows the distance to its finish, and reaching the
 -- finish completes the stage and saves it.
 do
   local S = require('beamngEarthEnduro/stages')
   local first = S.get('stage_1')
   T.eq(first.name, 'Stage 1', 'Stage 1 defined'); T.eq(S.first().id, 'stage_1', 'Stage 1 is the first stage')
-  T.eq(first.start.latitude, 34.224032, 'Stage 1 start latitude'); T.eq(first.finish.longitude, 75.80991, 'Stage 1 finish longitude')
+  T.eq(first.start.latitude, 34.271288, 'Stage 1 start latitude'); T.eq(first.finish.longitude, 75.80991, 'Stage 1 finish longitude')
   T.eq(S.get('zoji_la').id, 'stage_1', 'the stage old id still finds the stage')
   T.eq(S.get('nowhere'), nil, 'unknown stage')
   local m,mio,ma=F.controller()
   T.eq(m:view().stage.name, 'Stage 1', 'HUD names the stage')
   m:tick(0.1); T.eq(m.profile.stage, 'stage_1', 'new profile is on the first stage')
   T.check(m:view().finishDistanceMetres > 1000000, 'distance to the finish shown once on the stage')
-  T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Gund, Kashmir', 'HUD names the start town')
-  T.check(m:view().stage.briefing:find('Gund, Kashmir'), 'HUD has the stage briefing')
+  T.eq(m:view().stage.finishTown, 'Dras, Ladakh', 'HUD names the finish town'); T.eq(m:view().stage.startTown, 'Sind River, Kashmir', 'HUD names the start town')
+  T.check(m:view().stage.briefing:find('Sind River, Kashmir'), 'HUD has the stage briefing')
   T.check(type(m:view().finishDirection) == 'string', 'HUD gives the direction to the finish')
   T.eq(m:view().stageFinished, false, 'stage not finished at the start')
   ma.pose = F.position(first.finish.latitude + 0.0005, first.finish.longitude); m:tick(0.1)

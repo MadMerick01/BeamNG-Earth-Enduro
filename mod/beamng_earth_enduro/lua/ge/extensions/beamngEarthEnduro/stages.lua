@@ -10,15 +10,15 @@ local M = {}
 M.list = {
   {
     id = 'stage_1', oldIds = { 'zoji_la' }, name = 'Stage 1',
-    startTown = 'Gund, Kashmir', finishTown = 'Dras, Ladakh',
-    briefing = 'Drive from Gund, Kashmir, up the Sind valley past Sonamarg and over the high mountain pass to Dras, Ladakh. '
+    startTown = 'Sind River, Kashmir', finishTown = 'Dras, Ladakh',
+    briefing = 'Drive from the Sind River, Kashmir, up the Sind valley past Sonamarg and over the high mountain pass to Dras, Ladakh. '
       .. 'Reach the finish to complete the stage.',
-    start = { latitude = 34.224032, longitude = 75.029787 },
+    start = { latitude = 34.271288, longitude = 75.163671 },
     finish = { latitude = 34.43223, longitude = 75.80991 },
     finishRadiusMetres = 100,
     startingMoney = 3000,
-    -- Google Maps trip time from Gund to Dras: 2 h 30 min.
-    targetSeconds = 2.5 * 3600,
+    -- Time limit: 2 h 0 min.
+    targetSeconds = 2 * 3600,
   },
 }
 

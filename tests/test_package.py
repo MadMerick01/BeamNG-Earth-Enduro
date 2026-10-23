@@ -43,8 +43,8 @@ class PackageTest(unittest.TestCase):
             self.assertEqual(manifest['name'], 'World Ironman Enduro Rally')
             self.assertEqual(manifest['directive'], 'beamngEarthEnduroHud')
             self.assertIn('beamng-earth-enduro-hud', manifest['domElement'])
-            self.assertEqual(config['base']['latitude'], 34.224032)
-            self.assertEqual(config['base']['longitude'], 75.029787)
+            self.assertEqual(config['base']['latitude'], 34.271288)
+            self.assertEqual(config['base']['longitude'], 75.163671)
             self.assertIn(b'/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', archive.read(prefix + 'app.js'))
             self.assertIn(b'WORLD IRONMAN ENDURO RALLY', archive.read(prefix + 'app.html'))
             self.assertIn(b'beamngEarthEnduro_core', archive.read('scripts/beamngEarthEnduro/modScript.lua'))
@@ -102,8 +102,8 @@ class PackageTest(unittest.TestCase):
           })
         ''')
         defaults = lua.globals().packagedDefaults
-        self.assertEqual(defaults['base']['latitude'], 34.224032)
-        self.assertEqual(defaults['base']['longitude'], 75.029787)
+        self.assertEqual(defaults['base']['latitude'], 34.271288)
+        self.assertEqual(defaults['base']['longitude'], 75.163671)
         self.assertEqual(defaults['resumeRadiusMetres'], 50)
 
     def test_package_is_reproducible(self):
