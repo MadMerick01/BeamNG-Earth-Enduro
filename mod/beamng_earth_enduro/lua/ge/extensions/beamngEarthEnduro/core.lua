@@ -136,6 +136,8 @@ function M.new(deps)
     if not self.profile and not loadMessages[self.loadStatus] then self.error = self.loadStatus end
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     self.savedBalance = self.profile and self.profile.progression.balance or 0
+    -- A restored car looks new, but the repair it needed when saved is still owed.
+    self.owedDamage = self.profile and self.profile.vehicle and self.profile.vehicle.damage or 0
     self.mode = self.profile and 'resume' or 'start'
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
@@ -185,11 +187,18 @@ function M.new(deps)
     return true
   end
 
+  -- The vehicle's damage now, plus the damage still owed from the last save.
+  function c:inspectDamage()
+    local vehicle, why = self.garage:inspect()
+    if not vehicle then return nil, why end
+    return { id = vehicle.id, damage = vehicle.damage + self.owedDamage }
+  end
+
   -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
   function c:priceRepair()
     if not self.profile or self.error then return nil, 'unavailable' end
     if not self.garage then return nil, 'repair_unavailable' end
-    local vehicle, why = self.garage:inspect()
+    local vehicle, why = self:inspectDamage()
     if not vehicle then return nil, why end
     return vehicle, M.repairCost(vehicle.damage)
   end
@@ -257,7 +266,7 @@ function M.new(deps)
       return false
     end
     self:spend(cost, 'repair')
-    self.quote = nil
+    self.quote, self.owedDamage = nil, 0
     self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. Save to keep the new balance.'
     return true
   end
@@ -299,13 +308,14 @@ function M.new(deps)
       return true
     end
     local previous = self.pendingParts
-    local repair = previous and previous.repair
-      or (self.lastDamage and self.lastDamage.id == snapshot.id and M.repairCost(self.lastDamage.damage)) or 0
+    local damage = previous and previous.damage
+      or (self.lastDamage and self.lastDamage.id == snapshot.id and self.lastDamage.damage) or self.owedDamage
+    local repair = M.repairCost(damage)
     local position = previous and previous.position
       or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil
     self.pendingParts = {
       id = snapshot.id, added = diff.added, removed = diff.removed, partsCost = diff.cost,
-      repair = repair, cost = diff.cost + repair, position = position,
+      repair = repair, damage = damage, cost = diff.cost + repair, position = position,
     }
     self.quote = nil
     self.partsFeedback = self:canAfford(self.pendingParts.cost) and 'Press Buy to keep these parts, or Revert.'
@@ -327,7 +337,7 @@ function M.new(deps)
       if self:checkParts() then self.partsCheckDue = false end
       return
     end
-    local inspected = self.garage:inspect()
+    local inspected = self:inspectDamage()
     if inspected then self.lastDamage = inspected end
     local pending = self.pendingParts
     if pending and self.lastSample and self.lastSample.valid then
@@ -374,6 +384,7 @@ function M.new(deps)
       return false
     end
     self:adoptParts(self.fittedParts)
+    self.owedDamage = 0
     self.partsFeedback = 'Bought for ' .. dollars(pending.cost) .. '. Save to keep the new balance.'
     return true
   end
@@ -392,7 +403,7 @@ function M.new(deps)
       self.diag:event('parts_revert_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
       return false
     end
-    self.pendingParts = nil
+    self.pendingParts, self.owedDamage = nil, 0
     local charged = self.profile and math.min(pending.repair, self.profile.progression.balance) or 0
     if charged > 0 then self:spend(charged, 'repair') end
     self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
@@ -437,6 +448,18 @@ function M.new(deps)
       partsTree = source.partsTree, vars = look.vars, paints = look.paints, licenseName = look.licenseName })
     if not config then self.diag:event('vehicle_config_unsaved', tostring(owned.model), 'W') end
     return config
+  end
+
+  -- The damage Save keeps with the car: what it has now plus what is still owed, or, with a parts
+  -- bill open, what it had before the change mended it. A restored car owes its repair.
+  function c:savedVehicleDamage()
+    local damage = self.owedDamage
+    if self.pendingParts then damage = self.pendingParts.damage
+    elseif self.garage and self.ownedParts then
+      local inspected = self:inspectDamage()
+      if inspected and inspected.id == self.ownedParts.id then damage = inspected.damage end
+    end
+    return damage > 0 and math.min(MAX_BALANCE, damage) or nil
   end
 
   -- Adds the distance driven since the previous reading. Teleport-sized jumps only move the odometer.
@@ -517,6 +540,7 @@ function M.new(deps)
       testMoneyAllowed = self.profile ~= nil and not self.error,
       repairQuoteAllowed = self.profile ~= nil and not self.error and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
+      repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage) or nil,
       repairAllowed = quote ~= nil and not self.pendingParts,
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
@@ -565,7 +589,8 @@ function M.new(deps)
     local candidate = {
       schemaVersion = 1, profileId = self.profile.profileId, base = self.profile.base,
       resume = location.copy(fresh), progression = self.profile.progression,
-      vehicle = { model = fresh.vehicle and fresh.vehicle.model, config = self:savedVehicleConfig() },
+      vehicle = { model = fresh.vehicle and fresh.vehicle.model, config = self:savedVehicleConfig(),
+        damage = self:savedVehicleDamage() },
     }
     local saved, why = self.store:save(candidate)
     if not saved then

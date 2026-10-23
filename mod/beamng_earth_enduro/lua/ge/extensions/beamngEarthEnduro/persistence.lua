@@ -53,6 +53,11 @@ function M.validate(s)
     vehicleConfig = plainConfig(s.vehicle.config)
     if not vehicleConfig then return nil, 'invalid_vehicle' end
   end
+  -- Damage the saved car had and nobody has paid to repair; optional, so older saves load.
+  local damage = s.vehicle.damage
+  if damage ~= nil and (not location.finite(damage) or damage < 0 or damage > MAX_INTEGER) then
+    return nil, 'invalid_vehicle'
+  end
   local resume = location.copy(s.resume)
   if s.resume.altitude ~= nil then
     if not location.finite(s.resume.altitude) or s.resume.altitude < -20000
@@ -68,7 +73,8 @@ function M.validate(s)
     schemaVersion = M.SCHEMA, profileId = 'default', generation = s.generation,
     base = location.copy(s.base), resume = resume,
     progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm },
-    vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig },
+    vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig,
+      damage = damage },
   }
 end
 

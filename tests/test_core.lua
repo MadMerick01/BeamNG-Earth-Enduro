@@ -355,6 +355,31 @@ do
   T.eq(r:view().balance, balance, 'balance restored')
   r:tick(0.1); T.eq(#rg.spawns, 1, 'saved car spawned once per load')
 
+  -- Save keeps the car's damage. The restored car looks new, but its repair is still owed.
+  io = F.io({ [CONFIG] = F.config() })
+  m,_,_,_,_,g=F.controller({ io = io })
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  g.damage = 1000; m:tick(0.1)
+  T.check(m:manualSave(), 'saved a damaged car'); T.eq(io.files[A].vehicle.damage, 1000, 'damage saved with the car')
+  r,_,_,_,_,rg=F.controller({ io = io })
+  r:tick(0.1); r:vehicleSpawned(); r:tick(0.1)
+  T.eq(rg.damage, 0, 'restored car looks new'); T.eq(r:view().repairOwed, 600, 'HUD shows the repair still owed')
+  T.check(r:requestRepairQuote(), 'owed repair can be quoted'); T.eq(r:view().repairQuote, 600, 'quote includes the owed damage')
+  rg.damage = 1000; r:requestRepairQuote(); T.eq(r:view().repairQuote, 1100, 'new damage adds to the owed damage')
+  T.check(r:manualSave(), 'saved again unpaid'); T.eq(io.files[B].vehicle.damage, 2000, 'unpaid damage carried through saves')
+  r:addTestMoney(); r:requestRepairQuote(); T.check(r:repairVehicle(), 'owed repair paid')
+  T.eq(r:view().repairOwed, nil, 'nothing owed after paying'); T.eq(r:view().balance, 10000 - 1100, 'charged once')
+  T.check(r:manualSave(), 'saved after paying'); T.eq(io.files[A].vehicle.damage, nil, 'no damage saved once repaired')
+
+  -- Changing parts on a restored car bills the owed repair with the parts.
+  io.files[A].vehicle.damage = 1000; io.files[A].progression.balance = 10000
+  r,_,_,_,_,rg=F.controller({ io = io })
+  r:tick(0.1); r:vehicleSpawned(); r:tick(0.1); r:tick(0.1)
+  rg:fit('intake', 'pickup_intake_race'); r:vehicleSpawned(); r:tick(0.1)
+  T.eq(r:view().partsChange.repair, 600, 'owed repair joins the parts bill')
+  T.check(r:buyParts(), 'parts and owed repair bought'); T.eq(r:view().repairOwed, nil, 'owed repair settled by the parts bill')
+  r:reload(); T.eq(r:view().repairOwed, 600, 'a reload without saving brings the debt back')
+
   -- An older save without a car config keeps the player's own vehicle.
   io = F.io({ [CONFIG] = F.config(), [A] = F.save(1) })
   m,_,_,_,_,g=F.controller({ io = io })
