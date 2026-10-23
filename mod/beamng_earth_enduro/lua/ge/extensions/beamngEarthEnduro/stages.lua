@@ -1,5 +1,5 @@
 -- The rally's stages. To add one, add an entry to the list: an id that never changes (saves
--- store it), the name the HUD shows, the start and finish coordinates, and the towns nearest the
+-- store it; ids it had before go in oldIds so older saves still load), the name the HUD shows, the start and finish coordinates, and the towns nearest the
 -- start and finish, which the HUD shows so the player can find them on the map, and a short
 -- briefing shown when the stage starts, the money the player starts it with, and the time limit
 -- in seconds (the stage's Google Maps driving time; set targetIsEstimate = true to mark a guess). The finish counts once the vehicle is within
@@ -9,9 +9,9 @@ local M = {}
 
 M.list = {
   {
-    id = 'zoji_la', name = 'Zoji La',
+    id = 'stage_1', oldIds = { 'zoji_la' }, name = 'Stage 1',
     startTown = 'Gund, Kashmir', finishTown = 'Dras, Ladakh',
-    briefing = 'Drive from Gund, Kashmir, up the Sind valley past Sonamarg and over the Zoji La pass to Dras, Ladakh. '
+    briefing = 'Drive from Gund, Kashmir, up the Sind valley past Sonamarg and over the high mountain pass to Dras, Ladakh. '
       .. 'Reach the finish to complete the stage.',
     start = { latitude = 34.224032, longitude = 75.029787 },
     finish = { latitude = 34.43223, longitude = 75.80991 },
@@ -37,6 +37,9 @@ function M.first() return copy(M.list[1]) end
 function M.get(id)
   for _, stage in ipairs(M.list) do
     if stage.id == id then return copy(stage) end
+    for _, old in ipairs(stage.oldIds or {}) do
+      if old == id then return copy(stage) end
+    end
   end
   return nil
 end

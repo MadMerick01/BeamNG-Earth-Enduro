@@ -806,7 +806,7 @@ function M.new(deps)
       status = 'Ironman rule: your car was wrecked and you could not pay for the repair, so this run is over. '
         .. 'Press Restart stage to start ' .. stageName .. ' again in the starter car with ' .. dollars(self.stage and self.stage.startingMoney or 0) .. '.'
     elseif self.state == 'READY' and self.stageFinished then
-      status = 'You conquered the ' .. stageName .. ' stage! More stages are coming. Press Restart stage to run it again.'
+      status = 'You conquered ' .. stageName .. '! More stages are coming. Press Restart stage to run it again.'
     elseif self.state == 'READY' and self.wreck then
       status = 'Your car is wrecked. The repair costs ' .. dollars(self.wreck.cost) .. ' and you have '
         .. dollars(self.profile.progression.balance) .. '. Unless you can pay, it is game over in '
