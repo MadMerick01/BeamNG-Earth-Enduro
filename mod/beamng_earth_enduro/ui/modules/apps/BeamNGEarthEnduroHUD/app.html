@@ -42,8 +42,7 @@
       <div ng-if="data.vehicle">Vehicle: {{data.vehicle.model || 'Active vehicle'}} <span ng-if="data.vehicle.id != null">(#{{data.vehicle.id}})</span></div>
       <div>Mileage: {{data.totalDistanceKm | number:2}} km<span ng-if="data.unsavedDistanceKm >= 0.005"> ({{data.unsavedDistanceKm | number:2}} km unsaved)</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-        <button type="button" title="Loads your last save again. Anything not saved is lost." ng-click="reloadEnduro()" style="padding:7px 12px;">Reload rally</button>
-        <button type="button" title="Starts the stage again in the starter car with no money. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
+        <button type="button" title="Starts the stage again in the starter car with the starting money. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
         <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
       </div>
     </div>
@@ -118,7 +117,7 @@
       <ul style="margin:4px 0 0;padding-left:18px;">
         <li>Copy the coordinates on the Navigation tab, paste them into the map search and teleport there to start or resume.</li>
         <li>You earn $100 for every kilometre you drive. Teleports earn nothing.</li>
-        <li>Save often. Money, mileage and parts since your last Save are lost on Reload rally or when you exit.</li>
+        <li>Save often. Money, mileage and parts since your last Save are lost when you exit or load the level again.</li>
         <li>Ironman: if your car is wrecked and you cannot pay for the repair, it is game over and the stage starts again.</li>
         <li>Repair damage before it becomes a wreck. A wreck's repair costs at least $5,100.</li>
         <li>Parts taken off are traded in for 30% of their value. Trying parts on and swapping back is free.</li>

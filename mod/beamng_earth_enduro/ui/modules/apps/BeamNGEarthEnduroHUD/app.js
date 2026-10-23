@@ -70,9 +70,6 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.restartStage = function () {
         if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
       }
-      scope.reloadEnduro = function () {
-        call('if beamngEarthEnduro_core then beamngEarthEnduro_core.reload() end')
-      }
       // Stage clock: h:mm:ss of the size of a number of seconds; the sign is shown by the caller.
       scope.clock = function (seconds) {
         if (typeof seconds !== 'number' || !isFinite(seconds)) return '-:--:--'
