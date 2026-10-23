@@ -224,7 +224,7 @@ do
   g.accepts=false; T.check(not m:repairVehicle(),'failed repair reported'); T.eq(m:view().balance,10000,'failed repair is not charged')
   g.accepts=true; T.check(m:repairVehicle(),'repair succeeds'); T.eq(g.repairs,1,'game repair called once')
   T.eq(m:view().balance,8900,'repair charged the quote'); T.eq(m:view().repairQuote,nil,'quote used up')
-  T.eq(m:view().repairFeedback,'Repaired for $1,100. Save to keep the new balance.','repair confirmed')
+  T.eq(m:view().repairFeedback,'Repaired for $1,100. The repair cost you 5 minutes. Save to keep the new balance.','repair confirmed')
   T.eq(m:view().unsavedSpending,0,'nothing spent from the saved balance yet')
   T.check(not m:repairVehicle(),'repair needs a new quote after repairing')
   m:manualSave(); g.damage=3000; m:requestRepairQuote(); m:repairVehicle()

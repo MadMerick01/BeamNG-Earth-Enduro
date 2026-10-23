@@ -1,8 +1,24 @@
 <div class="bngApp" style="height:100%;width:100%;overflow:auto;box-sizing:border-box;padding:14px;background:rgba(12,19,24,.9);color:#f2f6f5;font:14px/1.4 sans-serif;border:1px solid #568d7a;border-radius:8px;">
   <div style="font-size:16px;font-weight:bold;letter-spacing:1px;">WORLD IRONMAN ENDURO RALLY</div>
   <div ng-if="data.stage" style="margin-top:2px;color:#c9d6d2;">Stage: {{data.stage.name}}<span ng-if="data.stage.startTown && data.stage.finishTown">, {{data.stage.startTown}} to {{data.stage.finishTown}}</span></div>
+  <style>@keyframes enduroPulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }</style>
+  <div ng-if="data.timer" role="timer" ng-style="{borderColor: timerColor(data.timer), boxShadow: '0 0 12px ' + timerColor(data.timer)}" style="margin:10px 0 4px;padding:10px 12px;border:2px solid;border-radius:8px;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(12,19,24,.85));">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;font-weight:bold;letter-spacing:2px;color:#c9d6d2;">{{timerLabel(data)}}<span ng-if="data.timer.started && !data.timer.running && !data.stageFinished && !data.gameOver" style="margin-left:6px;padding:0 5px;border-radius:3px;background:#c9d6d2;color:#0c1318;">PAUSED</span></div>
+        <div ng-style="{color: timerColor(data.timer), textShadow: '0 0 10px ' + timerColor(data.timer), animation: data.timer.remainingSeconds < 0 && data.timer.running ? 'enduroPulse 1s infinite' : 'none'}" style="font:bold 38px/1 'Courier New',monospace;letter-spacing:2px;">{{data.timer.remainingSeconds < 0 ? '+' : ''}}{{clock(data.timer.remainingSeconds)}}</div>
+      </div>
+      <div ng-if="data.timer.aheadSeconds != null" style="text-align:right;">
+        <div style="font-size:11px;font-weight:bold;letter-spacing:2px;color:#c9d6d2;">PACE</div>
+        <div ng-style="{color: paceColor(data.timer.aheadSeconds)}" style="font:bold 26px/1 'Courier New',monospace;">{{pace(data.timer.aheadSeconds)}}</div>
+        <div ng-style="{color: paceColor(data.timer.aheadSeconds)}" style="font-size:11px;font-weight:bold;letter-spacing:2px;">{{data.timer.aheadSeconds > 0 ? 'AHEAD' : (data.timer.aheadSeconds < 0 ? 'BEHIND' : 'ON PACE')}}</div>
+      </div>
+    </div>
+    <div style="margin-top:6px;font-size:12px;color:#c9d6d2;">Limit {{clock(data.timer.targetSeconds)}}<span ng-if="data.timer.estimate"> (estimate)</span> &middot; Driving {{clock(data.timer.drivingSeconds)}}<span ng-if="data.timer.penaltySeconds > 0"> &middot; <span style="color:#eb5757;">Penalties +{{clock(data.timer.penaltySeconds)}}</span></span><span ng-if="!data.timer.started"> &middot; Starts when you reach the start</span></div>
+    <div ng-if="data.timer.penalty" role="alert" style="margin-top:6px;padding:4px;border-radius:4px;background:#eb5757;color:#fff;font-weight:bold;text-align:center;letter-spacing:1px;animation:enduroPulse .8s infinite;">+5:00 {{data.timer.penalty.reason === 'car' ? 'NEW CAR' : 'REPAIR'}} PENALTY</div>
+  </div>
   <div role="status" style="margin:10px 0;color:#a7e5c9;font-weight:bold;">{{data.stateLabel}}</div>
-  <div ng-if="data.stageFinished && !data.gameOver" role="status" style="margin:10px 0;padding:10px;border:2px solid #f2c94c;border-radius:6px;background:rgba(242,201,76,.15);color:#f2c94c;font-size:18px;font-weight:bold;text-align:center;">&#127937; STAGE COMPLETE &#127937;<div style="font-size:13px;font-weight:normal;color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left.</div></div>
+  <div ng-if="data.stageFinished && !data.gameOver" role="status" style="margin:10px 0;padding:10px;border:2px solid #f2c94c;border-radius:6px;background:rgba(242,201,76,.15);color:#f2c94c;font-size:18px;font-weight:bold;text-align:center;">&#127937; STAGE COMPLETE &#127937;<div style="font-size:13px;font-weight:normal;color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left<span ng-if="data.timer">, in {{clock(data.timer.drivingSeconds + data.timer.penaltySeconds)}}</span>.</div></div>
   <div ng-if="data.gameOver" role="alert" style="margin:10px 0;padding:10px;border:2px solid #eb5757;border-radius:6px;background:rgba(235,87,87,.15);color:#eb5757;font-size:18px;font-weight:bold;text-align:center;">GAME OVER</div>
   <div ng-if="data.wreck" role="alert" style="margin:10px 0;padding:8px;border:2px solid #eb5757;border-radius:6px;color:#eb5757;font-weight:bold;">Wrecked: repair ${{data.wreck.cost | number:0}}. Game over in {{data.wreck.seconds}} s.</div>
   <p ng-if="data.sessionStatus" style="margin:8px 0;">{{data.sessionStatus}}</p>
@@ -107,6 +123,9 @@
         <li>Repair damage before it becomes a wreck. A wreck's repair costs at least $5,100.</li>
         <li>Parts taken off are traded in for 30% of their value. Trying parts on and swapping back is free.</li>
         <li>Driving more than 25 m with an unpaid parts or car bill puts your paid-for car back.</li>
+        <li>Beat the clock: the time limit counts down while you drive and stops while the game is paused. Every repair, and every new car, costs you 5 minutes. Buying parts costs no time.</li>
+        <li>Pace compares your time with how far you are, in a straight line, from start to finish. Winding roads can put you behind early on and ahead later.</li>
+        <li>Missing the time limit is not game over: the clock keeps counting in red as overtime.</li>
       </ul>
     </div>
   </div>

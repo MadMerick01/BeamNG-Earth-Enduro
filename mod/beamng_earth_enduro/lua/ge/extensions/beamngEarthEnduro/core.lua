@@ -39,6 +39,12 @@ M.STARTER_MODEL, M.STARTER_CONFIG = STARTER_MODEL, STARTER_CONFIG
 local WRECKED_DAMAGE = 10000
 local GAME_OVER_DELAY = 10
 M.WRECKED_DAMAGE, M.GAME_OVER_DELAY = WRECKED_DAMAGE, GAME_OVER_DELAY
+-- Stage clock: a repair or a new car costs the player this many seconds. One frame never adds more
+-- than MAX_CLOCK_STEP, so a loading stall or a teleport hitch does not eat into the time limit.
+local PENALTY_SECONDS = 300
+local MAX_CLOCK_STEP = 0.5
+local PENALTY_SHOWN_FOR = 8
+M.PENALTY_SECONDS = PENALTY_SECONDS
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
@@ -125,6 +131,7 @@ function M.new(deps)
     diag = diagnostics.new(deps.log), adapter = deps.adapter,
     store = persistence.new(deps.io), ui = hud.new(deps.trigger),
     feedback = 'Not saved this session.', garage = deps.garage,
+    paused = deps.paused or function() return false end,
   }
 
   function c:transition(nextState, reason)
@@ -140,7 +147,7 @@ function M.new(deps)
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
-    self.wreck, self.restartArmed = nil, false
+    self.wreck, self.restartArmed, self.penalty = nil, false, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -209,6 +216,43 @@ function M.new(deps)
     self.profile.progression.balance = self.profile.progression.balance - amount
     self.diag:event('spend', tostring(label) .. ':' .. tostring(amount))
     return true
+  end
+
+  -- Puts the player PENALTY_SECONDS further behind on the stage clock. Like money, it is kept by Save.
+  function c:addPenalty(reason)
+    local progression = self.profile.progression
+    progression.penaltySeconds = (progression.penaltySeconds or 0) + PENALTY_SECONDS
+    self.penalty = { reason = reason, at = self.clock }
+    self.diag:event('time_penalty', reason .. ':' .. PENALTY_SECONDS)
+  end
+
+  -- The stage clock runs while the player is on the stage, the game is not paused and the stage
+  -- is neither finished nor over.
+  function c:clockRunning()
+    return self.profile ~= nil and self.state == 'READY' and self.arrived and not self.stageFinished
+      and not self.gameOver and not self.error and self.stage ~= nil and self.stage.targetSeconds ~= nil
+      and not self.paused()
+  end
+
+  function c:runClock(dt)
+    if not self:clockRunning() then return end
+    local progression = self.profile.progression
+    progression.drivingSeconds = (progression.drivingSeconds or 0) + math.min(dt, MAX_CLOCK_STEP)
+  end
+
+  -- Seconds ahead of (positive) or behind (negative) the stage's pace. The pace assumes the time
+  -- limit is spread evenly over the straight-line distance from start to finish, so a player a
+  -- third of the way there in a straight line is expected to have used a third of the time.
+  function c:paceSeconds(current, elapsed)
+    local target = self.stage.targetSeconds
+    local progress = 1
+    if not self.stageFinished then
+      local total = location.distance(self:stageStart(), self.stage.finish)
+      local left = location.distance(current, self.stage.finish)
+      if not total or not left or total <= self.stage.finishRadiusMetres then return nil end
+      progress = math.max(0, math.min(1, 1 - left / total))
+    end
+    return math.floor(progress * target - elapsed + 0.5)
   end
 
   -- The vehicle's damage now, plus the damage still owed from the last save.
@@ -294,8 +338,9 @@ function M.new(deps)
       return false
     end
     self:spend(cost, 'repair')
+    self:addPenalty('repair')
     self.quote, self.owedDamage = nil, 0
-    self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. Save to keep the new balance.'
+    self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. The repair cost you 5 minutes. Save to keep the new balance.'
     return true
   end
 
@@ -417,8 +462,10 @@ function M.new(deps)
     local snapshot = self.fittedParts
     snapshot.value = pending.base.value
     self:adoptParts(snapshot)
+    self:addPenalty('car')
     self.owedDamage = 0
-    self.carFeedback = 'Bought ' .. tostring(pending.name) .. ' for ' .. dollars(pending.cost) .. '. Save to keep it.'
+    self.carFeedback = 'Bought ' .. tostring(pending.name) .. ' for ' .. dollars(pending.cost)
+      .. '. The car change cost you 5 minutes. Save to keep it.'
     return true
   end
 
@@ -514,7 +561,10 @@ function M.new(deps)
     end
     self:adoptParts(self.fittedParts)
     self.owedDamage = 0
-    self.partsFeedback = 'Bought for ' .. dollars(pending.cost) .. '. Save to keep the new balance.'
+    -- Parts alone cost no time, but a bill that includes a repair is a repair.
+    if pending.repair > 0 then self:addPenalty('repair') end
+    self.partsFeedback = 'Bought for ' .. dollars(pending.cost) .. '.'
+      .. (pending.repair > 0 and ' The repair cost you 5 minutes.' or '') .. ' Save to keep the new balance.'
     return true
   end
 
@@ -540,8 +590,11 @@ function M.new(deps)
     self.pendingParts, self.owedDamage = nil, 0
     local charged = self.profile and math.min(pending.repair, self.profile.progression.balance) or 0
     if charged > 0 then self:spend(charged, 'repair') end
+    -- Putting the parts back mended the car, so it counts as a repair on the clock.
+    if self.profile and pending.repair > 0 then self:addPenalty('repair') end
     self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
       or 'The paid parts were put back.') .. (charged > 0 and (' The repair cost ' .. dollars(charged) .. '.') or '')
+      .. (pending.repair > 0 and ' The repair cost you 5 minutes.' or '')
     return true
   end
 
@@ -715,11 +768,12 @@ function M.new(deps)
     if not self.gameOver and not self.restartArmed then
       self.restartArmed = true
       self.feedback = 'Press Confirm restart to start ' .. self.stage.name
-        .. ' again. Your car, money and mileage go back to the start.'
+        .. ' again. Your car, money, mileage and clock go back to the start.'
       return false
     end
     local start = self:stageStart()
-    local saved, why = self:record({ base = start, resume = start, progression = { balance = self.stage.startingMoney, totalDistanceKm = 0 },
+    local saved, why = self:record({ base = start, resume = start, progression = { balance = self.stage.startingMoney, totalDistanceKm = 0,
+      drivingSeconds = 0, penaltySeconds = 0 },
       stage = self.stage.id, vehicle = {}, atStart = true })
     if not saved then
       self.restartArmed = false
@@ -767,6 +821,23 @@ function M.new(deps)
     elseif self.state == 'READY' and self.wreck then label = 'WRECKED'
     elseif self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
     local active = self.profile ~= nil and not self.error and not self.gameOver
+    local timer
+    if self.stage and self.stage.targetSeconds then
+      local progression = self.profile and self.profile.progression or {}
+      local driving, penalties = progression.drivingSeconds or 0, progression.penaltySeconds or 0
+      local elapsed = driving + penalties
+      local shown = self.penalty and self.clock - self.penalty.at < PENALTY_SHOWN_FOR
+      timer = {
+        targetSeconds = self.stage.targetSeconds, estimate = self.stage.targetIsEstimate,
+        -- Whole seconds left; negative once the limit has passed and the player is in overtime.
+        remainingSeconds = math.ceil(self.stage.targetSeconds - elapsed),
+        drivingSeconds = math.floor(driving), penaltySeconds = penalties,
+        running = self:clockRunning(), started = self.arrived or elapsed > 0,
+        aheadSeconds = (self.arrived and current and not self.gameOver and self.configuration)
+          and self:paceSeconds(current, elapsed) or nil,
+        penalty = shown and { reason = self.penalty.reason, seconds = PENALTY_SECONDS } or nil,
+      }
+    end
     local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.gameOver
     return {
       state = self.state, stateLabel = label, mode = self.mode,
@@ -782,7 +853,7 @@ function M.new(deps)
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
-      stageFinished = self.stageFinished, gameOver = self.gameOver,
+      stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer,
       wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)) } or nil,
       restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error,
       restartArmed = self.restartArmed,
@@ -826,6 +897,7 @@ function M.new(deps)
     self:provideVehicle()
     self:watchParts()
     self:watchIronman(dt)
+    self:runClock(dt)
     self.ui:publish(self:view(), self.clock)
   end
 
@@ -903,10 +975,18 @@ local function gameIO()
     write = function(path, data) return jsonWriteFile(path, data, false) end,
   }
 end
+-- Whether the game is paused; the stage clock stops while it is.
+local function gamePaused()
+  for _, name in ipairs({ 'bullettime', 'simTimeAuthority' }) do
+    local timing = rawget(_G, name)
+    if type(timing) == 'table' and type(timing.getPause) == 'function' then return timing.getPause() == true end
+  end
+  return false
+end
 local function ensure()
   if not active then
     active = M.new({ io = gameIO(), adapter = earthAdapter.new(), garage = garage.new(), log = rawget(_G, 'log'),
-      trigger = function(event, payload) if guihooks then guihooks.trigger(event, payload) end end })
+      paused = gamePaused, trigger = function(event, payload) if guihooks then guihooks.trigger(event, payload) end end })
   end
   return active
 end

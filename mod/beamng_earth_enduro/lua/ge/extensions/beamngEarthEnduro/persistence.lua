@@ -46,6 +46,13 @@ function M.validate(s)
   local p = s.progression
   if type(p) ~= 'table' or not integer(p.balance, 0) or not location.finite(p.totalDistanceKm)
       or p.totalDistanceKm < 0 or p.totalDistanceKm > MAX_INTEGER then return nil, 'invalid_progression' end
+  -- Stage clock: seconds driven and penalty seconds; optional, so older saves start at zero.
+  for _, field in ipairs({ 'drivingSeconds', 'penaltySeconds' }) do
+    local seconds = p[field]
+    if seconds ~= nil and (not location.finite(seconds) or seconds < 0 or seconds > MAX_INTEGER) then
+      return nil, 'invalid_progression'
+    end
+  end
   if type(s.vehicle) ~= 'table' or not optionalString(s.vehicle.model)
       or not optionalString(s.vehicle.configuration) then return nil, 'invalid_vehicle' end
   local vehicleConfig = nil
@@ -78,7 +85,8 @@ function M.validate(s)
   return {
     schemaVersion = M.SCHEMA, profileId = 'default', generation = s.generation,
     base = location.copy(s.base), resume = resume,
-    progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm },
+    progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm,
+      drivingSeconds = p.drivingSeconds or 0, penaltySeconds = p.penaltySeconds or 0 },
     vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig,
       damage = damage },
     stage = s.stage, finished = s.finished, gameOver = s.gameOver, atStart = s.atStart,
@@ -97,7 +105,7 @@ function M.newProfile(base, pose, vehicle, stage, balance)
   return {
     schemaVersion = 1, profileId = 'default', generation = 0, stage = stage,
     base = location.copy(base), resume = location.copy(pose),
-    progression = { balance = balance or 0, totalDistanceKm = 0 },
+    progression = { balance = balance or 0, totalDistanceKm = 0, drivingSeconds = 0, penaltySeconds = 0 },
     vehicle = { model = vehicle and vehicle.model, configuration = vehicle and vehicle.configuration },
   }
 end
