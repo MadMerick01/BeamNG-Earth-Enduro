@@ -10,7 +10,7 @@ local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
 -- Money earned per kilometre of counted driving, and the amount the HUD test button adds.
-local EARNINGS_PER_KM = 50
+local EARNINGS_PER_KM = 100
 local TEST_MONEY = 10000
 local MAX_BALANCE = 9007199254740991
 -- Repair pricing from the vehicle's overall damage (BeamNG's own traffic code treats about 50 as a
@@ -107,15 +107,15 @@ local messages = {
   earth_missing = 'Enable BeamNG.Earth to continue.',
   earth_starting = 'Waiting for BeamNG.Earth to finish starting.',
   earth_level_required = 'Load the BeamNG.Earth Freeroam level to continue.',
-  earth_interface_error = 'Earth information is unavailable. Reload rally when Earth is ready.',
+  earth_interface_error = 'Earth information is unavailable. Load the level again when Earth is ready.',
   vehicle_required = 'Enter an active vehicle to continue.',
   position_invalid = 'Waiting for a valid geographic position.',
 }
 -- What the player sees for each problem that pauses Enduro.
 local errorMessages = {
   newer_version = 'Your save was made by a newer version of the rally mod. Update the mod to keep playing.',
-  storage_unavailable = 'The rally could not open its save folder. Press Reload rally to try again.',
-  internal_error = 'The rally hit a problem and paused. Press Reload rally to carry on from your last save.',
+  storage_unavailable = 'The rally could not open its save folder. Load the level again to try again.',
+  internal_error = 'The rally hit a problem and paused. Load the level again to carry on from your last save.',
   unknown_stage = 'Your save is for a stage this version does not have. Update the mod to keep playing.',
 }
 local loadMessages = {
@@ -799,7 +799,7 @@ function M.new(deps)
     local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
     if quote and (self.error or vehicleId ~= quote.vehicleId) then quote = nil end
     if self.state == 'CONFIG_REQUIRED' then
-      status = 'Set valid base coordinates in the rally configuration, then choose Reload rally.'
+      status = 'Set valid base coordinates in the rally configuration, then load the level again.'
     elseif self.state == 'ERROR' then
       status = errorMessages[self.error] or errorMessages.internal_error
     elseif self.gameOver then

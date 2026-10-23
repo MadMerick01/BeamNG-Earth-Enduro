@@ -35,8 +35,7 @@ test('Save only sends the fixed command when Lua enabled it', () => {
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', saveAllowed: true })
   a.scope.save()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.save() end')
-  a.scope.reloadEnduro()
-  assert.match(a.commands[2], /\.reload\(\)/)
+  assert.equal(a.scope.reloadEnduro, undefined)
 })
 test('test money button only sends the fixed command when Lua enabled it', () => {
   const a = app()
