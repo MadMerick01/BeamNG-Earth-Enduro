@@ -63,6 +63,20 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(thumbnail[:3], b'\xff\xd8\xff')
         self.assertIn(b"'" + (prefix + 'worldironmanenduro_starter.pc').encode() + b"'", core)
 
+    def test_hostile_car_config_is_packaged(self):
+        prefix = 'vehicles/roamer/'
+        with ZipFile(self.output) as archive:
+            config = json.loads(archive.read(prefix + 'robber_light.pc'))
+            info = json.loads(archive.read(prefix + 'info_robber_light.json'))
+            thumbnail = archive.read(prefix + 'robber_light.jpg')
+            hostile = archive.read('lua/ge/extensions/beamngEarthEnduro/hostile.lua')
+        self.assertEqual(config['model'], 'roamer')
+        self.assertEqual(config['mainPartName'], 'roamer')
+        self.assertIsInstance(config['parts'], dict)
+        self.assertEqual(info['Configuration'], 'Robber Light')
+        self.assertEqual(thumbnail[:3], b'\xff\xd8\xff')
+        self.assertIn(b"'roamer', '" + (prefix + 'robber_light.pc').encode() + b"'", hostile)
+
     def test_png_is_complete_with_valid_checksums(self):
         with ZipFile(self.output) as archive:
             data = archive.read('ui/modules/apps/BeamNGEarthEnduroHUD/app.png')

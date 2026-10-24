@@ -22,9 +22,9 @@ M.CLAIM_METRES = 10
 M.LOST_METRES = 3000
 -- The chase order is sent again this long after the spawn, in case the car's Lua was not ready.
 M.CHASE_RETRY_SECONDS = 2
--- The hostile's car. nil uses a copy of the player's current car. To give it its own car, set
--- MODEL to the model and CONFIG to a .pc path, e.g. 'vehicles/pickup/hostile.pc'.
-M.MODEL, M.CONFIG = nil, nil
+-- The hostile's car: the Robber Light, a black off-road Roamer shipped in vehicles/roamer. Set
+-- both to nil to send a copy of the player's current car instead.
+M.MODEL, M.CONFIG = 'roamer', 'vehicles/roamer/robber_light.pc'
 
 -- The distance into the run at which the hostile comes. random() returns a number in [0, 1).
 function M.pickKm(random)
