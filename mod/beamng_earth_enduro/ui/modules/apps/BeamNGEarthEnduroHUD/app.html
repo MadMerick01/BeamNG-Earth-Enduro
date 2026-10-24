@@ -17,38 +17,31 @@
     <div style="margin-top:6px;font-size:12px;color:#c9d6d2;">Limit {{clock(data.timer.targetSeconds)}}<span ng-if="data.timer.estimate"> (estimate)</span> &middot; Driving {{clock(data.timer.drivingSeconds)}}<span ng-if="data.timer.penaltySeconds > 0"> &middot; <span style="color:#eb5757;">Penalties +{{clock(data.timer.penaltySeconds)}}</span></span><span ng-if="!data.timer.started"> &middot; Starts when you reach the start</span></div>
     <div ng-if="data.timer.penalty" role="alert" style="margin-top:6px;padding:4px;border-radius:4px;background:#eb5757;color:#fff;font-weight:bold;text-align:center;letter-spacing:1px;animation:enduroPulse .8s infinite;">+5:00 {{data.timer.penalty.reason === 'car' ? 'NEW CAR' : 'REPAIR'}} PENALTY</div>
   </div>
-  <div role="status" style="margin:10px 0;color:#a7e5c9;font-weight:bold;">{{data.stateLabel}}</div>
-  <div ng-if="data.stageFinished && !data.gameOver" role="status" style="margin:10px 0;padding:10px;border:2px solid #f2c94c;border-radius:6px;background:rgba(242,201,76,.15);color:#f2c94c;font-size:18px;font-weight:bold;text-align:center;">&#127937; STAGE COMPLETE &#127937;<div style="font-size:13px;font-weight:normal;color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left<span ng-if="data.timer">, in {{clock(data.timer.drivingSeconds + data.timer.penaltySeconds)}}</span>.</div></div>
-  <div ng-if="data.gameOver" role="alert" style="margin:10px 0;padding:10px;border:2px solid #eb5757;border-radius:6px;background:rgba(235,87,87,.15);color:#eb5757;font-size:18px;font-weight:bold;text-align:center;">GAME OVER</div>
-  <div ng-if="data.wreck" role="alert" style="margin:10px 0;padding:8px;border:2px solid #eb5757;border-radius:6px;color:#eb5757;font-weight:bold;">Wrecked: repair ${{data.wreck.cost | number:0}}. Game over in {{data.wreck.seconds}} s.</div>
-  <p ng-if="data.sessionStatus" style="margin:8px 0;">{{data.sessionStatus}}</p>
-  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;">
-    <div style="font-weight:bold;">Money: ${{data.balance | number:0}}<span ng-if="data.unsavedBalance > 0" style="font-weight:normal;"> (${{data.unsavedBalance | number:0}} unsaved)</span><span ng-if="data.unsavedSpending > 0" style="font-weight:normal;"> (${{data.unsavedSpending | number:0}} spent, unsaved)</span></div>
-    <button type="button" ng-click="save()" ng-disabled="!data.saveAllowed" style="padding:5px 12px;margin-left:auto;">Save</button>
+  <div ng-if="notice(data)" ng-attr-role="{{notice(data).alert ? 'alert' : 'status'}}" ng-style="{borderColor: notice(data).color, color: notice(data).color, background: notice(data).alert || notice(data).kind === 'done' ? 'rgba(0,0,0,.35)' : 'transparent'}" style="margin:10px 0;padding:8px 10px;border:2px solid;border-radius:6px;">
+    <div style="font-weight:bold;letter-spacing:1px;" ng-style="{fontSize: notice(data).kind === 'status' ? '14px' : '18px'}">{{notice(data).title}}</div>
+    <div ng-if="notice(data).kind === 'wreck'" style="color:#f2f6f5;">Repair costs ${{data.wreck.cost | number:0}}. Game over in {{data.wreck.seconds}} s unless you repair.</div>
+    <div ng-if="notice(data).kind === 'done'" style="color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left<span ng-if="data.timer">, in {{clock(data.timer.drivingSeconds + data.timer.penaltySeconds)}}</span>.</div>
+    <div ng-if="(notice(data).kind === 'over' || notice(data).kind === 'status') && data.sessionStatus" style="color:#f2f6f5;">{{data.sessionStatus}}</div>
+    <div ng-if="data.saveFeedback" style="margin-top:4px;color:#c9d6d2;font-size:13px;">{{data.saveFeedback}}</div>
   </div>
-  <p role="status" ng-if="data.saveFeedback" style="margin:0 0 8px;">{{data.saveFeedback}}</p>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0;">
+    <div style="font-weight:bold;font-size:16px;">${{data.balance | number:0}}</div>
+    <div ng-if="data.vehicle" style="color:#c9d6d2;">{{data.vehicle.model || 'Your car'}}</div>
+    <div style="color:#c9d6d2;">{{data.totalDistanceKm | number:1}} km</div>
+    <button type="button" ng-click="save()" ng-disabled="!data.saveAllowed" ng-style="unsaved(data) && data.saveAllowed ? {background:'#f2c94c',color:'#0c1318',fontWeight:'bold',borderColor:'#f2c94c'} : {}" style="padding:5px 12px;margin-left:auto;border:1px solid #568d7a;border-radius:4px;">Save<span ng-if="data.unsavedBalance > 0"> &middot; ${{data.unsavedBalance | number:0}} unsaved</span><span ng-if="!(data.unsavedBalance > 0) && data.unsavedSpending > 0"> &middot; ${{data.unsavedSpending | number:0}} spent</span><span ng-if="!(data.unsavedBalance > 0) && !(data.unsavedSpending > 0) && data.unsavedDistanceKm >= 0.005"> &middot; {{data.unsavedDistanceKm | number:1}} km unsaved</span></button>
+  </div>
   <div role="tablist" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;border-bottom:1px solid #568d7a;">
     <button type="button" role="tab" ng-repeat="t in tabs" ng-click="setTab(t.id)" aria-selected="{{tab === t.id}}" ng-style="tab === t.id ? {background:'#568d7a',color:'#0c1318',fontWeight:'bold'} : {}" style="padding:5px 9px;border:1px solid #568d7a;border-bottom:none;border-radius:6px 6px 0 0;">{{t.label}}<span ng-if="tabAlert(t.id)" style="color:#f2c94c;" aria-label="needs attention"> &#9679;</span></button>
   </div>
   <div role="tabpanel" style="padding-top:10px;">
-    <div ng-if="tab === 'stage'">
+    <div ng-if="tab === 'route'">
       <div ng-if="data.mode === 'start' && data.stage.briefing && !data.stageFinished && !data.gameOver && !briefingDismissed" role="note" style="margin:0 0 8px;padding:10px;border:2px solid #a7e5c9;border-radius:6px;background:rgba(167,229,201,.1);">
         <div style="font-weight:bold;color:#a7e5c9;">STAGE BRIEFING: {{data.stage.name}}</div>
         <div style="margin-top:4px;">{{data.stage.briefing}}</div>
         <button type="button" ng-click="dismissBriefing()" style="margin-top:6px;padding:5px 10px;">Got it</button>
       </div>
-      <div ng-if="data.stage && data.stage.finishTown">Finish town: {{data.stage.finishTown}}</div>
-      <div ng-if="data.finishDistanceMetres != null && !data.stageFinished" style="font-weight:bold;">Finish: {{data.finishDistanceMetres / 1000 | number:1}} km away<span ng-if="data.finishDirection"> to the {{data.finishDirection}}</span> (straight line)</div>
-      <div ng-if="data.vehicle">Vehicle: {{data.vehicle.model || 'Active vehicle'}} <span ng-if="data.vehicle.id != null">(#{{data.vehicle.id}})</span></div>
-      <div>Mileage: {{data.totalDistanceKm | number:2}} km<span ng-if="data.unsavedDistanceKm >= 0.005"> ({{data.unsavedDistanceKm | number:2}} km unsaved)</span></div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-        <button type="button" title="Starts the stage again in the starter car with the starting money. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
-        <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
-      </div>
-    </div>
-    <div ng-if="tab === 'nav'">
       <div ng-if="data.resume" style="margin:0 0 8px;padding:10px;border:1px solid #a7e5c9;border-radius:6px;">
-        <label>{{data.mode === 'start' ? 'Start' : 'Resume'}} coordinates (lat, long):
+        <label><span style="font-weight:bold;color:#a7e5c9;">1. {{data.mode === 'start' ? 'Go to the start' : 'Go back to your last save'}}</span>
           <div style="display:flex;gap:6px;margin-top:4px;">
             <input aria-label="Resume coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.resume)" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
             <button type="button" aria-label="Copy resume coordinates" ng-click="copyCoordinates(data.resume)" ng-disabled="!coordinates(data.resume)">Copy</button>
@@ -57,56 +50,56 @@
         <div ng-if="data.mode === 'start' && data.stage.startTown" style="margin-top:4px;">The stage starts near {{data.stage.startTown}}.</div>
         <div ng-if="data.resumeDistanceMetres != null" style="margin-top:4px;">You are {{data.resumeDistanceMetres / 1000 | number:1}} km away.</div>
       </div>
-      <div ng-if="data.finishDistanceMetres != null && !data.stageFinished" style="margin:0 0 8px;font-weight:bold;">Finish: {{data.finishDistanceMetres / 1000 | number:1}} km away<span ng-if="data.finishDirection"> to the {{data.finishDirection}}</span> (straight line)</div>
-      <div ng-if="data.stage && !data.stageFinished && (data.stage.finishTown || coordinates(data.stage.finish))" style="margin:0 0 8px;padding:8px;border:1px solid #f2c94c;border-radius:6px;">
-        <div ng-if="data.stage.finishTown" style="font-weight:bold;color:#f2c94c;">Finish town: {{data.stage.finishTown}}</div>
-        <label ng-if="coordinates(data.stage.finish)">Finish coordinates (lat, long):
-          <div style="display:flex;gap:6px;margin-top:4px;">
-            <input aria-label="Finish coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.stage.finish)" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
-            <button type="button" aria-label="Copy finish coordinates" ng-click="copyCoordinates(data.stage.finish)">Copy</button>
-          </div>
-        </label>
+      <div ng-if="data.stage && !data.stageFinished && (data.stage.finishTown || coordinates(data.stage.finish) || data.finishDistanceMetres != null)" style="margin:0 0 8px;padding:10px;border:1px solid #f2c94c;border-radius:6px;">
+        <div style="font-weight:bold;color:#f2c94c;">{{data.resume ? '2. ' : ''}}Drive to the finish<span ng-if="data.stage.finishTown">: {{data.stage.finishTown}}</span></div>
+        <div ng-if="data.finishDistanceMetres != null" style="margin-top:4px;font-weight:bold;">{{data.finishDistanceMetres / 1000 | number:1}} km away<span ng-if="data.finishDirection"> to the {{data.finishDirection}}</span> (straight line)</div>
+        <div ng-if="coordinates(data.stage.finish)" style="display:flex;gap:6px;margin-top:4px;">
+          <input aria-label="Finish coordinates (latitude, longitude)" type="text" readonly ng-value="coordinates(data.stage.finish)" style="box-sizing:border-box;width:100%;min-width:0;flex:1;user-select:text;" />
+          <button type="button" aria-label="Copy finish coordinates" ng-click="copyCoordinates(data.stage.finish)">Copy</button>
+        </div>
       </div>
       <div style="font-size:12px;color:#c9d6d2;">Navigation tip: paste the finish coordinates into the map search and click the finish point. The map plots a route from where you are and shows arrows and road markers in game.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+        <button type="button" title="Starts the stage again in the starter car with the starting money. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
+        <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
+      </div>
     </div>
-    <div ng-if="tab === 'parts'">
-      <div ng-if="!data.partsChange">Change parts in the game's parts menu. The HUD prices the change here.</div>
-      <div ng-if="data.partsChange">
+    <div ng-if="tab === 'garage'">
+      <div ng-if="data.carChange" style="margin:0 0 8px;padding:10px;border:1px solid #f2c94c;border-radius:6px;">
+        <div style="font-weight:bold;color:#f2c94c;">New car bill</div>
+        <div>{{data.carChange.name}}: ${{data.carChange.price | number:0}}</div>
+        <div ng-if="data.carChange.extras > 0">Parts changed: ${{data.carChange.extras | number:0}}</div>
+        <div>Trade-in of your car: &minus;${{data.carChange.tradeIn | number:0}}</div>
+        <div style="font-weight:bold;">Total: ${{data.carChange.cost | number:0}}</div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button type="button" ng-click="buyCar()" ng-disabled="!data.buyCarAllowed" style="padding:7px 12px;">Buy car</button>
+          <button type="button" ng-click="revertCar()" ng-disabled="!data.revertCarAllowed" style="padding:7px 12px;">Revert</button>
+        </div>
+      </div>
+      <div ng-if="!data.carChange && data.partsChange" style="margin:0 0 8px;padding:10px;border:1px solid #f2c94c;border-radius:6px;">
+        <div style="font-weight:bold;color:#f2c94c;">Parts bill</div>
         <div ng-repeat="part in data.partsChange.added">+ {{part.name}}: ${{part.price | number:0}}</div>
         <div ng-repeat="part in data.partsChange.removed">&minus; {{part.name}} (trade-in)</div>
         <div>Parts: ${{data.partsChange.partsCost | number:0}}</div>
         <div ng-if="data.partsChange.repair > 0">Repair: ${{data.partsChange.repair | number:0}}</div>
         <div style="font-weight:bold;">Total: ${{data.partsChange.cost | number:0}}</div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button type="button" ng-click="buyParts()" ng-disabled="!data.buyPartsAllowed" style="padding:7px 12px;">Buy</button>
+          <button type="button" ng-click="revertParts()" ng-disabled="!data.revertPartsAllowed" style="padding:7px 12px;">Revert</button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:6px;">
-        <button type="button" ng-click="buyParts()" ng-disabled="!data.buyPartsAllowed" style="padding:7px 12px;">Buy</button>
-        <button type="button" ng-click="revertParts()" ng-disabled="!data.revertPartsAllowed" style="padding:7px 12px;">Revert</button>
+      <div ng-if="(!data.carChange && !data.partsChange) || data.wreck || data.repairOwed > 0" style="margin:0 0 8px;padding:10px;border:1px solid #568d7a;border-radius:6px;">
+        <div style="font-weight:bold;color:#a7e5c9;">Repair</div>
+        <div ng-if="data.repairOwed > 0">Owed from your last save: ${{data.repairOwed | number:0}}</div>
+        <div ng-if="data.repairQuote != null">Repair quote: ${{data.repairQuote | number:0}}</div>
+        <div ng-if="!(data.repairOwed > 0) && data.repairQuote == null">Get a quote to price the damage to the car you are in.</div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button type="button" ng-click="requestRepairQuote()" ng-disabled="!data.repairQuoteAllowed" style="padding:7px 12px;">Get repair quote</button>
+          <button type="button" ng-click="repairVehicle()" ng-disabled="!data.repairAllowed" style="padding:7px 12px;">Repair</button>
+        </div>
       </div>
-      <p role="status" ng-if="data.partsFeedback" style="margin:8px 0 0;">{{data.partsFeedback}}</p>
-    </div>
-    <div ng-if="tab === 'car'">
-      <div ng-if="!data.carChange">Pick a car in the game's vehicle selector. The HUD prices it here.</div>
-      <div ng-if="data.carChange">
-        <div>{{data.carChange.name}}: ${{data.carChange.price | number:0}}</div>
-        <div ng-if="data.carChange.extras > 0">Parts changed: ${{data.carChange.extras | number:0}}</div>
-        <div>Trade-in of your car: &minus;${{data.carChange.tradeIn | number:0}}</div>
-        <div style="font-weight:bold;">Total: ${{data.carChange.cost | number:0}}</div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:6px;">
-        <button type="button" ng-click="buyCar()" ng-disabled="!data.buyCarAllowed" style="padding:7px 12px;">Buy car</button>
-        <button type="button" ng-click="revertCar()" ng-disabled="!data.revertCarAllowed" style="padding:7px 12px;">Revert</button>
-      </div>
-      <p role="status" ng-if="data.carFeedback" style="margin:8px 0 0;">{{data.carFeedback}}</p>
-    </div>
-    <div ng-if="tab === 'repair'">
-      <div ng-if="data.repairOwed > 0">Owed from your last save: ${{data.repairOwed | number:0}}</div>
-      <div ng-if="data.repairQuote != null">Repair quote: ${{data.repairQuote | number:0}}</div>
-      <div ng-if="!(data.repairOwed > 0) && data.repairQuote == null">Get a quote to price the damage to the car you are in.</div>
-      <div style="display:flex;gap:8px;margin-top:6px;">
-        <button type="button" ng-click="requestRepairQuote()" ng-disabled="!data.repairQuoteAllowed" style="padding:7px 12px;">Get repair quote</button>
-        <button type="button" ng-click="repairVehicle()" ng-disabled="!data.repairAllowed" style="padding:7px 12px;">Repair</button>
-      </div>
-      <p role="status" ng-if="data.repairFeedback" style="margin:8px 0 0;">{{data.repairFeedback}}</p>
+      <p role="status" ng-repeat="text in [data.carFeedback, data.partsFeedback, data.repairFeedback] track by $index" ng-if="text" style="margin:0 0 6px;">{{text}}</p>
+      <div ng-if="!data.carChange && !data.partsChange" style="font-size:12px;color:#c9d6d2;">To change parts, use the game's parts menu. To change car, use the game's vehicle selector. The bill shows up here.</div>
     </div>
     <div ng-if="tab === 'tips'">
       <div ng-if="data.stage.briefing" style="margin:0 0 8px;">
@@ -115,7 +108,7 @@
       </div>
       <div style="font-weight:bold;color:#a7e5c9;">Tips</div>
       <ul style="margin:4px 0 0;padding-left:18px;">
-        <li>Copy the coordinates on the Navigation tab, paste them into the map search and teleport there to start or resume.</li>
+        <li>Copy the coordinates on the Route tab, paste them into the map search and teleport there to start or resume.</li>
         <li>You earn $100 for every kilometre you drive. Teleports earn nothing.</li>
         <li>Save often. Money, mileage and parts since your last Save are lost when you exit or load the level again.</li>
         <li>Ironman: if your car is wrecked and you cannot pay for the repair, it is game over and the stage starts again.</li>
