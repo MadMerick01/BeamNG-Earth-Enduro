@@ -10,6 +10,7 @@ local perks = require('beamngEarthEnduro/perks')
 local carkov = require('beamngEarthEnduro/carkov')
 local hostile = require('beamngEarthEnduro/hostile')
 local punctures = require('beamngEarthEnduro/punctures')
+local roadEvents = require('beamngEarthEnduro/roadEvents')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -179,6 +180,8 @@ function M.new(deps)
     self.quitArmed, self.extractHold, self.stageArmed, self.newGameArmed = false, nil, nil, false
     -- A puncture not yet repaired; a reload respawns the car, so its tyre repair is owed instead.
     self.punctureDamage, self.punctureFlash, self.offRoad, self.offRoadCheckedAt = 0, nil, nil, nil
+    -- A friendly village's offer is not saved, so a reload turns it down.
+    self.roadOffer, self.roadFlash = nil, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -875,6 +878,7 @@ function M.new(deps)
         self:paySponsor()
         self:offerPerk()
         self:roadPuncture(sample, metres, dt)
+        self:roadEvent(sample)
       end
     end
     self.odometer = location.copy(sample)
@@ -907,6 +911,91 @@ function M.new(deps)
     self.quote = nil
     self.punctureFlash = { at = self.clock }
     self.diag:event('puncture', string.format('%.1f km%s', progression.totalDistanceKm, self.offRoad and ' off road' or ''))
+  end
+
+  -- Roadside events (see roadEvents.lua). Each check due rolls for an event: a friendly village
+  -- offering a free part, or bandits. A check is used up, with no event, while a bill is open, the
+  -- player is stuck or extracting, a village offer is still open, or within SAFE_FINISH_METRES of
+  -- the stage finish or CarKov extraction. Like perk offers, the checks made are kept by Save.
+  function c:roadEvent(sample)
+    if self.stageFinished then return end
+    local progression = self.profile.progression
+    local due = roadEvents.due(progression.totalDistanceKm)
+    -- Saves from before roadside events start counting from here.
+    if progression.roadEvents == nil then progression.roadEvents = due end
+    if due <= progression.roadEvents then return end
+    progression.roadEvents = due
+    if self.paused() or self.pendingParts or self.pendingCar or self.stuck or self.extractHold or self.roadOffer then return end
+    local goal = self.carkov and self.carkov.extraction or (self.stage and self.stage.finish)
+    local left = goal and location.distance(sample, goal)
+    if not left or left <= roadEvents.SAFE_FINISH_METRES then return end
+    if self.random() >= roadEvents.CHANCE then return end
+    if self.random() < roadEvents.VILLAGE_SHARE then self:offerGift() else self:bandits() end
+  end
+
+  function c:flashRoad(title, text)
+    self.roadFlash = { title = title, text = text, at = self.clock }
+  end
+
+  -- Bandits take BANDITS_MIN to BANDITS_MAX dollars, never more than the player has.
+  function c:bandits()
+    local progression = self.profile.progression
+    local taken = math.min(roadEvents.banditAmount(self.random), progression.balance)
+    progression.balance = progression.balance - taken
+    self:flashRoad('BANDITS!', taken > 0 and ('Bandits made off with ' .. dollars(taken) .. ' of your money.')
+      or 'Bandits stopped you, but you had no money for them to take.')
+    self.diag:event('road_bandits', tostring(taken))
+  end
+
+  -- A friendly village offers a better part for one slot of the car, picked at random from the
+  -- garage's upgrades. With none to offer (or no way to read the parts), nothing happens.
+  function c:offerGift()
+    if not self.garage or type(self.garage.upgrades) ~= 'function' or not self.ownedParts then return false end
+    local ok, list, why = pcall(self.garage.upgrades, self.garage, roadEvents.category)
+    local gift = ok and roadEvents.pick(self.random, list) or nil
+    if not gift then
+      self.diag:event('road_gift_none', tostring(ok and why or list), 'W')
+      return false
+    end
+    self.roadOffer = { vehicleId = self.ownedParts.id, path = gift.path, part = gift.part, name = gift.name, label = gift.label }
+    self.diag:event('road_gift_offered', tostring(gift.path) .. ':' .. tostring(gift.part))
+    return true
+  end
+
+  function c:roadOfferInstallAllowed()
+    return self.roadOffer ~= nil and self:perkActionsAllowed() and not self.pendingParts and not self.pendingCar
+  end
+
+  -- Install: fits the part, which respawns the car mended, at no cost and with no time penalty, and
+  -- keeps the perk held. The car comes back as paid for. Decline: turns the offer down.
+  function c:answerRoadOffer(install)
+    local offer = self.roadOffer
+    if not offer or not self:perkActionsAllowed() then return false end
+    if not install then
+      self.roadOffer = nil
+      self.diag:event('road_gift_declined', tostring(offer.part))
+      return true
+    end
+    if not self:roadOfferInstallAllowed() then return false end
+    local owned = self.ownedParts
+    if not owned or owned.id ~= offer.vehicleId then
+      self.roadOffer = nil
+      self:flashRoad('FREE PART', 'The villagers\' part was for the car you had then, so it is gone.')
+      return false
+    end
+    self.arrivingModel, self.arrivingValue = owned.model, owned.value
+    local ok, why, detail = self.garage:fitPart(offer.path, offer.part)
+    if not ok then
+      self.arrivingModel, self.arrivingValue = nil, nil
+      self:flashRoad('FREE PART', 'The part could not be fitted. Try again in a moment.')
+      self.diag:event('road_gift_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+      return false
+    end
+    self.roadOffer = nil
+    self.owedDamage, self.punctureDamage, self.quote, self.stuck, self.still = 0, 0, nil, nil, nil
+    self:flashRoad('FREE PART FITTED', offer.name .. ' fitted, and your car was repaired for free. Save to keep it.')
+    self.diag:event('road_gift_installed', tostring(offer.path) .. ':' .. tostring(offer.part))
+    return true
   end
 
   function c:observe(sample, dt)
@@ -957,7 +1046,7 @@ function M.new(deps)
       local left = location.distance(sample, self.stage.finish)
       if left and left <= self.stage.finishRadiusMetres then
         self.stageFinished, self.stuck, self.still = true, nil, nil
-        self.profile.progression.perkOffer = nil
+        self.profile.progression.perkOffer, self.roadOffer = nil, nil
         self:addMoney(self.stage.finishReward)
         self.diag:event('stage_finished', self.stage.id .. string.format(' %.1f km', self.profile.progression.totalDistanceKm))
         self:manualSave()
@@ -1596,6 +1685,7 @@ function M.new(deps)
       }
     end
     local punctureShown = self.punctureFlash ~= nil and self.clock - self.punctureFlash.at < punctures.SHOWN_FOR
+    local roadShown = self.roadFlash ~= nil and self.clock - self.roadFlash.at < roadEvents.SHOWN_FOR
     local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.carkov
     local sponsor
     if self.stage and not self.carkov then
@@ -1704,6 +1794,13 @@ function M.new(deps)
       saveFeedback = self.feedback,
       carkov = self:carkovView(current),
       -- Puncture! for a few seconds after a tyre bursts, and its tyre repair until it is repaired.
+      -- Roadside events: a friendly village's offer, and what just happened for a few seconds.
+      road = (self.roadOffer or roadShown) and {
+        offer = self.roadOffer and { label = self.roadOffer.label, name = self.roadOffer.name } or nil,
+        installAllowed = self:roadOfferInstallAllowed(),
+        declineAllowed = self.roadOffer ~= nil and self:perkActionsAllowed(),
+        flash = roadShown and { title = self.roadFlash.title, text = self.roadFlash.text } or nil,
+      } or nil,
       puncture = (self.punctureDamage > 0 or punctureShown) and {
         flash = punctureShown,
         owed = self.punctureDamage > 0,
@@ -1851,6 +1948,8 @@ function M.quitCarKov() return safely(function() return ensure():quitCarKov() en
 function M.dismissExtraction() return safely(function() return ensure():dismissExtraction() end) end
 function M.keepPerk() return safely(function() return ensure():answerPerkOffer(false) end) end
 function M.swapPerk() return safely(function() return ensure():answerPerkOffer(true) end) end
+function M.installRoadPart() return safely(function() return ensure():answerRoadOffer(true) end) end
+function M.declineRoadPart() return safely(function() return ensure():answerRoadOffer(false) end) end
 function M.activatePerk() return safely(function() return ensure():activatePerk() end) end
 function M.onVehicleSpawned() return safely(function() if active then active:vehicleSpawned() end end) end
 function M.reload() return safely(function() ensure():reload() end) end

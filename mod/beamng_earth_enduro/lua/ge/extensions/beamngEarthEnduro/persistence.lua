@@ -56,6 +56,8 @@ local function progression(p)
   -- All optional, so older saves load.
   if not optionalString(p.perk) or not optionalString(p.perkOffer) then return nil end
   if p.perkOffers ~= nil and not integer(p.perkOffers, 0) then return nil end
+  -- Roadside event checks made this stage; optional, so older saves load.
+  if p.roadEvents ~= nil and not integer(p.roadEvents, 0) then return nil end
   for _, field in ipairs({ 'timeCreditSeconds', 'freezeSeconds', 'luckyUntilKm', 'lastPunctureKm' }) do
     local value = p[field]
     if value ~= nil and (not location.finite(value) or value < 0 or value > MAX_INTEGER) then
@@ -66,7 +68,7 @@ local function progression(p)
     drivingSeconds = p.drivingSeconds or 0, penaltySeconds = p.penaltySeconds or 0,
     sponsorBonuses = p.sponsorBonuses, perk = p.perk, perkOffer = p.perkOffer, perkOffers = p.perkOffers,
     timeCreditSeconds = p.timeCreditSeconds, freezeSeconds = p.freezeSeconds, luckyUntilKm = p.luckyUntilKm,
-    lastPunctureKm = p.lastPunctureKm }
+    lastPunctureKm = p.lastPunctureKm, roadEvents = p.roadEvents }
 end
 
 -- A saved position, with the altitude and heading when present. Returns a clean copy, or nil and why.

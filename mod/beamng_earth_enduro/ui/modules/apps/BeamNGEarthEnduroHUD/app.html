@@ -17,7 +17,7 @@
     <div style="margin-top:6px;font-size:12px;color:#c9d6d2;">Limit {{clock(data.timer.targetSeconds)}}<span ng-if="data.timer.estimate"> (estimate)</span> &middot; Driving {{clock(data.timer.drivingSeconds)}}<span ng-if="data.timer.penaltySeconds > 0"> &middot; <span style="color:#eb5757;">Penalties +{{clock(data.timer.penaltySeconds)}}</span></span><span ng-if="data.timer.creditSeconds > 0"> &middot; <span style="color:#6fcf97;">Pace Gift &minus;{{clock(data.timer.creditSeconds)}}</span></span><span ng-if="!data.timer.started"> &middot; Starts when you reach the start</span></div>
     <div ng-if="data.timer.penalty" role="alert" style="margin-top:6px;padding:4px;border-radius:4px;background:#eb5757;color:#fff;font-weight:bold;text-align:center;letter-spacing:1px;animation:enduroPulse .8s infinite;">+5:00 {{data.timer.penalty.reason === 'car' ? 'NEW CAR' : 'REPAIR'}} PENALTY</div>
   </div>
-  <div ng-if="notice(data)" ng-attr-role="{{notice(data).alert ? 'alert' : 'status'}}" ng-style="{borderColor: notice(data).color, color: notice(data).color, background: notice(data).alert || notice(data).kind === 'done' ? 'rgba(0,0,0,.35)' : (notice(data).kind === 'sponsor' ? 'rgba(242,201,76,.15)' : (notice(data).kind === 'offer' || notice(data).kind === 'perk' ? 'rgba(187,134,252,.15)' : 'transparent')), boxShadow: notice(data).kind === 'sponsor' ? '0 0 14px #f2c94c' : 'none'}" style="margin:10px 0;padding:8px 10px;border:2px solid;border-radius:6px;">
+  <div ng-if="notice(data)" ng-attr-role="{{notice(data).alert ? 'alert' : 'status'}}" ng-style="{borderColor: notice(data).color, color: notice(data).color, background: notice(data).alert || notice(data).kind === 'done' ? 'rgba(0,0,0,.35)' : (notice(data).kind === 'sponsor' ? 'rgba(242,201,76,.15)' : (notice(data).kind === 'offer' || notice(data).kind === 'perk' ? 'rgba(187,134,252,.15)' : (notice(data).kind === 'village' ? 'rgba(111,207,151,.15)' : 'transparent'))), boxShadow: notice(data).kind === 'sponsor' ? '0 0 14px #f2c94c' : 'none'}" style="margin:10px 0;padding:8px 10px;border:2px solid;border-radius:6px;">
     <div style="font-weight:bold;letter-spacing:1px;" ng-style="{fontSize: notice(data).kind === 'status' ? '14px' : (notice(data).kind === 'sponsor' ? '24px' : '18px'), textAlign: notice(data).kind === 'sponsor' ? 'center' : 'left', textShadow: notice(data).kind === 'sponsor' ? '0 0 10px #f2c94c' : 'none', animation: notice(data).kind === 'sponsor' ? 'enduroPulse 1s infinite' : 'none'}">{{notice(data).title}}</div>
     <div ng-if="notice(data).kind === 'sponsor'" style="color:#f2f6f5;text-align:center;">For every {{data.sponsor.everyKm | number:0}} km you drive. Save to keep it.</div>
     <div ng-if="notice(data).kind === 'stuck'">
@@ -27,6 +27,7 @@
     </div>
     <div ng-if="notice(data).kind === 'perk'" style="color:#f2f6f5;">{{data.perk.flash.text}}</div>
     <div ng-if="notice(data).kind === 'puncture'" style="color:#f2f6f5;">A tyre burst on the road. Repair it on the Garage tab: the tyre adds ${{data.puncture.tyreCost | number:0}}.</div>
+    <div ng-if="notice(data).kind === 'road'" style="color:#f2f6f5;">{{data.road.flash.text}}</div>
     <div ng-if="notice(data).kind === 'carkov'" style="color:#f2f6f5;">{{data.carkov.flash.text}}</div>
     <div ng-if="notice(data).kind === 'hostile' && data.carkov.hostile.phase === 'inbound'" style="color:#f2f6f5;">A hostile car is about to appear ahead of you, heading your way, and will try to ram you. Disable it to earn ${{data.carkov.hostile.reward | number:0}}.</div>
     <div ng-if="notice(data).kind === 'hostile' && data.carkov.hostile.phase === 'chasing'" style="color:#f2f6f5;"><span ng-if="data.carkov.hostile.distanceMetres != null">{{data.carkov.hostile.distanceMetres | number:0}} m away. </span>Damage it until it stops for {{data.carkov.hostile.stillSeconds}} s, then get within {{data.carkov.hostile.claimMetres}} m of it to earn ${{data.carkov.hostile.reward | number:0}}.</div>
@@ -41,6 +42,14 @@
       <div ng-if="data.carkov.complete.net != null" ng-style="{color: data.carkov.complete.net >= 0 ? '#6fcf97' : '#eb5757'}" style="margin-top:2px;font-weight:bold;">Run total after the ${{data.carkov.fee | number:0}} fee: {{data.carkov.complete.net >= 0 ? '+' : '−'}}${{(data.carkov.complete.net < 0 ? -data.carkov.complete.net : data.carkov.complete.net) | number:0}}</div>
       <div style="color:#c9d6d2;">Balance now ${{data.carkov.complete.balance | number:0}}. Your car and money go back to your stage.</div>
       <button type="button" ng-click="dismissExtraction()" style="margin-top:8px;padding:7px 14px;background:#6fcf97;color:#0c1318;font-weight:bold;border:1px solid #6fcf97;border-radius:4px;">Back to my stage</button>
+    </div>
+    <div ng-if="notice(data).kind === 'village'">
+      <div style="color:#f2f6f5;">A friendly village offers you a free part for your car: <b>{{data.road.offer.name}}</b> ({{data.road.offer.label}}).</div>
+      <div style="margin-top:2px;color:#c9d6d2;font-size:13px;">Installing it also repairs your car for free, with no time penalty, and you keep your perk.<span ng-if="!data.road.installAllowed && data.road.declineAllowed"> Settle your parts or car bill first.</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+        <button type="button" ng-click="installRoadPart()" ng-disabled="!data.road.installAllowed" style="padding:7px 12px;background:#6fcf97;color:#0c1318;font-weight:bold;border:1px solid #6fcf97;border-radius:4px;">Install</button>
+        <button type="button" ng-click="declineRoadPart()" ng-disabled="!data.road.declineAllowed" style="padding:7px 12px;">Decline</button>
+      </div>
     </div>
     <div ng-if="notice(data).kind === 'offer'">
       <div style="color:#f2f6f5;">{{data.perk.offer.description}}<span ng-if="data.perk.offer.activate"> Hold it until you want it.</span></div>
@@ -230,6 +239,7 @@
         <li>Pace compares your time with how far you are, in a straight line, from start to finish. Winding roads can put you behind early on and ahead later.</li>
         <li>Missing the time limit is not game over: the clock keeps counting in red as overtime.</li>
         <li>CarKov Off-Road, on the CarKov tab, is a side run you can enter at any time: pay to be dropped somewhere random on Earth and reach the extraction point for a big payout, then go back to your stage.</li>
+        <li>Roadside events, on stages and CarKov runs: every 20 km there is about a 1 in 3 chance of one. A friendly village may offer a free, better part for your car; Install fits it and repairs your car for free, with no time penalty, and you keep your perk. Or bandits may make off with $100 to $1,000 of your money.</li>
       </ul>
       <div ng-if="data.perk" style="margin-top:10px;">
         <div style="font-weight:bold;color:#d6b8ff;">Service Perks</div>

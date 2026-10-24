@@ -168,6 +168,123 @@ function M.new(environment)
     return true
   end
 
+  -- A part's slot types: a 0.39 part's slotType is a string, or a list of them.
+  local function slotTypes(part)
+    local t = type(part) == 'table' and part.slotType or nil
+    if type(t) == 'string' then return { t } end
+    local out = {}
+    if type(t) == 'table' then
+      for _, v in ipairs(t) do if type(v) == 'string' then out[#out + 1] = v end end
+    end
+    return out
+  end
+
+  -- The names of every part the game has for a slot type. jbeam/io's slot map is asked first,
+  -- then its per-slot list; both are guarded, as their shapes are not in the API dump.
+  local function partsForSlot(jbeam, ioCtx, slotType, cache)
+    if cache[slotType] then return cache[slotType] end
+    local names = {}
+    local function add(list)
+      if type(list) ~= 'table' then return end
+      for k, v in pairs(list) do
+        if type(v) == 'string' then names[#names + 1] = v
+        elseif type(k) == 'string' and v then names[#names + 1] = k end
+      end
+    end
+    if cache.slotMap == nil then
+      local ok, map = false, nil
+      if type(jbeam.getAvailableSlotNameMap) == 'function' then ok, map = pcall(jbeam.getAvailableSlotNameMap, ioCtx) end
+      cache.slotMap = ok and type(map) == 'table' and map or false
+    end
+    if cache.slotMap then add(cache.slotMap[slotType]) end
+    if #names == 0 and type(jbeam.getAvailablePartNamesForSlot) == 'function' then
+      local ok, list = pcall(jbeam.getAvailablePartNamesForSlot, ioCtx, slotType)
+      if ok then add(list) end
+    end
+    cache[slotType] = names
+    return names
+  end
+
+  -- Better parts for the player vehicle: for each fitted part whose slot category(slotType) names,
+  -- the cheapest part of the same slot type with a higher jbeam value. Returns a list of
+  -- { path, label, current, part, name, value }, or nil and a reason.
+  function g:upgrades(category)
+    local vehicle, id = current()
+    if not vehicle then return nil, 'vehicle_required' end
+    local data = vehicleData(id)
+    if not data or type(data.config.partsTree) ~= 'table' then return nil, 'parts_unavailable' end
+    local ok, jbeam = pcall(env.jbeam)
+    if not ok or type(jbeam) ~= 'table' or type(jbeam.getPart) ~= 'function' or data.ioCtx == nil then
+      return nil, 'parts_unavailable'
+    end
+    local function getPart(name)
+      local partOK, part = pcall(jbeam.getPart, data.ioCtx, name)
+      return partOK and type(part) == 'table' and part or nil
+    end
+    local cache, out = {}, {}
+    local function visit(node)
+      if type(node) ~= 'table' then return end
+      local chosen = node.chosenPartName
+      local part = type(chosen) == 'string' and chosen ~= '' and getPart(chosen) or nil
+      local types = slotTypes(part)
+      local label = category(types[1])
+      if label then
+        local currentValue = tonumber(type(part.information) == 'table' and part.information.value) or 0
+        local best
+        for _, name in ipairs(partsForSlot(jbeam, data.ioCtx, types[1], cache)) do
+          if name ~= chosen then
+            local candidate = getPart(name)
+            local info = candidate and candidate.information
+            local value = type(info) == 'table' and tonumber(info.value) or nil
+            local fits = false
+            for _, t in ipairs(slotTypes(candidate)) do if t == types[1] then fits = true end end
+            if fits and value and value == value and value > currentValue and value ~= math.huge
+                and (not best or value < best.value) then
+              best = { path = tostring(node.path or node.id or ''), label = label, current = chosen, part = name,
+                name = type(info.name) == 'string' and info.name or name, value = value }
+            end
+          end
+        end
+        if best then out[#out + 1] = best end
+      end
+      if type(node.children) == 'table' then
+        for _, child in pairs(node.children) do visit(child) end
+      end
+    end
+    visit(data.config.partsTree)
+    return out
+  end
+
+  -- Fits one part in the slot at this path and respawns the vehicle where it stands, which also
+  -- mends every part. The new part's own slots are left for the game to fill with its defaults.
+  -- Returns true once the game accepted the respawn.
+  function g:fitPart(path, partName)
+    local vehicle, id = current()
+    if not vehicle then return false, 'vehicle_required' end
+    local data = vehicleData(id)
+    if not data or type(data.config.partsTree) ~= 'table' then return false, 'config_unavailable' end
+    local config = copy(data.config)
+    -- The slot's name is its key in the parent's children (and its id, when the node has one).
+    local found, slotName
+    local function visit(node, key)
+      if type(node) ~= 'table' or found then return end
+      if tostring(node.path or node.id or '') == path then found, slotName = node, node.id or key; return end
+      if type(node.children) == 'table' then
+        for childKey, child in pairs(node.children) do visit(child, childKey) end
+      end
+    end
+    visit(config.partsTree)
+    if not found then return false, 'slot_not_found' end
+    found.chosenPartName, found.children = partName, nil
+    -- The flat parts list, by slot name or path, is kept in step with the tree.
+    if type(config.parts) == 'table' then
+      for slot in pairs(config.parts) do
+        if slot == path or slot == slotName then config.parts[slot] = partName end
+      end
+    end
+    return g:repair(config)
+  end
+
   -- Puts the player back in the vehicle with this id, if it still exists.
   function g:enter(id)
     local ok, vehicle = pcall(env.objectById, id)

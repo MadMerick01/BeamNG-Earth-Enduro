@@ -402,3 +402,26 @@ test('the Stages tab lists each stage by name, summary and length, and is left o
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carkov: { active: false } })
   assert.equal(a.scope.tabShown('stages'), true)
 })
+test('roadside events: a friendly village card above a perk offer, bandits in red, and fixed commands', () => {
+  const a = app()
+  const village = { road: { offer: { name: 'V10', label: 'Engine' }, installAllowed: true, declineAllowed: true } }
+  const perk = { offer: { id: 'luckyMile', name: 'Lucky Mile' } }
+  assert.equal(a.scope.notice({ ...village, perk }).kind, 'village')
+  assert.equal(a.scope.notice({ ...village, perk }).title, 'FRIENDLY VILLAGE')
+  assert.equal(a.scope.notice({ ...village, stuck: { cost: 1 } }).kind, 'stuck')
+  const bandits = { road: { flash: { title: 'BANDITS!', text: 'Bandits made off with $550 of your money.' } } }
+  assert.equal(a.scope.notice(bandits).kind, 'road')
+  assert.equal(a.scope.notice(bandits).color, '#eb5757')
+  assert.equal(a.scope.notice({ ...bandits, puncture: { flash: true } }).kind, 'puncture')
+  assert.equal(a.scope.notice({ road: { flash: { title: 'FREE PART FITTED', text: 'x' } } }).color, '#6fcf97')
+  a.scope.installRoadPart(); a.scope.declineRoadPart()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', ...village })
+  a.scope.installRoadPart(); a.scope.declineRoadPart()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.installRoadPart() end')
+  assert.equal(a.commands[2], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.declineRoadPart() end')
+  const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
+  assert.ok(html.includes("notice(data).kind === 'village'"))
+  assert.ok(html.includes('data.road.offer.name'))
+  assert.ok(html.includes("notice(data).kind === 'road'"))
+})
