@@ -81,7 +81,10 @@
         <div style="margin-top:4px;">{{data.stage.briefing}}</div>
         <button type="button" ng-click="dismissBriefing(data.stage.name)" style="margin-top:6px;padding:5px 10px;">Got it</button>
       </div>
-      <div ng-if="data.carkov.active" role="note" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">You are on a CarKov run. Your stage is saved and waits for you; the CarKov tab shows where to go.</div>
+      <div ng-if="data.carkov.active" role="note" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">
+        <div style="font-weight:bold;color:#f2994a;">You are on a CarKov run</div>
+        <div style="margin-top:4px;">The only ways out are reaching the extraction point or quitting the run, both on the CarKov tab. Your stage is saved and you go back to it afterwards.</div>
+      </div>
       <div ng-if="data.resume && !data.carkov.active" style="margin:0 0 8px;padding:10px;border:1px solid #a7e5c9;border-radius:6px;">
         <label><span style="font-weight:bold;color:#a7e5c9;">1. {{data.mode === 'start' ? 'Go to the start' : 'Go back to your last save'}}</span>
           <div style="display:flex;gap:6px;margin-top:4px;">
@@ -100,10 +103,10 @@
           <button type="button" aria-label="Copy finish coordinates" ng-click="copyCoordinates(data.stage.finish)">Copy</button>
         </div>
       </div>
-      <div ng-if="data.upcomingStage && !data.stageFinished" style="margin:0 0 8px;font-size:13px;color:#c9d6d2;">Up next: <b>{{data.upcomingStage.name}}</b>, {{data.upcomingStage.startTown}}. Your car and money come with you.</div>
-      <div style="font-size:12px;color:#c9d6d2;">Navigation tip: paste the finish coordinates into the map search and click the finish point. The map plots a route from where you are and shows arrows and road markers in game.</div>
+      <div ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active" style="margin:0 0 8px;font-size:13px;color:#c9d6d2;">Up next: <b>{{data.upcomingStage.name}}</b>, {{data.upcomingStage.startTown}}. Your car and money come with you.</div>
+      <div ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip: paste the finish coordinates into the map search and click the finish point. The map plots a route from where you are and shows arrows and road markers in game.</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-        <button type="button" title="Starts the stage again with the car and money you started it with. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
+        <button type="button" ng-if="!data.carkov.active" title="Starts the stage again with the car and money you started it with. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
         <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
       </div>
     </div>
@@ -144,8 +147,15 @@
           <button type="button" ng-click="repairVehicle()" ng-disabled="!data.repairAllowed" style="padding:7px 12px;">Repair</button>
         </div>
       </div>
+      <div ng-if="!data.carChange && !data.partsChange && !data.gameOver" style="margin:0 0 8px;padding:10px;border:1px solid #568d7a;border-radius:6px;">
+        <div style="font-weight:bold;color:#a7e5c9;">Buy parts</div>
+        <div>Fit parts in the game's parts menu. The bill shows up here: Buy to keep them, or Revert.<span ng-if="data.perk.held.id === 'partsDiscount'" style="color:#d6b8ff;"> Parts Discount takes half off.</span></div>
+      </div>
+      <div ng-if="!data.carChange && !data.partsChange && !data.gameOver" style="margin:0 0 8px;padding:10px;border:1px solid #568d7a;border-radius:6px;">
+        <div style="font-weight:bold;color:#a7e5c9;">Buy a vehicle</div>
+        <div>Pick one in the game's vehicle selector. The bill shows up here, less the trade-in of your car.<span ng-if="data.carkov.active"> No time penalty on a CarKov run.</span><span ng-if="!data.carkov.active && data.perk.held.id !== 'noPenalty'"> A new car costs 5 minutes on the clock.</span><span ng-if="!data.carkov.active && data.perk.held.id === 'noPenalty'" style="color:#d6b8ff;"> No Penalty covers the 5 minutes.</span><span ng-if="data.perk.held.id === 'carDeal'" style="color:#d6b8ff;"> Car Dealer Deal takes 30% off.</span></div>
+      </div>
       <p role="status" ng-repeat="text in [data.carFeedback, data.partsFeedback, data.repairFeedback] track by $index" ng-if="text" style="margin:0 0 6px;">{{text}}</p>
-      <div ng-if="!data.carChange && !data.partsChange" style="font-size:12px;color:#c9d6d2;">To change parts, use the game's parts menu. To change car, use the game's vehicle selector. The bill shows up here.</div>
     </div>
     <div ng-if="tab === 'carkov'">
       <div ng-if="!data.carkov.active" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">
