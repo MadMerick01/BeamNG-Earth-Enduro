@@ -18,30 +18,44 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.briefingDismissed = false
       scope.dismissBriefing = function () { scope.briefingDismissed = true }
       // Each part of the HUD sits on its own tab so the app stays short.
-      scope.tabs = [
-        { id: 'stage', label: 'Stage' }, { id: 'nav', label: 'Navigation' },
-        { id: 'parts', label: 'Parts' }, { id: 'car', label: 'New Car' },
-        { id: 'repair', label: 'Repair' }, { id: 'tips', label: 'Tips' }
-      ]
-      scope.tab = 'stage'
+      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'garage', label: 'Garage' }, { id: 'tips', label: 'Tips' }]
+      scope.tab = 'route'
       scope.setTab = function (id) { scope.tab = id }
       // Marks a tab that has something waiting for the player.
       var alerts = {
-        nav: function (d) { return !!d.resume },
-        parts: function (d) { return !!d.partsChange },
-        car: function (d) { return !!d.carChange },
-        repair: function (d) { return !!d.wreck || d.repairOwed > 0 }
+        route: function (d) { return !!d.resume },
+        garage: function (d) { return !!d.partsChange || !!d.carChange || !!d.wreck || d.repairOwed > 0 }
       }
       scope.tabAlert = function (id) { return !!alerts[id] && alerts[id](scope.data || {}) }
       // Opens a tab when its bill, wreck or coordinates first appear; the player can switch away after.
       var autoOpen = [
-        ['repair', function (d) { return !!d.wreck }], ['car', alerts.car],
-        ['parts', alerts.parts], ['nav', alerts.nav]
+        ['garage', function (d) { return !!d.wreck }], ['garage', function (d) { return !!d.carChange }],
+        ['garage', function (d) { return !!d.partsChange }], ['route', alerts.route]
       ]
       var follow = function (previous, next) {
         for (var i = 0; i < autoOpen.length; i++) {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
+      }
+      // The one message under the clock: the most urgent of wreck, game over, stage complete, then the status.
+      var notices = {
+        wreck: { kind: 'wreck', title: 'WRECKED', color: '#eb5757', alert: true },
+        over: { kind: 'over', title: 'GAME OVER', color: '#eb5757', alert: true },
+        done: { kind: 'done', title: '\uD83C\uDFC1 STAGE COMPLETE \uD83C\uDFC1', color: '#f2c94c', alert: false }
+      }
+      var statusNotice = { kind: 'status', title: '', color: '#a7e5c9', alert: false }
+      scope.notice = function (d) {
+        if (!d) return null
+        if (d.wreck) return notices.wreck
+        if (d.gameOver) return notices.over
+        if (d.stageFinished) return notices.done
+        if (!d.stateLabel && !d.sessionStatus && !d.saveFeedback) return null
+        statusNotice.title = d.stateLabel || ''
+        return statusNotice
+      }
+      // True when there is money, spending or mileage that a Save would keep.
+      scope.unsaved = function (d) {
+        return !!d && (d.unsavedBalance > 0 || d.unsavedSpending > 0 || d.unsavedDistanceKm >= 0.005)
       }
       scope.save = function () {
         if (scope.data.saveAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.save() end')
