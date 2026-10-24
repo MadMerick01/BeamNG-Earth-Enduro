@@ -67,18 +67,18 @@ do
   T.eq(p.bursts, 1, 'tyre burst'); T.near(c.profile.progression.lastPunctureKm, 0.1, 1e-6, 'where it happened')
   local v = c:view()
   T.eq(v.puncture.flash, true, 'Puncture! shown'); T.eq(v.puncture.owed, true, 'tyre repair owed')
-  T.eq(v.puncture.tyreCost, punctures.TYRE_REPAIR_COST, 'tyre repair cost shown')
+  T.eq(v.puncture.tyreCost, punctures.TYRE_REPAIR_COST * 20000 / 25000, 'tyre repair priced by the car Value')
   T.eq(v.repairOwed, nil, 'not counted as repair owed from a save')
   -- No second one within 5 km, then another after it.
   at = drive(c, a, at, 4800); T.eq(p.bursts, 1, 'none within 5 km')
   at = drive(c, a, at, 200); T.eq(p.bursts, 2, 'another once 5 km on')
-  T.eq(c:view().puncture.tyreCost, 2 * punctures.TYRE_REPAIR_COST, 'two tyres to repair')
+  T.eq(c:view().puncture.tyreCost, 2 * punctures.TYRE_REPAIR_COST * 20000 / 25000, 'two tyres to repair')
   F.advance(c, punctures.SHOWN_FOR + 1); T.eq(c:view().puncture.flash, false, 'message fades'); T.eq(c:view().puncture.owed, true, 'tyres still owed')
   -- The repair quote includes the tyres, and repairing clears them.
   roll = 0.999999
   c:addTestMoney()
   T.check(c:requestRepairQuote(), 'quoted')
-  T.eq(c:view().repairQuote, Core.repairCost(0) + 0 + (Core.repairCost(2 * punctures.TYRE_REPAIR_COST / 0.5)), 'quote includes both tyres')
+  T.eq(c:view().repairQuote, Core.repairCost(0) + 0 + (Core.repairCost(2 * punctures.TYRE_REPAIR_COST / 0.5, 20000)), 'quote includes both tyres')
   T.check(c:repairVehicle(), 'repaired'); T.eq(g.repairs, 1, 'car respawned, tyres put right')
   T.eq(c:view().puncture, nil, 'no puncture after the repair')
   -- Saved with the run: a reload keeps where the last one was.
@@ -91,7 +91,7 @@ do
   drive(c, a, 0, 100)
   T.check(c:manualSave(), 'saved'); T.eq(io.files[A].vehicle.damage, punctures.TYRE_REPAIR_COST / 0.5, 'tyre owed in the save')
   c:reload(); a.pose = F.position(100 * north); c:tick(0.1)
-  T.eq(c:view().repairOwed, Core.repairCost(punctures.TYRE_REPAIR_COST / 0.5), 'owed after a reload')
+  T.eq(c:view().repairOwed, Core.repairCost(punctures.TYRE_REPAIR_COST / 0.5, 20000), 'owed after a reload')
 end
 
 -- Off road doubles the chance: a roll that misses on road hits off road.

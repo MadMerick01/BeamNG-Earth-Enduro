@@ -17,7 +17,7 @@ M.OFF_ROAD_METRES = 10
 M.OFF_ROAD_CHECK_SECONDS = 1 -- how often the road map is asked
 M.GAP_KM = 5 -- no second puncture within this far of the last one
 M.SAFE_FINISH_METRES = 1000 -- none this close to the stage finish or CarKov extraction
-M.TYRE_REPAIR_COST = 300 -- added to the repair, which puts the tyre right
+M.TYRE_REPAIR_COST = 300 -- added to the repair, which puts the tyre right; on a $25,000 car, scaled by Value
 M.SHOWN_FOR = 6 -- seconds the HUD shows "Puncture!"
 
 -- The chance of a puncture over this many metres at this speed (km/h), on or off road.
