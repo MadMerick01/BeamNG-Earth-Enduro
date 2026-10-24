@@ -151,7 +151,7 @@ test('tabs switch without sending a command and flag what needs attention', () =
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', partsChange: { cost: 10 } })
   assert.equal(a.scope.tabAlert('garage'), true)
 })
-test('a new bill, wreck or set of coordinates opens its tab once', () => {
+test('a new bill or set of coordinates opens its tab once', () => {
   const a = app()
   a.handlers.BeamNGEarthEnduroState({}, { state: 'WAITING', resume: { latitude: 1, longitude: 2 } })
   assert.equal(a.scope.tab, 'route')
@@ -164,10 +164,7 @@ test('a new bill, wreck or set of coordinates opens its tab once', () => {
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carChange: { cost: 10 } })
   assert.equal(a.scope.tab, 'garage')
   a.scope.setTab('route')
-  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carChange: { cost: 10 }, wreck: { cost: 6000, seconds: 10 } })
-  assert.equal(a.scope.tab, 'garage')
-  a.scope.setTab('route')
-  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carChange: { cost: 10 }, wreck: { cost: 6000, seconds: 9 } })
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carChange: { cost: 10 }, stuck: { cost: 6000, balance: 0, action: 'restart' } })
   assert.equal(a.scope.tab, 'route')
 })
 test('one message shows the most urgent news first', () => {
@@ -176,8 +173,7 @@ test('one message shows the most urgent news first', () => {
   assert.equal(n({ state: 'READY', stateLabel: 'READY' }).kind, 'status')
   assert.equal(n({ state: 'READY', stateLabel: 'READY' }).title, 'READY')
   assert.equal(n({ stateLabel: 'STAGE COMPLETE', stageFinished: true }).kind, 'done')
-  assert.equal(n({ stateLabel: 'GAME OVER', gameOver: true, stageFinished: true }).kind, 'over')
-  assert.equal(n({ stateLabel: 'WRECKED', gameOver: true, wreck: { cost: 1, seconds: 1 } }).kind, 'wreck')
+  assert.equal(n({ stateLabel: 'STUCK', stageFinished: true, stuck: { cost: 1, balance: 0, action: 'restart' } }).kind, 'stuck')
   assert.equal(n({ state: 'READY' }), null)
   const bonus = { state: 'READY', stateLabel: 'READY', sponsor: { everyKm: 10, flash: { amount: 2000 } } }
   assert.equal(n(bonus).kind, 'sponsor')
@@ -198,7 +194,7 @@ test('Save lights up only when there is progress to keep', () => {
 test('the HUD keeps money, Save and alerts outside the tabs', () => {
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
   const panels = html.indexOf('role="tabpanel"')
-  for (const always of ['ng-click="save()"', 'data.balance', 'notice(data)', 'data.wreck.cost', 'conquered', 'Sponsor bonus in', 'Sponsor bonuses earned']) {
+  for (const always of ['ng-click="save()"', 'data.balance', 'notice(data)', 'data.stuck.cost', 'conquered', 'Sponsor bonus in', 'Sponsor bonuses earned']) {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
   for (const id of ['route', 'garage', 'carkov', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
@@ -258,7 +254,7 @@ test('a perk offer shows in the message box, below a sponsor bonus and a perk fl
   assert.equal(a.scope.notice({ perk: offer }).title, 'NEW PERK: Lucky Mile')
   assert.equal(a.scope.notice({ perk: { ...offer, flash: { title: 'PERK LOST' } } }).kind, 'perk')
   assert.equal(a.scope.notice({ perk: offer, sponsor: { flash: { amount: 2000 } } }).kind, 'sponsor')
-  assert.equal(a.scope.notice({ perk: offer, wreck: { cost: 1 } }).kind, 'wreck')
+  assert.equal(a.scope.notice({ perk: offer, stuck: { cost: 1 } }).kind, 'stuck')
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
   const badge = html.indexOf('data.perk.held.name')
   assert.ok(badge > -1 && badge < html.indexOf('role="tablist"'), 'perk badge sits in the always-visible strip')
@@ -288,13 +284,13 @@ test('on a CarKov run the coordinates open the CarKov tab, and back on the stage
   assert.equal(a.scope.tab, 'route')
   assert.equal(a.scope.tabAlert('carkov'), false)
 })
-test('how a CarKov run ended shows in the message box, below a wreck', () => {
+test('how a CarKov run ended shows in the message box, below being stuck', () => {
   const a = app()
   const ended = { carkov: { flash: { result: 'extracted', title: 'EXTRACTED', text: 'Paid.' } } }
   assert.equal(a.scope.notice(ended).kind, 'carkov')
   assert.equal(a.scope.notice(ended).title, 'EXTRACTED')
   assert.equal(a.scope.notice({ ...ended, stageFinished: true }).kind, 'carkov')
-  assert.equal(a.scope.notice({ ...ended, wreck: { cost: 1 } }).kind, 'wreck')
+  assert.equal(a.scope.notice({ ...ended, stuck: { cost: 1 } }).kind, 'stuck')
   assert.equal(a.scope.notice({ carkov: { active: true }, stateLabel: 'CARKOV' }).kind, 'status')
 })
 test('a CarKov hostile shows in red in the message box: inbound above the rest, the chase below the extraction hold', () => {
@@ -304,7 +300,7 @@ test('a CarKov hostile shows in red in the message box: inbound above the rest, 
   assert.match(a.scope.notice(inbound).title, /HOSTILE INBOUND 4/)
   assert.equal(a.scope.notice(inbound).color, '#eb5757')
   assert.equal(a.scope.notice({ carkov: { ...inbound.carkov, hold: { seconds: 3 } } }).kind, 'hostile')
-  assert.equal(a.scope.notice({ ...inbound, wreck: { cost: 1 } }).kind, 'wreck')
+  assert.equal(a.scope.notice({ ...inbound, stuck: { cost: 1 } }).kind, 'stuck')
   const chasing = { carkov: { active: true, hostile: { phase: 'chasing', distanceMetres: 120 } }, stateLabel: 'CARKOV' }
   assert.equal(a.scope.notice(chasing).title, 'HOSTILE ON YOUR TAIL')
   assert.equal(a.scope.notice({ carkov: { ...chasing.carkov, hold: { seconds: 3 } } }).kind, 'hold')
@@ -315,7 +311,7 @@ test('a CarKov hostile shows in red in the message box: inbound above the rest, 
 test('extraction counts down in the message box, then EXTRACTION COMPLETE stays until dismissed', () => {
   const a = app()
   assert.equal(a.scope.notice({ carkov: { active: true, hold: { seconds: 3, progress: 0.4 } } }).title, 'EXTRACTING... 3')
-  assert.equal(a.scope.notice({ carkov: { active: true, hold: { seconds: 3 } }, wreck: { cost: 1 } }).kind, 'wreck')
+  assert.equal(a.scope.notice({ carkov: { active: true, hold: { seconds: 3 } }, stuck: { cost: 1 } }).kind, 'stuck')
   const done = { carkov: { complete: { reward: 15000 }, flash: { title: 'CARKOV QUIT' } }, stageFinished: true }
   assert.equal(a.scope.notice(done).kind, 'extracted')
   assert.match(a.scope.notice(done).title, /EXTRACTION COMPLETE/)

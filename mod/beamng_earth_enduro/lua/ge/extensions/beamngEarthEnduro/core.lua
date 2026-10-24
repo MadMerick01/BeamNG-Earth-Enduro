@@ -36,12 +36,14 @@ local CAR_TRADE_IN_SHARE = 0.5
 local STARTER_MODEL = 'burnside'
 local STARTER_CONFIG = 'vehicles/burnside/worldironmanenduro_starter.pc'
 M.STARTER_MODEL, M.STARTER_CONFIG = STARTER_MODEL, STARTER_CONFIG
--- Ironman: a car with this much damage counts as wrecked (a third of what BeamNG calls major
--- damage). When a wrecked car's repair costs more than the balance, the run is over unless the
--- player can pay within GAME_OVER_DELAY seconds; then the only way on is to restart the stage.
-local WRECKED_DAMAGE = 10000
-local GAME_OVER_DELAY = 10
-M.WRECKED_DAMAGE, M.GAME_OVER_DELAY = WRECKED_DAMAGE, GAME_OVER_DELAY
+-- Out of money and can't drive: a car with at least STUCK_DAMAGE (what BeamNG calls moderate damage)
+-- whose repair costs more than the balance, and which has stayed within STUCK_METRES for
+-- STUCK_SECONDS of unpaused play. The HUD then offers Restart stage, or Quit run on CarKov. Nothing
+-- is forced: damage is its own punishment, so there is no wreck limit.
+local STUCK_DAMAGE = 1000
+local STUCK_METRES = 5
+local STUCK_SECONDS = 20
+M.STUCK_DAMAGE, M.STUCK_METRES, M.STUCK_SECONDS = STUCK_DAMAGE, STUCK_METRES, STUCK_SECONDS
 -- Stage clock: a repair or a new car costs the player this many seconds. One frame never adds more
 -- than MAX_CLOCK_STEP, so a loading stall or a teleport hitch does not eat into the time limit.
 local PENALTY_SECONDS = 300
@@ -167,7 +169,7 @@ function M.new(deps)
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
-    self.wreck, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, false, nil, nil, nil
+    self.stuck, self.still, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, nil, false, nil, nil, nil
     self.quitArmed, self.extractHold = false, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
@@ -180,7 +182,6 @@ function M.new(deps)
     self.stage = stageId and stages.get(stageId) or (not stageId and stages.first()) or nil
     if not self.stage and not self.error then self.error = 'unknown_stage' end
     self.stageFinished = self.profile ~= nil and self.profile.finished == true
-    self.gameOver = self.profile ~= nil and self.profile.gameOver == true
     -- Saves from before sponsor bonuses count the distance already driven as paid, so nothing is back-paid.
     if self.profile and self.stage and self.profile.progression.sponsorBonuses == nil then
       self.profile.progression.sponsorBonuses = math.floor(self.profile.progression.totalDistanceKm / self.stage.sponsorEveryKm)
@@ -219,6 +220,13 @@ function M.new(deps)
     if not self.configuration then self:transition('CONFIG_REQUIRED', 'configuration')
     elseif self.error then self:transition('ERROR', self.error)
     else self:transition('EARTH_UNAVAILABLE', 'position_invalid') end
+    -- Saves from when a wreck ended the run could only be restarted, so they restart now.
+    if self.profile and self.profile.gameOver and self.configuration and not self.error then
+      self.restartArmed = true
+      if self:restartStage() then
+        self.feedback = 'Wrecks no longer end the run, so your old game over was restarted. Go to the start to carry on.'
+      end
+    end
   end
 
   function c:interrupt(reason)
@@ -243,7 +251,7 @@ function M.new(deps)
   end
 
   function c:canAfford(amount)
-    return self.profile ~= nil and not self.error and not self.gameOver and type(amount) == 'number' and amount >= 0
+    return self.profile ~= nil and not self.error and type(amount) == 'number' and amount >= 0
       and amount == math.floor(amount) and amount <= self.profile.progression.balance
   end
 
@@ -323,7 +331,7 @@ function M.new(deps)
   end
 
   function c:perkActionsAllowed()
-    return self.profile ~= nil and not self.error and not self.gameOver and self.state == 'READY' and self.arrived
+    return self.profile ~= nil and not self.error and self.state == 'READY' and self.arrived
       and not self.stageFinished
   end
 
@@ -361,7 +369,7 @@ function M.new(deps)
     return true
   end
 
-  -- Ironman with Insurance: pays for the wreck's repair instead of ending the run. With a bill
+  -- Insurance: pays for the repair when the player is out of money and cannot drive. With a bill
   -- open, the repair in the bill is dropped. Like any repair it costs time. Returns whether it paid.
   function c:claimInsurance()
     if self:heldPerk() ~= 'insurance' then return false end
@@ -379,10 +387,10 @@ function M.new(deps)
       end
     end
     self.profile.progression.perk = nil
-    self.owedDamage, self.quote, self.wreck = 0, nil, nil
+    self.owedDamage, self.quote, self.stuck, self.still = 0, nil, nil, nil
     self:addPenalty('repair')
-    self:flashPerk('INSURANCE PAID', 'Your insurance paid for the repair and kept you in the rally.')
-    self.diag:event('insurance_paid', 'wreck')
+    self:flashPerk('INSURANCE PAID', 'Your insurance paid for the repair, so you can drive on.')
+    self.diag:event('insurance_paid', 'stuck')
     return true
   end
 
@@ -390,7 +398,7 @@ function M.new(deps)
   -- is neither finished nor over.
   function c:clockRunning()
     return self.profile ~= nil and self.state == 'READY' and self.arrived and not self.stageFinished
-      and not self.gameOver and not self.error and self.stage ~= nil and self.stage.targetSeconds ~= nil
+      and not self.error and self.stage ~= nil and self.stage.targetSeconds ~= nil
       and not self.carkov and not self.paused()
   end
 
@@ -456,7 +464,7 @@ function M.new(deps)
 
   -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
   function c:priceRepair()
-    if not self.profile or self.error or self.gameOver then return nil, 'unavailable' end
+    if not self.profile or self.error then return nil, 'unavailable' end
     if not self.garage then return nil, 'repair_unavailable' end
     local vehicle, why = self:inspectDamage()
     if not vehicle then return nil, why end
@@ -631,7 +639,7 @@ function M.new(deps)
   end
 
   function c:buyCar()
-    if not self.profile or self.error or self.gameOver then
+    if not self.profile or self.error then
       self.carFeedback = 'Buying cars is unavailable right now. Check the status above.'
       return false
     end
@@ -700,7 +708,7 @@ function M.new(deps)
   -- Called every tick: checks parts after a spawn or vehicle switch, notes the damage the vehicle has
   -- before a change, and puts the paid parts back if the player drives off without paying.
   function c:watchParts()
-    if not self.garage or self.gameOver then return end
+    if not self.garage then return end
     local vehicleId = self.lastSample and self.lastSample.valid and self.lastSample.vehicle and self.lastSample.vehicle.id
     local expected = self.pendingCar and self.pendingCar.id or (self.ownedParts and self.ownedParts.id)
     if vehicleId ~= nil and expected ~= nil and vehicleId ~= expected then self.partsCheckDue = true end
@@ -775,11 +783,6 @@ function M.new(deps)
       self.partsFeedback = 'No part changes to revert.'
       return false
     end
-    -- Ironman: a part change, which mends the car, cannot be used to fix a wreck the player cannot pay for.
-    if pending.damage >= WRECKED_DAMAGE and not self:canAfford(pending.repair) then
-      self.partsFeedback = 'Your car is wrecked and you cannot pay for its repair, so the paid parts cannot go back.'
-      return false
-    end
     local ok, why, detail = self.garage:repair(self.ownedParts.config)
     if not ok then
       self.partsFeedback = 'Could not put the paid parts back. Try again in a moment.'
@@ -797,7 +800,7 @@ function M.new(deps)
   -- stands, for the car of the last save, or the starter car on a fresh start. Like money, part
   -- changes since the last Save are undone by a reload. A save without a car config leaves the vehicle alone.
   function c:provideVehicle()
-    if self.vehicleProvided or self.gameOver or not self.garage or self.state ~= 'READY' or not self.arrived then return end
+    if self.vehicleProvided or not self.garage or self.state ~= 'READY' or not self.arrived then return end
     self.vehicleProvided = true
     local model, config, label
     local configFile
@@ -896,7 +899,7 @@ function M.new(deps)
       end
     end
     -- Driving before then is not part of the trek.
-    if self.arrived and not self.gameOver then self:addMileage(sample, dt) else self.odometer = nil end
+    if self.arrived then self:addMileage(sample, dt) else self.odometer = nil end
     self:transition('READY', 'verified')
     -- On a CarKov run, staying in the extraction zone for EXTRACT_HOLD_SECONDS, with no bill open,
     -- pays out and ends the run. Leaving the zone starts the hold again.
@@ -911,10 +914,10 @@ function M.new(deps)
       return
     end
     -- Reaching the finish completes the stage, and the finish is saved straight away.
-    if self.arrived and not self.stageFinished and not self.gameOver then
+    if self.arrived and not self.stageFinished then
       local left = location.distance(sample, self.stage.finish)
       if left and left <= self.stage.finishRadiusMetres then
-        self.stageFinished, self.wreck = true, nil
+        self.stageFinished, self.stuck, self.still = true, nil, nil
         self.profile.progression.perkOffer = nil
         self.diag:event('stage_finished', self.stage.id .. string.format(' %.1f km', self.profile.progression.totalDistanceKm))
         self:manualSave()
@@ -922,12 +925,14 @@ function M.new(deps)
     end
   end
 
-  -- Ironman: watches for a wrecked car the player cannot pay to repair, and ends the run when the
-  -- player still cannot pay after GAME_OVER_DELAY seconds. With a parts bill open, the damage the
-  -- part change mended counts.
-  function c:watchIronman(dt)
-    if self.gameOver or self.stageFinished or not self.garage or self.state ~= 'READY' or not self.arrived then
-      self.wreck = nil
+  -- Watches for a player who is out of money and cannot drive (see STUCK_DAMAGE). Insurance pays
+  -- the repair then; otherwise the HUD offers the way out. With a parts bill open, the damage the
+  -- part change mended counts. Moving off, or being able to pay, clears it.
+  function c:watchStuck(dt)
+    local sample = self.lastSample
+    if self.stageFinished or not self.garage or self.state ~= 'READY' or not self.arrived
+        or not sample or not sample.valid then
+      self.stuck, self.still = nil, nil
       return
     end
     local damage = (self.pendingCar and self.pendingCar.oldDamage) or (self.pendingParts and self.pendingParts.damage)
@@ -935,22 +940,21 @@ function M.new(deps)
       local inspected = self:inspectDamage()
       damage = inspected and inspected.damage
     end
-    local cost = damage and damage >= WRECKED_DAMAGE and M.repairCost(damage) or 0
-    if cost == 0 or self:canAfford(cost) then
-      if self.wreck then self.diag:event('wreck_cleared', tostring(cost)) end
-      self.wreck = nil
+    local cost = damage and damage >= STUCK_DAMAGE and M.repairCost(damage) or 0
+    local moved = self.still and location.distance(self.still.position, sample)
+    if cost == 0 or self:canAfford(cost) or not self.still or not moved or moved > STUCK_METRES then
+      if self.stuck then self.diag:event('stuck_cleared', tostring(cost)) end
+      self.stuck = nil
+      self.still = { position = location.copy(sample), seconds = 0 }
       return
     end
-    if not self.wreck then
-      self.wreck = { left = GAME_OVER_DELAY }
-      self.diag:event('wrecked', string.format('%.1f damage, %d', damage, cost), 'W')
+    if not self.paused() then self.still.seconds = self.still.seconds + math.min(dt, MAX_CLOCK_STEP) end
+    if self.still.seconds < STUCK_SECONDS then return end
+    if not self.stuck then
+      self.diag:event('stuck', string.format('%.1f damage, %d', damage, cost), 'W')
+      if self:claimInsurance() then return end
     end
-    self.wreck.cost = cost
-    self.wreck.left = self.wreck.left - dt
-    if self.wreck.left <= 0 and not self:claimInsurance() then
-      -- On a CarKov run a wreck ends the run, not the rally.
-      if self.carkov then self:failCarKov(cost) else self:endRun(cost) end
-    end
+    self.stuck = { cost = cost }
   end
 
   -- Writes a save of this profile and makes it the loaded one. Returns it, or nil and why.
@@ -968,15 +972,6 @@ function M.new(deps)
     self.savedDistanceKm = saved.progression.totalDistanceKm
     self.savedBalance = saved.progression.balance
     return saved
-  end
-
-  -- Game over. It is saved straight away, so reloading the last save does not undo it.
-  function c:endRun(cost)
-    self.gameOver, self.wreck, self.quote, self.restartArmed = true, nil, nil, false
-    self.diag:event('game_over', tostring(cost), 'W')
-    local saved, why = self:record({ base = self.profile.base, resume = self.profile.resume,
-      progression = self.profile.progression, stage = self.stage.id, vehicle = {}, gameOver = true })
-    if not saved then self.diag:event('game_over_unsaved', tostring(why), 'E') end
   end
 
   -- Where the stage starts. config.json's base, when set, moves the first stage's start.
@@ -999,7 +994,7 @@ function M.new(deps)
   -- The perk held comes too. A perk running now, or one on offer, stays behind with the stage.
   function c:startNextStage()
     local nextStage = self.stage and stages.after(self.stage.id)
-    if not nextStage or not self.stageFinished or self.gameOver or self.error or self.state ~= 'READY'
+    if not nextStage or not self.stageFinished or self.error or self.state ~= 'READY'
         or not self.arrived or not self.profile then
       self.feedback = 'The next stage is not open yet. Finish this stage first.'
       return false
@@ -1032,7 +1027,7 @@ function M.new(deps)
   end
 
   -- Starts the stage again: money, mileage, car and perk go back to the start, and the save is replaced.
-  -- After game over one press does it; otherwise a second press confirms, since progress is lost.
+  -- A second press confirms, since progress is lost.
   function c:restartStage()
     if self.error or not self.configuration or not self.stage then
       self.feedback = 'Restart is unavailable right now. Check the status above.'
@@ -1042,7 +1037,7 @@ function M.new(deps)
       self.feedback = 'Quit your CarKov run on the CarKov tab before you restart the stage.'
       return false
     end
-    if not self.gameOver and not self.restartArmed then
+    if not self.restartArmed then
       self.restartArmed = true
       self.feedback = 'Press Confirm restart to start ' .. self.stage.name
         .. ' again. Your car, money, mileage, clock and perk go back to the start.'
@@ -1068,8 +1063,8 @@ function M.new(deps)
   -- CarKov. Entering saves the stage where the player is, takes the fee and sends them to a random
   -- drop point with their car; the run gets its own progression (the perk held comes along), with no
   -- stage clock or sponsor bonus. Every way out goes back to the stage save with the car and money
-  -- the player has then: extraction pays the reward, quitting pays nothing, and a wreck the player
-  -- cannot pay for ends the run with the car repaired as far as the money goes.
+  -- the player has then: extraction pays the reward, quitting pays nothing, and quitting while out of
+  -- money and unable to drive also repairs the car as far as the money goes.
   local function copyTable(t)
     local out = {}
     for k, v in pairs(t) do out[k] = v end
@@ -1079,13 +1074,12 @@ function M.new(deps)
   -- Why CarKov cannot be entered now, or nil when it can.
   function c:carkovEntryProblem()
     if self.carkov then return 'You are already on a CarKov run.' end
-    if not self.profile or self.error or self.gameOver or self.state ~= 'READY' or not self.arrived then
+    if not self.profile or self.error or self.state ~= 'READY' or not self.arrived then
       return 'CarKov opens once you are on your stage. Check the status above.'
     end
     if self.pendingParts or self.pendingCar then
       return 'Pay for or put back your parts or car change on the Garage tab before you enter CarKov.'
     end
-    if self.wreck then return 'Repair your car before you enter CarKov.' end
     if not self:canAfford(carkov.ENTRY_FEE) then
       return 'CarKov costs ' .. dollars(carkov.ENTRY_FEE) .. ' to enter. You need '
         .. dollars(carkov.ENTRY_FEE - self.profile.progression.balance) .. ' more.'
@@ -1162,7 +1156,7 @@ function M.new(deps)
 
   local carkovResults = {
     quit = { title = 'CARKOV QUIT', text = 'You left CarKov. The entry fee is lost.' },
-    wrecked = { title = 'CARKOV FAILED', text = 'Your car was totalled, so the run is over and the entry fee is lost.' },
+    stranded = { title = 'CARKOV FAILED', text = 'You were out of money and could not drive, so the run is over and the entry fee is lost.' },
     hostile_disabled = { title = 'HOSTILE DISABLED', text = 'You took out the hostile and earned ' .. dollars(hostile.REWARD) .. '. Save to keep it.' },
     hostile_lost = { title = 'HOSTILE LOST', text = 'You left the hostile far behind. It is gone.' },
   }
@@ -1192,18 +1186,17 @@ function M.new(deps)
     return true
   end
 
-  -- A wreck the player could not pay for: the car is repaired, charged as far as the balance goes.
+  -- Quitting while out of money and unable to drive: the car is repaired, charged as far as the balance goes.
   function c:failCarKov(cost)
     local balance = self.profile.progression.balance
     local charged = math.min(cost, balance)
-    if not self:leaveCarKov('wrecked', balance - charged, true) then
-      -- Tried again after another countdown.
-      self.wreck.left = GAME_OVER_DELAY
+    if not self:leaveCarKov('stranded', balance - charged, true) then
+      self.feedback = 'Could not quit just now. Try again.'
       return false
     end
     -- The car is respawned repaired at the stage save; this mends it where it stands meanwhile.
     if self.garage then self.garage:repair() end
-    self:flashCarKov('wrecked', charged > 0 and (' The repair took ' .. dollars(charged) .. '.') or '')
+    self:flashCarKov('stranded', charged > 0 and (' The repair took ' .. dollars(charged) .. '.') or '')
     self.feedback = 'Go back to your stage save to carry on in your repaired car.'
     return true
   end
@@ -1231,7 +1224,7 @@ function M.new(deps)
 
   function c:watchHostile(dt)
     local run = self.carkov
-    if not run or not self.hostiles or self.error or self.gameOver then
+    if not run or not self.hostiles or self.error then
       self:clearHostile('no_run')
       return
     end
@@ -1252,8 +1245,8 @@ function M.new(deps)
     end
     if encounter.phase == 'inbound' then
       encounter.left = encounter.left - step
-      -- A wrecked car is left alone until it is sorted out.
-      if encounter.left > 0 or self.wreck then return end
+      -- A player who is out of money and cannot drive is left alone until it is sorted out.
+      if encounter.left > 0 or self.stuck then return end
       local model, config = self:hostileCar()
       local id, why, detail
       if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_BEHIND_METRES)
@@ -1307,7 +1300,7 @@ function M.new(deps)
       claimMetres = hostile.CLAIM_METRES, stillSeconds = hostile.STILL_SECONDS }
   end
 
-  -- Quits the run; a second press confirms. A wrecked car the player cannot pay for counts as a failed run.
+  -- Quits the run; a second press confirms. Out of money and unable to drive, the car is repaired as far as the money goes.
   function c:quitCarKov()
     if not self.carkov or not self.profile or self.error then
       self.feedback = 'You are not on a CarKov run.'
@@ -1323,7 +1316,7 @@ function M.new(deps)
       return false
     end
     self.quitArmed = false
-    if self.wreck then return self:failCarKov(self.wreck.cost) end
+    if self.stuck then return self:failCarKov(self.stuck.cost) end
     if not self:leaveCarKov('quit', self.profile.progression.balance) then
       self.feedback = 'Could not quit just now. Try again.'
       return false
@@ -1365,7 +1358,7 @@ function M.new(deps)
   function c:view()
     local current = self.lastSample and self.lastSample.valid and location.copy(self.lastSample) or nil
     -- Where the player goes to carry on: the last save, or the start before the first save.
-    local resume = not self.arrived and not self.error and not self.gameOver and location.copy(self.startupTarget) or nil
+    local resume = not self.arrived and not self.error and location.copy(self.startupTarget) or nil
     local stageName = self.stage and self.stage.name or ''
     local upcoming = self.stage and stages.after(self.stage.id) or nil
     local nextStage = self.stageFinished and upcoming or nil
@@ -1379,20 +1372,14 @@ function M.new(deps)
       status = 'Set valid base coordinates in the rally configuration, then load the level again.'
     elseif self.state == 'ERROR' then
       status = errorMessages[self.error] or errorMessages.internal_error
-    elseif self.gameOver then
-      status = 'Ironman rule: your car was wrecked and you could not pay for the repair, so this run is over. '
-        .. 'Press Restart stage to start ' .. stageName .. ' again '
-        .. ((self.profile and self.profile.entry) and ('with the car and ' .. dollars(self.profile.entry.balance) .. ' you started it with.')
-          or ('in the starter car with ' .. dollars(self.stage and self.stage.startingMoney or 0) .. '.'))
     elseif self.state == 'READY' and self.stageFinished then
       status = nextStage and ('You conquered ' .. stageName .. '! Press Start ' .. nextStage.name .. ' to take your car and money on to '
           .. nextStage.startTown .. '.')
         or ('You conquered ' .. stageName .. '! More stages are coming. Press Restart stage to run it again.')
-    elseif self.state == 'READY' and self.wreck then
-      status = 'Your car is wrecked. The repair costs ' .. dollars(self.wreck.cost) .. ' and you have '
-        .. dollars(self.profile.progression.balance) .. '. Unless you can pay, '
-        .. (self.carkov and 'your CarKov run is over in ' or 'it is game over in ')
-        .. math.max(0, math.ceil(self.wreck.left)) .. ' s.'
+    elseif self.state == 'READY' and self.stuck then
+      status = 'Out of money and can\'t drive? The repair costs ' .. dollars(self.stuck.cost) .. ' and you have '
+        .. dollars(self.profile.progression.balance) .. '. If your car will not move, '
+        .. (self.carkov and 'press Quit run to leave CarKov in a repaired car.' or ('press Restart stage to start ' .. stageName .. ' again.'))
     elseif self.state == 'READY' and self.carkov and self.arrived and (self.pendingParts or self.pendingCar)
         and current and (location.distance(current, self.carkov.extraction) or math.huge) <= carkov.EXTRACTION_RADIUS_METRES then
       status = 'You are at the extraction point. Pay for or put back your parts or car change on the Garage tab to extract.'
@@ -1404,12 +1391,11 @@ function M.new(deps)
     elseif not status then status = messages.position_invalid end
     local label = labels[self.state]
     if self.state == 'CONFIG_REQUIRED' or self.state == 'ERROR' then -- keep the label
-    elseif self.gameOver then label = 'GAME OVER'
     elseif self.state == 'READY' and self.stageFinished then label = 'STAGE COMPLETE'
-    elseif self.state == 'READY' and self.wreck then label = 'WRECKED'
+    elseif self.state == 'READY' and self.stuck then label = 'STUCK'
     elseif self.state == 'READY' and not self.arrived then label = goLabels[self.mode]
     elseif self.state == 'READY' and self.carkov then label = 'CARKOV' end
-    local active = self.profile ~= nil and not self.error and not self.gameOver
+    local active = self.profile ~= nil and not self.error
     local timer
     -- A CarKov run has no stage clock or sponsor bonus.
     if self.stage and self.stage.targetSeconds and not self.carkov then
@@ -1427,12 +1413,12 @@ function M.new(deps)
         -- Time Freeze seconds left; the clock stands still while there are any.
         freezeSeconds = progression.freezeSeconds and math.ceil(progression.freezeSeconds) or nil,
         running = self:clockRunning(), started = self.arrived or elapsed > 0,
-        aheadSeconds = (self.arrived and current and not self.gameOver and self.configuration)
+        aheadSeconds = (self.arrived and current and self.configuration)
           and self:paceSeconds(current, elapsed) or nil,
         penalty = shown and { reason = self.penalty.reason, seconds = PENALTY_SECONDS } or nil,
       }
     end
-    local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.gameOver and not self.carkov
+    local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.carkov
     local sponsor
     if self.stage and not self.carkov then
       local progression = self.profile and self.profile.progression or {}
@@ -1490,15 +1476,16 @@ function M.new(deps)
       upcomingStage = upcoming and { name = upcoming.name, startTown = upcoming.startTown } or nil,
       -- Offered once the stage is finished, when there is a stage after it.
       nextStage = nextStage and { name = nextStage.name, startTown = nextStage.startTown } or nil,
-      nextStageAllowed = nextStage ~= nil and self.state == 'READY' and self.arrived and not self.gameOver
+      nextStageAllowed = nextStage ~= nil and self.state == 'READY' and self.arrived
         and not self.error and not self.pendingParts and not self.pendingCar,
       carriedCar = self.carriedCar,
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
-      stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer, sponsor = sponsor, perk = perk,
-      wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)),
-        insured = self:heldPerk() == 'insurance' } or nil,
+      stageFinished = self.stageFinished, timer = timer, sponsor = sponsor, perk = perk,
+      -- Out of money and can't drive: the repair it needs, the balance, and the way out offered.
+      stuck = self.stuck and { cost = self.stuck.cost, balance = self.profile.progression.balance,
+        action = self.carkov and 'quit' or 'restart' } or nil,
       restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error and not self.carkov,
       restartArmed = self.restartArmed,
       vehicle = current and self.lastSample.vehicle and {
@@ -1513,7 +1500,7 @@ function M.new(deps)
       repairQuoteAllowed = active and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
       repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage) or nil,
-      repairAllowed = quote ~= nil and not self.pendingParts and not self.pendingCar and not self.gameOver,
+      repairAllowed = quote ~= nil and not self.pendingParts and not self.pendingCar,
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
         added = self.pendingParts.added, removed = self.pendingParts.removed,
@@ -1521,7 +1508,7 @@ function M.new(deps)
         repair = self.pendingParts.repair, cost = self.pendingParts.cost,
       } or nil,
       buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
-      revertPartsAllowed = self.pendingParts ~= nil and not self.gameOver,
+      revertPartsAllowed = self.pendingParts ~= nil,
       partsFeedback = self.partsFeedback,
       carChange = self.pendingCar and {
         name = self.pendingCar.name, price = self.pendingCar.price, discount = self.pendingCar.discount,
@@ -1529,9 +1516,9 @@ function M.new(deps)
         tradeIn = self.pendingCar.tradeIn, cost = self.pendingCar.cost,
       } or nil,
       buyCarAllowed = self.pendingCar ~= nil and self:canAfford(self.pendingCar.cost),
-      revertCarAllowed = self.pendingCar ~= nil and not self.gameOver,
+      revertCarAllowed = self.pendingCar ~= nil,
       carFeedback = self.carFeedback,
-      saveAllowed = self.state == 'READY' and self.arrived and not self.gameOver,
+      saveAllowed = self.state == 'READY' and self.arrived,
       saveFeedback = self.feedback,
       carkov = self:carkovView(current),
     }
@@ -1543,14 +1530,14 @@ function M.new(deps)
     self:observe(self.adapter:sample(), dt)
     self:provideVehicle()
     self:watchParts()
-    self:watchIronman(dt)
+    self:watchStuck(dt)
     self:watchHostile(dt)
     self:runClock(dt)
     self.ui:publish(self:view(), self.clock)
   end
 
   function c:manualSave()
-    if self.state ~= 'READY' or not self.profile or self.error or self.gameOver then
+    if self.state ~= 'READY' or not self.profile or self.error then
       self.feedback = 'Save is unavailable right now. Check the status above.'
       self.diag:event('manual_save_rejected', tostring(self.state), 'W')
       return false
@@ -1591,7 +1578,7 @@ function M.new(deps)
 
   -- Testing aid: adds money to the in-memory balance. Like driving earnings, it is kept by Save.
   function c:addTestMoney()
-    if not self.profile or self.error or self.gameOver then
+    if not self.profile or self.error then
       self.diag:event('test_money_rejected', tostring(self.state), 'W')
       return false
     end
