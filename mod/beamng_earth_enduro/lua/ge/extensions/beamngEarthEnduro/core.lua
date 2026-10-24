@@ -7,6 +7,7 @@ local earthAdapter = require('beamngEarthEnduro/earthAdapter')
 local garage = require('beamngEarthEnduro/garage')
 local stages = require('beamngEarthEnduro/stages')
 local perks = require('beamngEarthEnduro/perks')
+local carkov = require('beamngEarthEnduro/carkov')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -51,6 +52,10 @@ M.PENALTY_SECONDS = PENALTY_SECONDS
 local SPONSOR_SHOWN_FOR = 6
 -- How long the HUD shows a perk being used, paid out or lost. Perk values are set in perks.lua.
 local PERK_SHOWN_FOR = 6
+-- How long the HUD shows how a CarKov run ended. CarKov's fee and reward are set in carkov.lua.
+local CARKOV_SHOWN_FOR = 10
+-- Perks that work on the stage clock, which does not run on a CarKov run, so they wait for the stage.
+local CLOCK_PERKS = { timeFreeze = true, paceGift = true }
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
@@ -100,11 +105,12 @@ local labels = {
   READY = 'READY', ERROR = 'RALLY PAUSED',
 }
 -- What the HUD asks of the player until they reach the resume point.
-local goLabels = { resume = 'GO TO YOUR LAST SAVE', start = 'GO TO THE START' }
+local goLabels = { resume = 'GO TO YOUR LAST SAVE', start = 'GO TO THE START', drop = 'GO TO THE CARKOV DROP' }
 local goMessages = {
   resume = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to carry on your enduro.',
   start = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start your enduro. You get your starter car when you arrive.',
   carried = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start the stage. Your car is waiting for you there.',
+  drop = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start your CarKov run. Your car is waiting for you there.',
 }
 local arrivedMessages = {
   resume = "You're in the right place. Continue your trek, and press Save to keep your progress.",
@@ -156,6 +162,7 @@ function M.new(deps)
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
     self.wreck, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, false, nil, nil, nil
+    self.quitArmed = false
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -184,8 +191,12 @@ function M.new(deps)
     self.owedDamage = self.profile and self.profile.vehicle and self.profile.vehicle.damage or 0
     -- A restarted stage sends the player back to its start for a new starter car.
     self.mode = (self.profile and not self.profile.atStart) and 'resume' or 'start'
-    -- A stage started from the one before, or restarted, can bring a car to its start instead of the starter car.
-    self.carriedCar = self.mode == 'start' and self.profile ~= nil and self.profile.vehicle ~= nil
+    -- A CarKov run under way; until the player first reaches its drop point they go there instead.
+    self.carkov = self.profile and self.profile.carkov or nil
+    if self.carkov and self.mode == 'start' then self.mode = 'drop' end
+    -- A stage started from the one before, or restarted, can bring a car to its start instead of the
+    -- starter car; a CarKov drop always brings the player's car.
+    self.carriedCar = (self.mode == 'start' or self.mode == 'drop') and self.profile ~= nil and self.profile.vehicle ~= nil
       and self.profile.vehicle.config ~= nil
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
@@ -239,6 +250,8 @@ function M.new(deps)
 
   -- Puts the player PENALTY_SECONDS further behind on the stage clock. Like money, it is kept by Save.
   function c:addPenalty(reason)
+    -- A CarKov run has no clock to add to.
+    if self.carkov then return end
     local progression = self.profile.progression
     progression.penaltySeconds = (progression.penaltySeconds or 0) + PENALTY_SECONDS
     self.penalty = { reason = reason, at = self.clock }
@@ -271,15 +284,16 @@ function M.new(deps)
 
   -- A repair costs time unless No Penalty covers it, and loses the perk held, except Insurance.
   -- Returns whether it cost time.
+  -- On a CarKov run a repair costs no time, so No Penalty is kept for the stage.
   function c:repaired()
-    local timed = not self:usePerk('noPenalty')
+    local timed = not self.carkov and not self:usePerk('noPenalty')
     if timed then self:addPenalty('repair') end
     local held = self:heldPerk()
-    if held and held ~= 'insurance' then
+    if held and held ~= 'insurance' and not (self.carkov and held == 'noPenalty') then
       self.profile.progression.perk = nil
       self:flashPerk('PERK LOST', 'The repair lost your ' .. perks.get(held).name .. ' perk.')
       self.diag:event('perk_lost', held)
-    elseif not timed then
+    elseif not timed and not self.carkov then
       self:flashPerk('NO PENALTY USED', 'The repair cost you no time.')
     end
     return timed
@@ -319,6 +333,7 @@ function M.new(deps)
     local held = self:heldPerk()
     local perk = held and perks.get(held)
     if not perk or not perk.activate or not self:perkActionsAllowed() then return false end
+    if self.carkov and CLOCK_PERKS[held] then return false end
     local progression = self.profile.progression
     progression.perk = nil
     if held == 'timeFreeze' then
@@ -365,7 +380,7 @@ function M.new(deps)
   function c:clockRunning()
     return self.profile ~= nil and self.state == 'READY' and self.arrived and not self.stageFinished
       and not self.gameOver and not self.error and self.stage ~= nil and self.stage.targetSeconds ~= nil
-      and not self.paused()
+      and not self.carkov and not self.paused()
   end
 
   function c:runClock(dt)
@@ -385,7 +400,7 @@ function M.new(deps)
   -- Pays the sponsor bonus for each whole stretch of sponsorEveryKm driven and not yet paid for. The
   -- count of bonuses paid is saved with the balance, so a reload never pays one twice.
   function c:paySponsor()
-    if self.stageFinished or not self.stage then return end
+    if self.stageFinished or not self.stage or self.carkov then return end
     local progression = self.profile.progression
     local due = math.floor(progression.totalDistanceKm / self.stage.sponsorEveryKm)
     local paid = progression.sponsorBonuses or 0
@@ -624,11 +639,12 @@ function M.new(deps)
     snapshot.value = pending.base.value
     self:adoptParts(snapshot)
     if pending.discount > 0 then self:usePerk('carDeal') end
-    local timed = not self:usePerk('noPenalty')
+    local timed = not self.carkov and not self:usePerk('noPenalty')
     if timed then self:addPenalty('car') end
     self.owedDamage = 0
     self.carFeedback = 'Bought ' .. tostring(pending.name) .. ' for ' .. dollars(pending.cost)
-      .. (timed and '. The car change cost you 5 minutes.' or '. No Penalty saved you the 5 minutes.') .. ' Save to keep it.'
+      .. (timed and '. The car change cost you 5 minutes.' or (self.carkov and '.' or '. No Penalty saved you the 5 minutes.'))
+      .. ' Save to keep it.'
     return true
   end
 
@@ -865,6 +881,14 @@ function M.new(deps)
     -- Driving before then is not part of the trek.
     if self.arrived and not self.gameOver then self:addMileage(sample, dt) else self.odometer = nil end
     self:transition('READY', 'verified')
+    -- On a CarKov run, reaching the extraction point with no bill open pays out and ends the run.
+    if self.carkov then
+      local left = self.arrived and location.distance(sample, self.carkov.extraction)
+      if left and left <= carkov.EXTRACTION_RADIUS_METRES and not self.pendingParts and not self.pendingCar then
+        self:extract()
+      end
+      return
+    end
     -- Reaching the finish completes the stage, and the finish is saved straight away.
     if self.arrived and not self.stageFinished and not self.gameOver then
       local left = location.distance(sample, self.stage.finish)
@@ -902,7 +926,10 @@ function M.new(deps)
     end
     self.wreck.cost = cost
     self.wreck.left = self.wreck.left - dt
-    if self.wreck.left <= 0 and not self:claimInsurance() then self:endRun(cost) end
+    if self.wreck.left <= 0 and not self:claimInsurance() then
+      -- On a CarKov run a wreck ends the run, not the rally.
+      if self.carkov then self:failCarKov(cost) else self:endRun(cost) end
+    end
   end
 
   -- Writes a save of this profile and makes it the loaded one. Returns it, or nil and why.
@@ -911,6 +938,9 @@ function M.new(deps)
     candidate.schemaVersion, candidate.profileId = 1, 'default'
     if candidate.completedStages == nil and self.profile then candidate.completedStages = self.profile.completedStages end
     if candidate.entry == nil and self.profile then candidate.entry = self.profile.entry end
+    -- A CarKov run carries over too; false ends it.
+    if candidate.carkov == nil and self.profile then candidate.carkov = self.profile.carkov end
+    if candidate.carkov == false then candidate.carkov = nil end
     local saved, why = self.store:save(candidate)
     if not saved then return nil, why end
     self.profile, self.unsavedBase = saved, nil
@@ -987,6 +1017,10 @@ function M.new(deps)
       self.feedback = 'Restart is unavailable right now. Check the status above.'
       return false
     end
+    if self.carkov then
+      self.feedback = 'Quit your CarKov run on the CarKov tab before you restart the stage.'
+      return false
+    end
     if not self.gameOver and not self.restartArmed then
       self.restartArmed = true
       self.feedback = 'Press Confirm restart to start ' .. self.stage.name
@@ -1008,6 +1042,179 @@ function M.new(deps)
     self:reload()
     self.feedback = 'Stage restarted. Go to the start to get ' .. (self.carriedCar and 'your car.' or 'your starter car.')
     return true
+  end
+
+  -- CarKov. Entering saves the stage where the player is, takes the fee and sends them to a random
+  -- drop point with their car; the run gets its own progression (the perk held comes along), with no
+  -- stage clock or sponsor bonus. Every way out goes back to the stage save with the car and money
+  -- the player has then: extraction pays the reward, quitting pays nothing, and a wreck the player
+  -- cannot pay for ends the run with the car repaired as far as the money goes.
+  local function copyTable(t)
+    local out = {}
+    for k, v in pairs(t) do out[k] = v end
+    return out
+  end
+
+  -- Why CarKov cannot be entered now, or nil when it can.
+  function c:carkovEntryProblem()
+    if self.carkov then return 'You are already on a CarKov run.' end
+    if not self.profile or self.error or self.gameOver or self.state ~= 'READY' or not self.arrived then
+      return 'CarKov opens once you are on your stage. Check the status above.'
+    end
+    if self.pendingParts or self.pendingCar then
+      return 'Pay for or put back your parts or car change on the Garage tab before you enter CarKov.'
+    end
+    if self.wreck then return 'Repair your car before you enter CarKov.' end
+    if not self:canAfford(carkov.ENTRY_FEE) then
+      return 'CarKov costs ' .. dollars(carkov.ENTRY_FEE) .. ' to enter. You need '
+        .. dollars(carkov.ENTRY_FEE - self.profile.progression.balance) .. ' more.'
+    end
+    return nil
+  end
+
+  function c:enterCarKov()
+    local problem = self:carkovEntryProblem()
+    if problem then
+      self.feedback = problem
+      return false
+    end
+    -- Read the vehicle position at click time so the stage is saved where the player is now.
+    local fresh = self.adapter:sample()
+    if not fresh.valid or not location.valid(fresh) then
+      self.feedback = 'Waiting for a valid vehicle position. Try again in a moment.'
+      return false
+    end
+    local drop, extraction = carkov.pick(self.random)
+    if not drop then
+      self.feedback = 'Could not find a CarKov drop point. Try again.'
+      self.diag:event('carkov_no_drop', '', 'W')
+      return false
+    end
+    local progression = self.profile.progression
+    local stageProgression = copyTable(progression)
+    -- An open perk offer stays behind; the perk held goes on the run and comes back with the player.
+    stageProgression.perkOffer = nil
+    local config = self:savedVehicleConfig()
+    local saved, why = self:record({ base = self.profile.base, resume = drop,
+      progression = { balance = progression.balance - carkov.ENTRY_FEE, totalDistanceKm = 0, drivingSeconds = 0,
+        penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0, perk = self:heldPerk() },
+      vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() },
+      stage = self.stage.id, atStart = true,
+      carkov = { drop = drop, extraction = extraction,
+        stage = { resume = location.copy(fresh), progression = stageProgression, finished = self.stageFinished or nil } } })
+    if not saved then
+      self.feedback = 'Could not enter CarKov just now. You have not been charged. Try again.'
+      self.diag:event('carkov_enter_failed', tostring(why), 'E')
+      return false
+    end
+    self.diag:event('carkov_entered', string.format('%.5f,%.5f to %.5f,%.5f', drop.latitude, drop.longitude,
+      extraction.latitude, extraction.longitude))
+    self:reload()
+    self.feedback = 'Your stage is saved and you paid ' .. dollars(carkov.ENTRY_FEE) .. '. Go to the drop point to get your car.'
+    return true
+  end
+
+  -- Ends the run and saves the stage again as it was on entry, with the money given and the car
+  -- the player has now (or, before they reached the drop, the car they entered with).
+  function c:leaveCarKov(result, balance, repaired)
+    local run = self.carkov
+    local vehicle = self.profile.vehicle
+    if self.arrived then
+      local config = self:savedVehicleConfig()
+      vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() }
+    end
+    if repaired then vehicle = { model = vehicle.model, config = vehicle.config } end
+    local progression = copyTable(run.stage.progression)
+    progression.balance, progression.perk = balance, self:heldPerk()
+    local saved, why = self:record({ base = self.profile.base, resume = run.stage.resume, progression = progression,
+      vehicle = vehicle, stage = self.stage.id, finished = run.stage.finished, carkov = false })
+    if not saved then
+      self.diag:event('carkov_leave_failed', result .. ':' .. tostring(why), 'E')
+      return false
+    end
+    self.diag:event('carkov_' .. result, tostring(balance))
+    self:reload()
+    return true
+  end
+
+  local carkovResults = {
+    extracted = { title = 'EXTRACTED', text = 'You reached the extraction point and earned ' .. dollars(carkov.REWARD) .. '.' },
+    quit = { title = 'CARKOV QUIT', text = 'You left CarKov. The entry fee is lost.' },
+    wrecked = { title = 'CARKOV FAILED', text = 'Your car was totalled, so the run is over and the entry fee is lost.' },
+  }
+  function c:flashCarKov(result, extra)
+    local shown = carkovResults[result]
+    self.carkovFlash = { result = result, title = shown.title, text = shown.text .. (extra or ''), at = self.clock }
+  end
+
+  -- Extraction: pays the reward and goes back to the stage. The save is made straight away.
+  function c:extract()
+    local balance = math.min(MAX_BALANCE, self.profile.progression.balance + carkov.REWARD)
+    if not self:leaveCarKov('extracted', balance) then return false end
+    self:flashCarKov('extracted')
+    self.feedback = 'Go back to your stage save to carry on. Your car and money come with you.'
+    return true
+  end
+
+  -- A wreck the player could not pay for: the car is repaired, charged as far as the balance goes.
+  function c:failCarKov(cost)
+    local balance = self.profile.progression.balance
+    local charged = math.min(cost, balance)
+    if not self:leaveCarKov('wrecked', balance - charged, true) then
+      -- Tried again after another countdown.
+      self.wreck.left = GAME_OVER_DELAY
+      return false
+    end
+    -- The car is respawned repaired at the stage save; this mends it where it stands meanwhile.
+    if self.garage then self.garage:repair() end
+    self:flashCarKov('wrecked', charged > 0 and (' The repair took ' .. dollars(charged) .. '.') or '')
+    self.feedback = 'Go back to your stage save to carry on in your repaired car.'
+    return true
+  end
+
+  -- Quits the run; a second press confirms. A wrecked car the player cannot pay for counts as a failed run.
+  function c:quitCarKov()
+    if not self.carkov or not self.profile or self.error then
+      self.feedback = 'You are not on a CarKov run.'
+      return false
+    end
+    if self.pendingParts or self.pendingCar then
+      self.feedback = 'Pay for or put back your parts or car change on the Garage tab before you quit.'
+      return false
+    end
+    if not self.quitArmed then
+      self.quitArmed = true
+      self.feedback = 'Press Confirm quit to leave CarKov. The ' .. dollars(carkov.ENTRY_FEE) .. ' entry fee is lost.'
+      return false
+    end
+    self.quitArmed = false
+    if self.wreck then return self:failCarKov(self.wreck.cost) end
+    if not self:leaveCarKov('quit', self.profile.progression.balance) then
+      self.feedback = 'Could not quit just now. Try again.'
+      return false
+    end
+    self:flashCarKov('quit')
+    self.feedback = 'Go back to your stage save to carry on. Your car and money come with you.'
+    return true
+  end
+
+  function c:carkovView(current)
+    local run = self.carkov
+    local onRun = run ~= nil and current ~= nil and self.arrived
+    local flash = self.carkovFlash and self.clock - self.carkovFlash.at < CARKOV_SHOWN_FOR
+    return {
+      fee = carkov.ENTRY_FEE, reward = carkov.REWARD, extractionKm = carkov.EXTRACTION_KM,
+      active = run ~= nil,
+      enterAllowed = self:carkovEntryProblem() == nil,
+      extraction = run and location.copy(run.extraction) or nil,
+      -- Straight-line distance and compass direction to the extraction point, once at the drop.
+      extractionDistanceMetres = onRun and location.distance(current, run.extraction) or nil,
+      extractionDirection = onRun and location.compassPoint(location.bearing(current, run.extraction)) or nil,
+      distanceKm = run and self.profile and self.profile.progression.totalDistanceKm or nil,
+      quitAllowed = run ~= nil and not self.error and not self.pendingParts and not self.pendingCar,
+      quitArmed = self.quitArmed,
+      flash = flash and { result = self.carkovFlash.result, title = self.carkovFlash.title, text = self.carkovFlash.text } or nil,
+    }
   end
 
   function c:view()
@@ -1038,20 +1245,26 @@ function M.new(deps)
         or ('You conquered ' .. stageName .. '! More stages are coming. Press Restart stage to run it again.')
     elseif self.state == 'READY' and self.wreck then
       status = 'Your car is wrecked. The repair costs ' .. dollars(self.wreck.cost) .. ' and you have '
-        .. dollars(self.profile.progression.balance) .. '. Unless you can pay, it is game over in '
+        .. dollars(self.profile.progression.balance) .. '. Unless you can pay, '
+        .. (self.carkov and 'your CarKov run is over in ' or 'it is game over in ')
         .. math.max(0, math.ceil(self.wreck.left)) .. ' s.'
+    elseif self.state == 'READY' and self.carkov and self.arrived then
+      status = 'CarKov: reach the extraction point to earn ' .. dollars(carkov.REWARD) .. '. Off road is fine. Save to keep your progress.'
     elseif self.state == 'READY' then
-      status = self.arrived and arrivedMessages[self.mode] or goMessages[self.carriedCar and 'carried' or self.mode]
+      status = self.arrived and arrivedMessages[self.mode]
+        or goMessages[self.mode == 'drop' and 'drop' or (self.carriedCar and 'carried' or self.mode)]
     elseif not status then status = messages.position_invalid end
     local label = labels[self.state]
     if self.state == 'CONFIG_REQUIRED' or self.state == 'ERROR' then -- keep the label
     elseif self.gameOver then label = 'GAME OVER'
     elseif self.state == 'READY' and self.stageFinished then label = 'STAGE COMPLETE'
     elseif self.state == 'READY' and self.wreck then label = 'WRECKED'
-    elseif self.state == 'READY' and not self.arrived then label = goLabels[self.mode] end
+    elseif self.state == 'READY' and not self.arrived then label = goLabels[self.mode]
+    elseif self.state == 'READY' and self.carkov then label = 'CARKOV' end
     local active = self.profile ~= nil and not self.error and not self.gameOver
     local timer
-    if self.stage and self.stage.targetSeconds then
+    -- A CarKov run has no stage clock or sponsor bonus.
+    if self.stage and self.stage.targetSeconds and not self.carkov then
       local progression = self.profile and self.profile.progression or {}
       local driving, penalties = progression.drivingSeconds or 0, progression.penaltySeconds or 0
       local credit = progression.timeCreditSeconds or 0
@@ -1071,9 +1284,9 @@ function M.new(deps)
         penalty = shown and { reason = self.penalty.reason, seconds = PENALTY_SECONDS } or nil,
       }
     end
-    local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.gameOver
+    local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.gameOver and not self.carkov
     local sponsor
-    if self.stage then
+    if self.stage and not self.carkov then
       local progression = self.profile and self.profile.progression or {}
       local every = self.stage.sponsorEveryKm
       local paid = progression.sponsorBonuses or 0
@@ -1102,7 +1315,7 @@ function M.new(deps)
       elseif held then repairNote = 'Repairing loses your ' .. perks.get(held).name .. ' perk.' end
       perk = {
         held = shown(held), offer = actions and shown(progression.perkOffer) or nil,
-        activateAllowed = actions and held ~= nil and perks.get(held).activate == true,
+        activateAllowed = actions and held ~= nil and perks.get(held).activate == true and not (self.carkov and CLOCK_PERKS[held]),
         offerAllowed = actions and progression.perkOffer ~= nil,
         everyKm = perks.OFFER_EVERY_KM,
         nextKm = math.max(0, ((progression.perkOffers or 0) + 1) * perks.OFFER_EVERY_KM - (progression.totalDistanceKm or 0)),
@@ -1138,7 +1351,7 @@ function M.new(deps)
       stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer, sponsor = sponsor, perk = perk,
       wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)),
         insured = self:heldPerk() == 'insurance' } or nil,
-      restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error,
+      restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error and not self.carkov,
       restartArmed = self.restartArmed,
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
@@ -1172,6 +1385,7 @@ function M.new(deps)
       carFeedback = self.carFeedback,
       saveAllowed = self.state == 'READY' and self.arrived and not self.gameOver,
       saveFeedback = self.feedback,
+      carkov = self:carkovView(current),
     }
   end
 
@@ -1304,6 +1518,8 @@ function M.buyCar() return safely(function() return ensure():buyCar() end) end
 function M.revertCar() return safely(function() return ensure():revertCar(false) end) end
 function M.restartStage() return safely(function() return ensure():restartStage() end) end
 function M.startNextStage() return safely(function() return ensure():startNextStage() end) end
+function M.enterCarKov() return safely(function() return ensure():enterCarKov() end) end
+function M.quitCarKov() return safely(function() return ensure():quitCarKov() end) end
 function M.keepPerk() return safely(function() return ensure():answerPerkOffer(false) end) end
 function M.swapPerk() return safely(function() return ensure():answerPerkOffer(true) end) end
 function M.activatePerk() return safely(function() return ensure():activatePerk() end) end

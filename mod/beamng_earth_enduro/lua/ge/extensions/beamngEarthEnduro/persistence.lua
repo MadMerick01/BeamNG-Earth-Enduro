@@ -38,33 +38,57 @@ local function plainConfig(config)
 end
 M.plainConfig = plainConfig
 
+-- The money, distance, clock and perks of a stage (or a CarKov run). Returns a clean copy, or nil.
+local function progression(p)
+  if type(p) ~= 'table' or not integer(p.balance, 0) or not location.finite(p.totalDistanceKm)
+      or p.totalDistanceKm < 0 or p.totalDistanceKm > MAX_INTEGER then return nil end
+  -- Stage clock: seconds driven and penalty seconds; optional, so older saves start at zero.
+  for _, field in ipairs({ 'drivingSeconds', 'penaltySeconds' }) do
+    local seconds = p[field]
+    if seconds ~= nil and (not location.finite(seconds) or seconds < 0 or seconds > MAX_INTEGER) then
+      return nil
+    end
+  end
+  -- Sponsor bonuses paid on this stage; optional, so older saves load (the controller fills it in).
+  if p.sponsorBonuses ~= nil and not integer(p.sponsorBonuses, 0) then return nil end
+  -- Service Perks: the perk held and the one on offer (ids; the controller ignores unknown ones),
+  -- how many offers this stage has made, and the perks running now. All optional, so older saves load.
+  if not optionalString(p.perk) or not optionalString(p.perkOffer) then return nil end
+  if p.perkOffers ~= nil and not integer(p.perkOffers, 0) then return nil end
+  for _, field in ipairs({ 'timeCreditSeconds', 'freezeSeconds', 'luckyUntilKm' }) do
+    local value = p[field]
+    if value ~= nil and (not location.finite(value) or value < 0 or value > MAX_INTEGER) then
+      return nil
+    end
+  end
+  return { balance = p.balance, totalDistanceKm = p.totalDistanceKm,
+    drivingSeconds = p.drivingSeconds or 0, penaltySeconds = p.penaltySeconds or 0,
+    sponsorBonuses = p.sponsorBonuses, perk = p.perk, perkOffer = p.perkOffer, perkOffers = p.perkOffers,
+    timeCreditSeconds = p.timeCreditSeconds, freezeSeconds = p.freezeSeconds, luckyUntilKm = p.luckyUntilKm }
+end
+
+-- A saved position, with the altitude and heading when present. Returns a clean copy, or nil and why.
+local function pose(r)
+  if not location.valid(r) then return nil, 'invalid_coordinates' end
+  local out = location.copy(r)
+  if r.altitude ~= nil then
+    if not location.finite(r.altitude) or r.altitude < -20000 or r.altitude > 1000000 then return nil, 'invalid_altitude' end
+    out.altitude = r.altitude
+  end
+  if r.heading ~= nil then
+    if not location.finite(r.heading) or r.heading < 0 or r.heading >= 360 then return nil, 'invalid_heading' end
+    out.heading = r.heading
+  end
+  return out
+end
+
 function M.validate(s)
   if type(s) ~= 'table' then return nil, 'invalid_document' end
   if s.schemaVersion ~= M.SCHEMA then return nil, 'unsupported_schema' end
   if s.profileId ~= 'default' or not integer(s.generation, 1) then return nil, 'invalid_identity' end
   if not location.valid(s.base) or not location.valid(s.resume) then return nil, 'invalid_coordinates' end
-  local p = s.progression
-  if type(p) ~= 'table' or not integer(p.balance, 0) or not location.finite(p.totalDistanceKm)
-      or p.totalDistanceKm < 0 or p.totalDistanceKm > MAX_INTEGER then return nil, 'invalid_progression' end
-  -- Stage clock: seconds driven and penalty seconds; optional, so older saves start at zero.
-  for _, field in ipairs({ 'drivingSeconds', 'penaltySeconds' }) do
-    local seconds = p[field]
-    if seconds ~= nil and (not location.finite(seconds) or seconds < 0 or seconds > MAX_INTEGER) then
-      return nil, 'invalid_progression'
-    end
-  end
-  -- Sponsor bonuses paid on this stage; optional, so older saves load (the controller fills it in).
-  if p.sponsorBonuses ~= nil and not integer(p.sponsorBonuses, 0) then return nil, 'invalid_progression' end
-  -- Service Perks: the perk held and the one on offer (ids; the controller ignores unknown ones),
-  -- how many offers this stage has made, and the perks running now. All optional, so older saves load.
-  if not optionalString(p.perk) or not optionalString(p.perkOffer) then return nil, 'invalid_progression' end
-  if p.perkOffers ~= nil and not integer(p.perkOffers, 0) then return nil, 'invalid_progression' end
-  for _, field in ipairs({ 'timeCreditSeconds', 'freezeSeconds', 'luckyUntilKm' }) do
-    local value = p[field]
-    if value ~= nil and (not location.finite(value) or value < 0 or value > MAX_INTEGER) then
-      return nil, 'invalid_progression'
-    end
-  end
+  local p = progression(s.progression)
+  if not p then return nil, 'invalid_progression' end
   if type(s.vehicle) ~= 'table' or not optionalString(s.vehicle.model)
       or not optionalString(s.vehicle.configuration) then return nil, 'invalid_vehicle' end
   local vehicleConfig = nil
@@ -111,28 +135,29 @@ function M.validate(s)
     entry = { balance = e.balance, vehicle = { model = e.vehicle.model, config = entryConfig, damage = entryDamage },
       perk = e.perk }
   end
-  local resume = location.copy(s.resume)
-  if s.resume.altitude ~= nil then
-    if not location.finite(s.resume.altitude) or s.resume.altitude < -20000
-        or s.resume.altitude > 1000000 then return nil, 'invalid_altitude' end
-    resume.altitude = s.resume.altitude
-  end
-  if s.resume.heading ~= nil then
-    if not location.finite(s.resume.heading) or s.resume.heading < 0
-        or s.resume.heading >= 360 then return nil, 'invalid_heading' end
-    resume.heading = s.resume.heading
+  local resume, poseWhy = pose(s.resume)
+  if not resume then return nil, poseWhy end
+  -- A CarKov run under way: its drop and extraction points, and the stage to go back to (where it
+  -- was saved on entry, its progression and whether it was finished). Optional, so older saves load.
+  local carkov = nil
+  if s.carkov ~= nil then
+    local k = s.carkov
+    if type(k) ~= 'table' or not location.valid(k.drop) or not location.valid(k.extraction)
+        or type(k.stage) ~= 'table' or (k.stage.finished ~= nil and k.stage.finished ~= true) then return nil, 'invalid_carkov' end
+    local stageResume = pose(k.stage.resume)
+    local stageProgression = progression(k.stage.progression)
+    if not stageResume or not stageProgression then return nil, 'invalid_carkov' end
+    carkov = { drop = location.copy(k.drop), extraction = location.copy(k.extraction),
+      stage = { resume = stageResume, progression = stageProgression, finished = k.stage.finished } }
   end
   return {
     schemaVersion = M.SCHEMA, profileId = 'default', generation = s.generation,
     base = location.copy(s.base), resume = resume,
-    progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm,
-      drivingSeconds = p.drivingSeconds or 0, penaltySeconds = p.penaltySeconds or 0,
-      sponsorBonuses = p.sponsorBonuses, perk = p.perk, perkOffer = p.perkOffer, perkOffers = p.perkOffers,
-      timeCreditSeconds = p.timeCreditSeconds, freezeSeconds = p.freezeSeconds, luckyUntilKm = p.luckyUntilKm },
+    progression = p,
     vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig,
       damage = damage },
     stage = s.stage, finished = s.finished, gameOver = s.gameOver, atStart = s.atStart,
-    completedStages = completed, entry = entry,
+    completedStages = completed, entry = entry, carkov = carkov,
   }
 end
 
@@ -198,7 +223,7 @@ function M.new(io)
       generation = self.generation + 1, base = candidate.base, resume = candidate.resume,
       progression = candidate.progression, vehicle = candidate.vehicle,
       stage = candidate.stage, finished = candidate.finished, gameOver = candidate.gameOver, atStart = candidate.atStart,
-      completedStages = candidate.completedStages, entry = candidate.entry,
+      completedStages = candidate.completedStages, entry = candidate.entry, carkov = candidate.carkov,
     }
     local clean, why = M.validate(prepared)
     if not clean then return nil, why end
