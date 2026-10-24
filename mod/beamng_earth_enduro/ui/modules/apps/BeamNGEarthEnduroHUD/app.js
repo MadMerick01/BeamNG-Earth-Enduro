@@ -59,8 +59,9 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         if (scope.tab === 'stages' && onCarKov(next)) scope.tab = 'carkov'
       }
       // The one message under the clock: the most urgent of out of money and can't drive, extraction complete, a
-      // hostile inbound, a puncture just now, how a CarKov run just ended or its hostile was dealt with, the extraction
-      // countdown, a hostile on the player's tail, stage complete, a sponsor bonus just paid, a perk just used or lost, a perk on offer, then the status.
+      // hostile inbound, a puncture just now, a roadside event just now, how a CarKov run just ended or its hostile was dealt
+      // with, the extraction countdown, a hostile on the player's tail, stage complete, a sponsor bonus just paid, a perk just
+      // used or lost, a friendly village's offer, a perk on offer, then the status.
       var notices = {
         stuck: { kind: 'stuck', title: 'OUT OF MONEY AND CAN\'T DRIVE?', color: '#eb5757', alert: true },
         done: { kind: 'done', title: '\uD83C\uDFC1 STAGE COMPLETE \uD83C\uDFC1', color: '#f2c94c', alert: false }
@@ -74,6 +75,8 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var holdNotice = { kind: 'hold', title: '', color: '#6fcf97', alert: false }
       var hostileNotice = { kind: 'hostile', title: '', color: '#eb5757', alert: true }
       var punctureNotice = { kind: 'puncture', title: 'PUNCTURE!', color: '#eb5757', alert: true }
+      var roadNotice = { kind: 'road', title: '', color: '#f2994a', alert: false }
+      var villageNotice = { kind: 'village', title: 'FRIENDLY VILLAGE', color: '#6fcf97', alert: false }
       scope.notice = function (d) {
         if (!d) return null
         if (d.stuck) return notices.stuck
@@ -84,6 +87,12 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           return hostileNotice
         }
         if (d.puncture && d.puncture.flash) return punctureNotice
+        if (d.road && d.road.flash) {
+          roadNotice.title = d.road.flash.title
+          roadNotice.color = d.road.flash.title === 'BANDITS!' ? '#eb5757' : '#6fcf97'
+          roadNotice.alert = d.road.flash.title === 'BANDITS!'
+          return roadNotice
+        }
         if (d.carkov && d.carkov.flash) {
           carkovNotice.title = d.carkov.flash.title
           return carkovNotice
@@ -105,6 +114,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           perkNotice.title = d.perk.flash.title
           return perkNotice
         }
+        if (d.road && d.road.offer) return villageNotice
         if (d.perk && d.perk.offer) {
           offerNotice.title = 'NEW PERK: ' + d.perk.offer.name
           return offerNotice
@@ -157,6 +167,12 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       }
       scope.swapPerk = function () {
         if (scope.data.perk && scope.data.perk.offerAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.swapPerk() end')
+      }
+      scope.installRoadPart = function () {
+        if (scope.data.road && scope.data.road.installAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.installRoadPart() end')
+      }
+      scope.declineRoadPart = function () {
+        if (scope.data.road && scope.data.road.declineAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.declineRoadPart() end')
       }
       scope.activatePerk = function () {
         if (scope.data.perk && scope.data.perk.activateAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.activatePerk() end')
