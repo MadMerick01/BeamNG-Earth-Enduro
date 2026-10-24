@@ -41,8 +41,8 @@ do
   T.eq(id, 8, 'returns the hostile id'); T.eq(spawned.model, 'pickup', 'spawns the model given')
   T.eq(spawned.options.config.parts.engine, 'v8', 'with the config given'); T.check(spawned.options.config ~= config, 'a copy of it')
   T.eq(spawned.options.autoEnterVehicle, false, 'the player stays in their own car')
-  T.near(spawned.options.pos.x, 1000, 1e-9, 'directly behind'); T.near(spawned.options.pos.y, 1700, 1e-9, '300 m behind')
-  T.near(spawned.options.pos.z, 42.5, 1e-9, 'just above the ground'); T.near(spawned.options.rot.y, 1, 1e-9, 'facing the way the player faces')
+  T.near(spawned.options.pos.x, 1000, 1e-9, 'directly ahead'); T.near(spawned.options.pos.y, 2300, 1e-9, '300 m ahead')
+  T.near(spawned.options.pos.z, 42.5, 1e-9, 'just above the ground'); T.near(spawned.options.rot.y, -1, 1e-9, 'facing the player')
   T.eq(#commands, 1, 'chase order sent'); T.check(commands[1].command:find('ai.setTargetObjectID%(7%)'), 'chases the player')
   T.check(commands[1].command:find('ai.setMode%("chase"%)'), 'in chase mode')
   local status = h:status(8)
@@ -77,10 +77,14 @@ do
   T.eq(why, 'not_ready', 'no reading yet just after a spawn')
   -- Only where there is ground: closer in when there is none at the first distance, none at all refused.
   local tried = {}
-  groundAt = function(x, y) tried[#tried + 1] = 2000 - y; if 2000 - y <= 100 then return 40 end end
+  groundAt = function(x, y) tried[#tried + 1] = y - 2000; if y - 2000 <= 200 then return 40 end end
   world[8] = nil
-  T.eq(h:spawn('pickup', config, 150), 8, 'spawned closer in'); T.near(spawned.options.pos.y, 1910, 1e-9, '90 m behind, the first spot with ground')
-  T.eq(table.concat(tried, ','), '150,120,90', 'tried 150, 120 then 90 m'); T.near(spawned.options.pos.z, 40.5, 1e-9, 'on that ground')
+  T.eq(h:spawn('pickup', config, 250, 12), 8, 'spawned closer in'); T.near(spawned.options.pos.y, 2190, 1e-9, '190 m ahead, the first spot with ground')
+  T.near(spawned.options.pos.x, 1012, 1e-9, '12 m to the right of the player\'s line')
+  T.eq(table.concat(tried, ','), '250,220,190', 'tried 250, 220 then 190 m'); T.near(spawned.options.pos.z, 40.5, 1e-9, 'on that ground')
+  world[8] = nil
+  h:spawn('pickup', config, 250, -12)
+  T.near(spawned.options.pos.x, 988, 1e-9, 'or to the left')
   groundAt = function() return nil end
   spawned = nil
   T.eq(select(2, h:spawn('pickup', config, 150)), 'no_ground', 'no ground anywhere: refused'); T.eq(spawned, nil, 'nothing spawned')
@@ -184,10 +188,10 @@ do
   T.eq(c:view().carkov.hostile.seconds, 2, 'counting down')
   F.advance(c, 2.5)
   v = c:view()
-  T.eq(#h.spawns, 1, 'hostile spawned'); T.eq(h.spawns[1].behind, 150, '150 m behind, inside Earth\'s ground')
+  T.eq(#h.spawns, 1, 'hostile spawned'); T.eq(h.spawns[1].ahead, 250, '250 m ahead, inside Earth\'s ground'); T.eq(math.abs(h.spawns[1].side), 12, 'to one side')
   T.eq(h.spawns[1].model, 'roamer', 'a Roamer'); T.eq(h.spawns[1].config, 'vehicles/roamer/robber_light.pc', 'in the Robber Light config')
-  T.eq(v.carkov.hostile.phase, 'chasing', 'chasing'); T.eq(v.carkov.hostile.distanceMetres, 150, 'distance shown')
-  T.eq(c.hostile.brain.mode, 'direct', '150 m back it drives straight at the player'); T.eq(h.orders[1].kind, 'drive', 'steered from the mod')
+  T.eq(v.carkov.hostile.phase, 'chasing', 'chasing'); T.eq(v.carkov.hostile.distanceMetres, 250, 'distance shown')
+  T.eq(c.hostile.brain.mode, 'direct', '250 m off it drives straight at the player'); T.eq(h.orders[1].kind, 'drive', 'steered from the mod')
   h.alive[h:current()].distance = 100; c:tick(0.1)
   T.eq(c.hostile.brain.mode, 'chase', 'close in it hands over to the chase AI'); T.eq(h.orders[#h.orders].kind, 'chase', 'chase order sent')
   -- Stuck with no damage, beside the player, for longer than 10 s: not disabled, no bounty.

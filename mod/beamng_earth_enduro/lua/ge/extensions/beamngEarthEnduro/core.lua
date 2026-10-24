@@ -1341,7 +1341,7 @@ function M.new(deps)
 
   -- The CarKov hostile. Once per run, when the run's distance passes hostileAtKm (and the player is
   -- not within SAFE_EXTRACTION_METRES of the extraction), HOSTILE INBOUND counts down, then a
-  -- hostile car is spawned behind the player and chases them. Once it has stood still for
+  -- hostile car is spawned ahead of the player, facing them, and comes at them. Once it has stood still for
   -- STILL_SECONDS with real damage, getting within CLAIM_METRES of it pays the bounty. Like
   -- driving pay, the bounty and the hostile having come are kept by Save.
   function c:clearHostile(reason)
@@ -1387,10 +1387,11 @@ function M.new(deps)
       if encounter.left > 0 or self.stuck then return end
       local model, config = self:hostileCar()
       local id, why, detail
-      if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_BEHIND_METRES)
+      local side = (self.random() < 0.5 and -1 or 1) * hostile.SPAWN_SIDE_METRES
+      if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_AHEAD_METRES, side)
       else why = 'car_unavailable' end
       if not id then
-        -- No ground with collision behind the player yet (BeamNG.Earth still streaming it in): try
+        -- No ground with collision ahead of the player yet (BeamNG.Earth still streaming it in): try
         -- again each second for a while.
         encounter.waited = (encounter.waited or 0) + 1
         if why == 'no_ground' and encounter.waited <= hostile.SPAWN_WAIT_SECONDS then
@@ -1414,7 +1415,7 @@ function M.new(deps)
       return
     end
     encounter.damage, encounter.distance = status.damage, status.distance
-    -- Fallen through the world (no ground under it): respawned behind the player, a few times a run.
+    -- Fallen through the world (no ground under it): respawned ahead of the player, a few times a run.
     encounter.airborne = status.grounded == false and encounter.airborne + step or 0
     if encounter.airborne >= hostile.FALL_SECONDS then
       local respawns = encounter.respawns + 1

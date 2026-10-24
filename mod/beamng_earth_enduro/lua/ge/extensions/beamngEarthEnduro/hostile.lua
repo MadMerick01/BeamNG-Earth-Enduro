@@ -1,5 +1,5 @@
 -- CarKov hostile: once per run, at a random distance driven, a hostile car is spawned a few hundred
--- metres behind the player and its AI is set to chase and ram them. Disabling it pays a bounty. The
+-- metres ahead of the player, facing them, and comes at them to ram them. Disabling it pays a bounty. The
 -- core controller runs the encounter; this file holds its settings and the game calls that spawn,
 -- read and remove the hostile car. Every game call is guarded, so a missing or changed function
 -- makes the spawn fail and the run carries on without a hostile.
@@ -13,15 +13,18 @@ M.WARNING_SECONDS = 5 -- HOSTILE INBOUND shows this long before the spawn
 -- BeamNG.Earth only has ground with collision near the player: its terrain block follows the
 -- player's car and, on its smaller 512 x 512 block, keeps the car at least 250 m inside its edge
 -- (follow.lua), with road and bridge collision 320 m around it (roads.lua COLLIDE_M). A car spawned
--- beyond that falls through the world, so the hostile comes SPAWN_BEHIND_METRES behind, well inside
--- both. It only spawns where a ray finds ground; with none there it tries SPAWN_STEP_METRES closer,
--- down to SPAWN_MIN_METRES, and failing that waits and tries again for up to SPAWN_WAIT_SECONDS.
-M.SPAWN_BEHIND_METRES = 150
-M.SPAWN_MIN_METRES = 60
+-- beyond that falls through the world. The block sits ahead of a moving car, so the hostile comes
+-- SPAWN_AHEAD_METRES ahead, facing the player, so they can see it coming and take it on, and
+-- SPAWN_SIDE_METRES to one side (left or right at random), off the road the player is on. It only
+-- spawns where a ray finds ground; with none there it tries SPAWN_STEP_METRES closer, down to
+-- SPAWN_MIN_METRES, and failing that waits and tries again for up to SPAWN_WAIT_SECONDS.
+M.SPAWN_AHEAD_METRES = 250
+M.SPAWN_SIDE_METRES = 12
+M.SPAWN_MIN_METRES = 100
 M.SPAWN_STEP_METRES = 30
 M.SPAWN_WAIT_SECONDS = 10
 -- A hostile with no ground under it for FALL_SECONDS has fallen through the world (left behind
--- off the terrain block, or spawned before the ground was in): it is respawned behind the player,
+-- off the terrain block, or spawned before the ground was in): it is respawned ahead of the player,
 -- up to RESPAWN_TRIES times a run, then removed.
 M.FALL_SECONDS = 1.5
 M.RESPAWN_TRIES = 2
@@ -240,10 +243,10 @@ function M.new(environment)
   -- Tells the hostile's AI to chase the player and ram them.
   function h:chase(id) return h:drive(id, { kind = 'chase' }) end
 
-  -- Spawns the hostile behind the player vehicle, facing the way it faces, and sets it chasing.
-  -- config is a .pc path or a config table. Returns the new vehicle's id, or nil and a reason
-  -- ('no_ground' when no ground with collision was found behind the player).
-  function h:spawn(model, config, behindMetres)
+  -- Spawns the hostile aheadMetres ahead of the player vehicle and sideMetres to its right (negative:
+  -- left), facing the player, and sets it chasing. config is a .pc path or a config table. Returns
+  -- the new vehicle's id, or nil and a reason ('no_ground' when no ground with collision was found).
+  function h:spawn(model, config, aheadMetres, sideMetres)
     local vehicle, playerId = player()
     if not vehicle then return nil, 'vehicle_required' end
     local ok, pos, dir = pcall(function() return vehicle:getPosition(), vehicle:getDirectionVector() end)
@@ -252,21 +255,22 @@ function M.new(environment)
     local flat = length(fx, fy)
     if not flat or flat ~= flat or flat < 1e-3 then fx, fy, flat = 0, 1, 1 end
     fx, fy = fx / flat, fy / flat
-    -- Only where there is ground with collision: from behindMetres back, then closer in.
+    -- Only where there is ground with collision: from aheadMetres out, then closer in. Right of the
+    -- heading (fx, fy) is (fy, -fx).
     local x, y, z
-    local back = behindMetres
-    while back >= M.SPAWN_MIN_METRES do
-      local px, py = pos.x - fx * back, pos.y - fy * back
+    local ahead, side = aheadMetres, sideMetres or 0
+    while ahead >= M.SPAWN_MIN_METRES do
+      local px, py = pos.x + fx * ahead + fy * side, pos.y + fy * ahead - fx * side
       local groundOK, height = pcall(env.ground, px, py, pos.z + 200)
       if groundOK and type(height) == 'number' and height == height then x, y, z = px, py, height; break end
-      back = back - M.SPAWN_STEP_METRES
+      ahead = ahead - M.SPAWN_STEP_METRES
     end
     if not x then return nil, 'no_ground' end
     local vehicles = env.vehicles()
     if type(vehicles) ~= 'table' or type(vehicles.spawnNewVehicle) ~= 'function' then return nil, 'spawn_unavailable' end
     local spawned, hostile = pcall(function()
       return vehicles.spawnNewVehicle(model, { config = copy(config), pos = env.point(x, y, z + 0.5),
-        rot = env.rotation(fx, fy), autoEnterVehicle = false, cling = true })
+        rot = env.rotation(-fx, -fy), autoEnterVehicle = false, cling = true })
     end)
     if not spawned or not hostile then return nil, 'spawn_failed', tostring(hostile) end
     local idOK, id = pcall(function() return hostile:getID() end)
