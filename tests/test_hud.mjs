@@ -170,6 +170,11 @@ test('one message shows the most urgent news first', () => {
   assert.equal(n({ stateLabel: 'GAME OVER', gameOver: true, stageFinished: true }).kind, 'over')
   assert.equal(n({ stateLabel: 'WRECKED', gameOver: true, wreck: { cost: 1, seconds: 1 } }).kind, 'wreck')
   assert.equal(n({ state: 'READY' }), null)
+  const bonus = { state: 'READY', stateLabel: 'READY', sponsor: { everyKm: 10, flash: { amount: 2000 } } }
+  assert.equal(n(bonus).kind, 'sponsor')
+  assert.equal(n(bonus).title, '+$2,000 SPONSOR BONUS')
+  assert.equal(n({ ...bonus, stageFinished: true }).kind, 'done')
+  assert.equal(n({ ...bonus, sponsor: { everyKm: 10 } }).kind, 'status')
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
   for (const field of ['data.sessionStatus', 'data.saveFeedback']) assert.equal(html.split(`{{${field}}}`).length, 2, field)
 })
@@ -184,7 +189,7 @@ test('Save lights up only when there is progress to keep', () => {
 test('the HUD keeps money, Save and alerts outside the tabs', () => {
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
   const panels = html.indexOf('role="tabpanel"')
-  for (const always of ['ng-click="save()"', 'data.balance', 'notice(data)', 'data.wreck.cost', 'conquered']) {
+  for (const always of ['ng-click="save()"', 'data.balance', 'notice(data)', 'data.wreck.cost', 'conquered', 'Sponsor bonus in', 'Sponsor bonuses earned']) {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
   for (const id of ['route', 'garage', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)

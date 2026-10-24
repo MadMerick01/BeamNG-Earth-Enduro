@@ -37,18 +37,24 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
       }
-      // The one message under the clock: the most urgent of wreck, game over, stage complete, then the status.
+      // The one message under the clock: the most urgent of wreck, game over, stage complete, a sponsor
+      // bonus just paid, then the status.
       var notices = {
         wreck: { kind: 'wreck', title: 'WRECKED', color: '#eb5757', alert: true },
         over: { kind: 'over', title: 'GAME OVER', color: '#eb5757', alert: true },
         done: { kind: 'done', title: '\uD83C\uDFC1 STAGE COMPLETE \uD83C\uDFC1', color: '#f2c94c', alert: false }
       }
       var statusNotice = { kind: 'status', title: '', color: '#a7e5c9', alert: false }
+      var sponsorNotice = { kind: 'sponsor', title: '', color: '#f2c94c', alert: false }
       scope.notice = function (d) {
         if (!d) return null
         if (d.wreck) return notices.wreck
         if (d.gameOver) return notices.over
         if (d.stageFinished) return notices.done
+        if (d.sponsor && d.sponsor.flash) {
+          sponsorNotice.title = '+$' + String(Math.floor(d.sponsor.flash.amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' SPONSOR BONUS'
+          return sponsorNotice
+        }
         if (!d.stateLabel && !d.sessionStatus && !d.saveFeedback) return null
         statusNotice.title = d.stateLabel || ''
         return statusNotice

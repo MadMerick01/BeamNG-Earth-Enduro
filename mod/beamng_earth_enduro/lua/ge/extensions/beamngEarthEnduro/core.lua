@@ -45,6 +45,9 @@ local PENALTY_SECONDS = 300
 local MAX_CLOCK_STEP = 0.5
 local PENALTY_SHOWN_FOR = 8
 M.PENALTY_SECONDS = PENALTY_SECONDS
+-- How long the HUD shows a sponsor bonus once it is paid. The amount and distance are set per stage
+-- in stages.lua.
+local SPONSOR_SHOWN_FOR = 6
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
@@ -147,7 +150,7 @@ function M.new(deps)
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
-    self.wreck, self.restartArmed, self.penalty = nil, false, nil
+    self.wreck, self.restartArmed, self.penalty, self.sponsorFlash = nil, false, nil, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -160,6 +163,10 @@ function M.new(deps)
     if not self.stage and not self.error then self.error = 'unknown_stage' end
     self.stageFinished = self.profile ~= nil and self.profile.finished == true
     self.gameOver = self.profile ~= nil and self.profile.gameOver == true
+    -- Saves from before sponsor bonuses count the distance already driven as paid, so nothing is back-paid.
+    if self.profile and self.stage and self.profile.progression.sponsorBonuses == nil then
+      self.profile.progression.sponsorBonuses = math.floor(self.profile.progression.totalDistanceKm / self.stage.sponsorEveryKm)
+    end
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     -- Before the first save the stage's starting money counts as saved, since it was not earned.
     self.savedBalance = self.profile and self.profile.progression.balance
@@ -238,6 +245,21 @@ function M.new(deps)
     if not self:clockRunning() then return end
     local progression = self.profile.progression
     progression.drivingSeconds = (progression.drivingSeconds or 0) + math.min(dt, MAX_CLOCK_STEP)
+  end
+
+  -- Pays the sponsor bonus for each whole stretch of sponsorEveryKm driven and not yet paid for. The
+  -- count of bonuses paid is saved with the balance, so a reload never pays one twice.
+  function c:paySponsor()
+    if self.stageFinished or not self.stage then return end
+    local progression = self.profile.progression
+    local due = math.floor(progression.totalDistanceKm / self.stage.sponsorEveryKm)
+    local paid = progression.sponsorBonuses or 0
+    if due <= paid then return end
+    local amount = (due - paid) * self.stage.sponsorBonus
+    progression.sponsorBonuses = due
+    self:addMoney(amount)
+    self.sponsorFlash = { amount = amount, at = self.clock }
+    self.diag:event('sponsor_bonus', due .. ':' .. amount)
   end
 
   -- Seconds ahead of (positive) or behind (negative) the stage's pace. The pace assumes the time
@@ -660,6 +682,7 @@ function M.new(deps)
       if metres and metres <= MAX_DRIVING_SPEED * dt then
         self.profile.progression.totalDistanceKm = self.profile.progression.totalDistanceKm + metres / 1000
         self:addMoney(metres / 1000 * EARNINGS_PER_KM)
+        self:paySponsor()
       end
     end
     self.odometer = location.copy(sample)
@@ -773,7 +796,7 @@ function M.new(deps)
     end
     local start = self:stageStart()
     local saved, why = self:record({ base = start, resume = start, progression = { balance = self.stage.startingMoney, totalDistanceKm = 0,
-      drivingSeconds = 0, penaltySeconds = 0 },
+      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0 },
       stage = self.stage.id, vehicle = {}, atStart = true })
     if not saved then
       self.restartArmed = false
@@ -839,6 +862,20 @@ function M.new(deps)
       }
     end
     local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.gameOver
+    local sponsor
+    if self.stage then
+      local progression = self.profile and self.profile.progression or {}
+      local every = self.stage.sponsorEveryKm
+      local paid = progression.sponsorBonuses or 0
+      local flash = self.sponsorFlash and self.clock - self.sponsorFlash.at < SPONSOR_SHOWN_FOR
+      sponsor = {
+        amount = self.stage.sponsorBonus, everyKm = every, earned = paid, earnedMoney = paid * self.stage.sponsorBonus,
+        -- Kilometres to the next bonus, and how far through this stretch the player is (0 to 1).
+        nextKm = math.max(0, (paid + 1) * every - (progression.totalDistanceKm or 0)),
+        progress = math.max(0, math.min(1, 1 - ((paid + 1) * every - (progression.totalDistanceKm or 0)) / every)),
+        flash = flash and { amount = self.sponsorFlash.amount } or nil,
+      }
+    end
     return {
       state = self.state, stateLabel = label, mode = self.mode,
       sessionStatus = status, arrived = self.arrived,
@@ -853,7 +890,7 @@ function M.new(deps)
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
-      stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer,
+      stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer, sponsor = sponsor,
       wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)) } or nil,
       restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error,
       restartArmed = self.restartArmed,

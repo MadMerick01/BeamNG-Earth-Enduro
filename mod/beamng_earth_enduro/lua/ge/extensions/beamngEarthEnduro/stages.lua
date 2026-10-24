@@ -3,9 +3,14 @@
 -- start and finish, which the HUD shows so the player can find them on the map, and a short
 -- briefing shown when the stage starts, the money the player starts it with, and the time limit
 -- in seconds (the stage's Google Maps driving time; set targetIsEstimate = true to mark a guess). The finish counts once the vehicle is within
--- finishRadiusMetres of it. The first stage is where a new player starts.
+-- finishRadiusMetres of it. The first stage is where a new player starts. A stage can set its own
+-- sponsorBonus (dollars) and sponsorEveryKm; otherwise the defaults below apply.
 local location = require('beamngEarthEnduro/location')
 local M = {}
+
+-- Sponsor bonus: paid once for every SPONSOR_EVERY_KM of counted driving on a stage.
+M.SPONSOR_BONUS = 2000
+M.SPONSOR_EVERY_KM = 10
 
 M.list = {
   {
@@ -28,6 +33,7 @@ local function copy(stage)
     briefing = stage.briefing, start = location.copy(stage.start), finish = location.copy(stage.finish),
     finishRadiusMetres = stage.finishRadiusMetres, startingMoney = stage.startingMoney or 0,
     targetSeconds = stage.targetSeconds, targetIsEstimate = stage.targetIsEstimate == true,
+    sponsorBonus = stage.sponsorBonus or M.SPONSOR_BONUS, sponsorEveryKm = stage.sponsorEveryKm or M.SPONSOR_EVERY_KM,
   }
 end
 
