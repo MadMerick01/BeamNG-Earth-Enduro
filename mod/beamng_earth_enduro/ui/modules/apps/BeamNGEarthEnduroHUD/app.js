@@ -42,8 +42,9 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
       }
-      // The one message under the clock: the most urgent of wreck, game over, extraction complete, how
-      // a CarKov run just ended, the extraction countdown, stage complete, a sponsor bonus just paid, a perk just used or lost, a perk on offer, then the status.
+      // The one message under the clock: the most urgent of wreck, game over, extraction complete, a
+      // hostile inbound, how a CarKov run just ended or its hostile was dealt with, the extraction
+      // countdown, a hostile on the player's tail, stage complete, a sponsor bonus just paid, a perk just used or lost, a perk on offer, then the status.
       var notices = {
         wreck: { kind: 'wreck', title: 'WRECKED', color: '#eb5757', alert: true },
         over: { kind: 'over', title: 'GAME OVER', color: '#eb5757', alert: true },
@@ -56,11 +57,17 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var carkovNotice = { kind: 'carkov', title: '', color: '#f2994a', alert: false }
       var extractedNotice = { kind: 'extracted', title: '\uD83D\uDE81 EXTRACTION COMPLETE \uD83D\uDE81', color: '#6fcf97', alert: false }
       var holdNotice = { kind: 'hold', title: '', color: '#6fcf97', alert: false }
+      var hostileNotice = { kind: 'hostile', title: '', color: '#eb5757', alert: true }
       scope.notice = function (d) {
         if (!d) return null
         if (d.wreck) return notices.wreck
         if (d.gameOver) return notices.over
         if (d.carkov && d.carkov.complete) return extractedNotice
+        var threat = d.carkov && d.carkov.hostile
+        if (threat && threat.phase === 'inbound') {
+          hostileNotice.title = '\u26A0 HOSTILE INBOUND ' + threat.seconds
+          return hostileNotice
+        }
         if (d.carkov && d.carkov.flash) {
           carkovNotice.title = d.carkov.flash.title
           return carkovNotice
@@ -68,6 +75,10 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         if (d.carkov && d.carkov.hold) {
           holdNotice.title = 'EXTRACTING... ' + d.carkov.hold.seconds
           return holdNotice
+        }
+        if (threat) {
+          hostileNotice.title = threat.phase === 'disabled' ? 'HOSTILE DISABLED: CLAIM IT' : 'HOSTILE ON YOUR TAIL'
+          return hostileNotice
         }
         if (d.stageFinished) return notices.done
         if (d.sponsor && d.sponsor.flash) {

@@ -8,6 +8,7 @@ local garage = require('beamngEarthEnduro/garage')
 local stages = require('beamngEarthEnduro/stages')
 local perks = require('beamngEarthEnduro/perks')
 local carkov = require('beamngEarthEnduro/carkov')
+local hostile = require('beamngEarthEnduro/hostile')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -52,7 +53,8 @@ M.PENALTY_SECONDS = PENALTY_SECONDS
 local SPONSOR_SHOWN_FOR = 6
 -- How long the HUD shows a perk being used, paid out or lost. Perk values are set in perks.lua.
 local PERK_SHOWN_FOR = 6
--- How long the HUD shows how a CarKov run ended. CarKov's fee and reward are set in carkov.lua.
+-- How long the HUD shows how a CarKov run ended, or how its hostile was dealt with. CarKov's fee
+-- and reward are set in carkov.lua, and the hostile's in hostile.lua.
 local CARKOV_SHOWN_FOR = 10
 -- Perks that work on the stage clock, which does not run on a CarKov run, so they wait for the stage.
 local CLOCK_PERKS = { timeFreeze = true, paceGift = true }
@@ -146,6 +148,8 @@ function M.new(deps)
     feedback = 'Not saved this session.', garage = deps.garage,
     paused = deps.paused or function() return false end,
     random = deps.random or math.random,
+    -- Spawns, reads and removes the CarKov hostile; without it runs have no hostile.
+    hostiles = deps.hostiles,
   }
 
   function c:transition(nextState, reason)
@@ -155,6 +159,8 @@ function M.new(deps)
   end
 
   function c:reload()
+    -- Whatever ended (a run, a level or a reload), its hostile goes with it.
+    self:clearHostile('reload')
     self.adapter:invalidate()
     self.sessionVerified, self.lastSample, self.error, self.odometer = false, nil, nil, nil
     self.earningsCarry = 0
@@ -194,6 +200,10 @@ function M.new(deps)
     -- A CarKov run under way; until the player first reaches its drop point they go there instead.
     self.carkov = self.profile and self.profile.carkov or nil
     if self.carkov and self.mode == 'start' then self.mode = 'drop' end
+    -- Runs saved before hostiles get one too.
+    if self.carkov and self.carkov.hostileAtKm == nil and not self.carkov.hostileDone then
+      self.carkov.hostileAtKm = hostile.pickKm(self.random)
+    end
     -- A stage started from the one before, or restarted, can bring a car to its start instead of the
     -- starter car; a CarKov drop always brings the player's car.
     self.carriedCar = (self.mode == 'start' or self.mode == 'drop') and self.profile ~= nil and self.profile.vehicle ~= nil
@@ -217,6 +227,7 @@ function M.new(deps)
   end
 
   function c:endMission()
+    self:clearHostile('level_ended')
     self.sessionVerified, self.lastSample = false, nil
     self:interrupt('earth_level_required')
     self.adapter:invalidate()
@@ -1115,7 +1126,8 @@ function M.new(deps)
       vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() },
       stage = self.stage.id, atStart = true,
       carkov = { drop = drop, extraction = extraction, startBalance = progression.balance,
-        stage = { resume = location.copy(fresh), progression = stageProgression, finished = self.stageFinished or nil } } })
+        stage = { resume = location.copy(fresh), progression = stageProgression, finished = self.stageFinished or nil },
+        hostileAtKm = hostile.pickKm(self.random) } })
     if not saved then
       self.feedback = 'Could not enter CarKov just now. You have not been charged. Try again.'
       self.diag:event('carkov_enter_failed', tostring(why), 'E')
@@ -1155,6 +1167,8 @@ function M.new(deps)
   local carkovResults = {
     quit = { title = 'CARKOV QUIT', text = 'You left CarKov. The entry fee is lost.' },
     wrecked = { title = 'CARKOV FAILED', text = 'Your car was totalled, so the run is over and the entry fee is lost.' },
+    hostile_disabled = { title = 'HOSTILE DISABLED', text = 'You took out the hostile and earned ' .. dollars(hostile.REWARD) .. '. Save to keep it.' },
+    hostile_lost = { title = 'HOSTILE LOST', text = 'You left the hostile far behind. It is gone.' },
   }
   function c:flashCarKov(result, extra)
     local shown = carkovResults[result]
@@ -1198,6 +1212,105 @@ function M.new(deps)
     return true
   end
 
+  -- The CarKov hostile. Once per run, when the run's distance passes hostileAtKm (and the player is
+  -- not within SAFE_EXTRACTION_METRES of the extraction), HOSTILE INBOUND counts down, then a
+  -- hostile car is spawned behind the player and chases them. Once it has stood still for
+  -- STILL_SECONDS with real damage, getting within CLAIM_METRES of it pays the bounty. Like
+  -- driving pay, the bounty and the hostile having come are kept by Save.
+  function c:clearHostile(reason)
+    local encounter = self.hostile
+    self.hostile = nil
+    if not encounter or not encounter.id or not self.hostiles then return end
+    local ok, why = self.hostiles:remove(encounter.id)
+    self.diag:event('hostile_removed', reason .. (ok and '' or (':' .. tostring(why))), ok and 'I' or 'W')
+  end
+
+  -- The hostile's car: hostile.lua's MODEL and CONFIG when set, or else a copy of the player's car.
+  function c:hostileCar()
+    if hostile.MODEL and hostile.CONFIG then return hostile.MODEL, hostile.CONFIG end
+    local snapshot = self.garage and self.garage:parts()
+    if snapshot and type(snapshot.config) == 'table' then return snapshot.model, snapshot.config end
+    return nil
+  end
+
+  function c:watchHostile(dt)
+    local run = self.carkov
+    if not run or not self.hostiles or self.error or self.gameOver then
+      self:clearHostile('no_run')
+      return
+    end
+    if self.state ~= 'READY' or not self.arrived or self.paused() then return end
+    local step = math.min(dt, MAX_CLOCK_STEP)
+    local encounter = self.hostile
+    if not encounter then
+      if run.hostileDone or not run.hostileAtKm or self.profile.progression.totalDistanceKm < run.hostileAtKm then return end
+      run.hostileDone = true
+      local left = self.lastSample and location.distance(self.lastSample, run.extraction)
+      if not left or left <= hostile.SAFE_EXTRACTION_METRES then
+        self.diag:event('hostile_skipped', string.format('%.0f m from extraction', left or -1))
+        return
+      end
+      self.hostile = { phase = 'inbound', left = hostile.WARNING_SECONDS }
+      self.diag:event('hostile_inbound', string.format('%.1f km', self.profile.progression.totalDistanceKm))
+      return
+    end
+    if encounter.phase == 'inbound' then
+      encounter.left = encounter.left - step
+      -- A wrecked car is left alone until it is sorted out.
+      if encounter.left > 0 or self.wreck then return end
+      local model, config = self:hostileCar()
+      local id, why, detail
+      if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_BEHIND_METRES)
+      else why = 'car_unavailable' end
+      if not id then
+        self.hostile = nil
+        self.diag:event('hostile_spawn_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+        return
+      end
+      self.hostile = { phase = 'chasing', id = id, age = 0, still = 0 }
+      self.diag:event('hostile_spawned', tostring(model) .. ' #' .. tostring(id))
+      return
+    end
+    encounter.age = encounter.age + step
+    if not encounter.retried and encounter.age >= hostile.CHASE_RETRY_SECONDS then
+      encounter.retried = true
+      self.hostiles:chase(encounter.id)
+    end
+    local status, why = self.hostiles:status(encounter.id)
+    if not status then
+      if why == 'vehicle_gone' then
+        self.hostile = nil
+        self.diag:event('hostile_gone', '', 'W')
+      end
+      return
+    end
+    encounter.damage, encounter.distance = status.damage, status.distance
+    encounter.still = status.speed <= hostile.STILL_SPEED and encounter.still + step or 0
+    encounter.disabled = encounter.still >= hostile.STILL_SECONDS and status.damage >= hostile.DISABLED_DAMAGE
+    if encounter.disabled and status.distance and status.distance <= hostile.CLAIM_METRES then
+      self:addMoney(hostile.REWARD)
+      self:clearHostile('disabled')
+      self:flashCarKov('hostile_disabled')
+      self.diag:event('hostile_bounty', string.format('%.0f damage', status.damage))
+    elseif status.distance and status.distance > hostile.LOST_METRES then
+      self:clearHostile('lost')
+      self:flashCarKov('hostile_lost')
+    end
+  end
+
+  -- What the HUD shows of the hostile, or nil when there is none.
+  function c:hostileView()
+    local encounter = self.hostile
+    if not encounter then return nil end
+    if encounter.phase == 'inbound' then
+      return { phase = 'inbound', seconds = math.max(0, math.ceil(encounter.left)), reward = hostile.REWARD,
+        claimMetres = hostile.CLAIM_METRES }
+    end
+    return { phase = encounter.disabled and 'disabled' or 'chasing', reward = hostile.REWARD,
+      distanceMetres = encounter.distance and math.floor(encounter.distance + 0.5) or nil,
+      claimMetres = hostile.CLAIM_METRES, stillSeconds = hostile.STILL_SECONDS }
+  end
+
   -- Quits the run; a second press confirms. A wrecked car the player cannot pay for counts as a failed run.
   function c:quitCarKov()
     if not self.carkov or not self.profile or self.error then
@@ -1231,6 +1344,8 @@ function M.new(deps)
     return {
       fee = carkov.ENTRY_FEE, reward = carkov.REWARD, extractionKm = carkov.EXTRACTION_KM,
       dropRadiusMetres = carkov.DROP_RADIUS_METRES,
+      hostileReward = self.hostiles and hostile.REWARD or nil, hostileFromKm = hostile.SPAWN_FROM_KM,
+      hostileToKm = hostile.SPAWN_TO_KM, hostileClaimMetres = hostile.CLAIM_METRES,
       active = run ~= nil,
       enterAllowed = self:carkovEntryProblem() == nil,
       extraction = run and location.copy(run.extraction) or nil,
@@ -1247,6 +1362,7 @@ function M.new(deps)
       -- The EXTRACTION COMPLETE screen, until dismissed.
       complete = self.extraction,
       flash = flash and { result = self.carkovFlash.result, title = self.carkovFlash.title, text = self.carkovFlash.text } or nil,
+      hostile = self:hostileView(),
     }
   end
 
@@ -1432,6 +1548,7 @@ function M.new(deps)
     self:provideVehicle()
     self:watchParts()
     self:watchIronman(dt)
+    self:watchHostile(dt)
     self:runClock(dt)
     self.ui:publish(self:view(), self.clock)
   end
@@ -1520,7 +1637,8 @@ local function gamePaused()
 end
 local function ensure()
   if not active then
-    active = M.new({ io = gameIO(), adapter = earthAdapter.new(), garage = garage.new(), log = rawget(_G, 'log'),
+    active = M.new({ io = gameIO(), adapter = earthAdapter.new(), garage = garage.new(), hostiles = hostile.new(),
+      log = rawget(_G, 'log'),
       paused = gamePaused, trigger = function(event, payload) if guihooks then guihooks.trigger(event, payload) end end })
   end
   return active

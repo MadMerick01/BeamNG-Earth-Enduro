@@ -100,6 +100,32 @@ function F.garage()
   end
   return g
 end
+-- Stand-in for the hostile spawner: records spawns and removals; tests set each hostile's reading.
+function F.hostiles()
+  local h = { spawns = {}, removed = {}, chases = 0, alive = {}, nextId = 100 }
+  function h:spawn(model, config, behind)
+    if self.fails then return nil, 'spawn_failed', 'rejected' end
+    self.nextId = self.nextId + 1
+    self.spawns[#self.spawns + 1] = { id = self.nextId, model = model, config = F.copy(config), behind = behind }
+    self.alive[self.nextId] = { speed = 15, damage = 0, distance = behind }
+    return self.nextId
+  end
+  function h:chase(id) self.chases = self.chases + 1; return self.alive[id] ~= nil end
+  function h:status(id)
+    if not self.alive[id] then return nil, 'vehicle_gone' end
+    return F.copy(self.alive[id])
+  end
+  function h:remove(id)
+    self.removed[#self.removed + 1] = id
+    self.alive[id] = nil
+    return true
+  end
+  -- The one hostile in the world, or nil.
+  function h:current()
+    for id, reading in pairs(self.alive) do return id, reading end
+  end
+  return h
+end
 -- The first stage's starting money as shipped. Controllers start with $0 unless a test asks for
 -- starting money, so the money arithmetic in the tests stays simple.
 local firstStage = require('beamngEarthEnduro/stages').list[1]
@@ -113,6 +139,7 @@ function F.controller(options)
   local garage = options.garage or F.garage()
   local events, logs = {}, {}
   local c = Core.new({ io = io, adapter = adapter, garage = garage, paused = options.paused, random = options.random,
+    hostiles = options.hostiles,
     trigger = function(name, view) events[#events + 1] = { name = name, data = F.copy(view) } end,
     log = function(level, tag, message) logs[#logs + 1] = message end })
   return c, io, adapter, events, logs, garage

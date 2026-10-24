@@ -144,12 +144,16 @@ function M.validate(s)
     local k = s.carkov
     if type(k) ~= 'table' or not location.valid(k.drop) or not location.valid(k.extraction)
         or type(k.stage) ~= 'table' or (k.stage.finished ~= nil and k.stage.finished ~= true)
-        or (k.startBalance ~= nil and not integer(k.startBalance, 0)) then return nil, 'invalid_carkov' end
+        or (k.startBalance ~= nil and not integer(k.startBalance, 0))
+        or (k.hostileAtKm ~= nil and not (location.finite(k.hostileAtKm) and k.hostileAtKm >= 0))
+        or (k.hostileDone ~= nil and k.hostileDone ~= true) then return nil, 'invalid_carkov' end
     local stageResume = pose(k.stage.resume)
     local stageProgression = progression(k.stage.progression)
     if not stageResume or not stageProgression then return nil, 'invalid_carkov' end
     carkov = { drop = location.copy(k.drop), extraction = location.copy(k.extraction), startBalance = k.startBalance,
-      stage = { resume = stageResume, progression = stageProgression, finished = k.stage.finished } }
+      stage = { resume = stageResume, progression = stageProgression, finished = k.stage.finished },
+      -- The run's hostile: how far into the run it comes, and whether it has come.
+      hostileAtKm = k.hostileAtKm, hostileDone = k.hostileDone }
   end
   return {
     schemaVersion = M.SCHEMA, profileId = 'default', generation = s.generation,
