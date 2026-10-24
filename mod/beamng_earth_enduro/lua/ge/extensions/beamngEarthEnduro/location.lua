@@ -1,6 +1,6 @@
 -- Pure geographic math; no game globals.
 local M = {}
-local rad, sin, cos, sqrt, atan2 = math.rad, math.sin, math.cos, math.sqrt, math.atan2
+local rad, sin, cos, sqrt, atan2, asin = math.rad, math.sin, math.cos, math.sqrt, math.atan2, math.asin
 local EARTH_MEAN_RADIUS = 6371008.8 -- metres; spherical short-range approximation for WGS84 coordinates
 
 function M.finite(v)
@@ -32,6 +32,16 @@ function M.bearing(a, b)
   local y = sin(dlon) * cos(lat2)
   local x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon)
   return (math.deg(atan2(y, x)) + 360) % 360
+end
+
+-- The point this many metres from p along a great circle starting on this bearing (degrees).
+function M.destination(p, bearing, metres)
+  if not M.valid(p) or not M.finite(bearing) or not M.finite(metres) then return nil end
+  local d, theta = metres / EARTH_MEAN_RADIUS, rad(bearing)
+  local lat1, lon1 = rad(p.latitude), rad(p.longitude)
+  local lat2 = asin(math.max(-1, math.min(1, sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(theta))))
+  local lon2 = lon1 + atan2(sin(theta) * sin(d) * cos(lat1), cos(d) - sin(lat1) * sin(lat2))
+  return { latitude = math.deg(lat2), longitude = (math.deg(lon2) + 540) % 360 - 180 }
 end
 
 local POINTS = { 'north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west' }

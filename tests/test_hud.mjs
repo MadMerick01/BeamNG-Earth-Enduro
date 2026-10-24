@@ -119,7 +119,8 @@ test('coordinates copy as one latitude, longitude pair through the game clipboar
   }
   assert.equal(a.commands.length, count)
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
-  assert.equal((html.match(/type="text" readonly/g) || []).length, 2)
+  // Resume and finish on the Route tab; drop and extraction on the CarKov tab.
+  assert.equal((html.match(/type="text" readonly/g) || []).length, 4)
   assert.ok(html.includes('ng-click="copyCoordinates(data.resume)"'))
   assert.ok(html.includes('ng-disabled="!coordinates(data.resume)"'))
   assert.ok(html.includes('ng-click="copyCoordinates(data.stage.finish)"'))
@@ -137,7 +138,7 @@ test('the stage briefing can be dismissed without sending a command', () => {
 test('tabs switch without sending a command and flag what needs attention', () => {
   const a = app()
   const count = a.commands.length
-  assert.equal(a.scope.tabs.map(t => t.id).join(), 'route,garage,tips')
+  assert.equal(a.scope.tabs.map(t => t.id).join(), 'route,garage,carkov,tips')
   assert.equal(a.scope.tab, 'route')
   a.scope.setTab('tips')
   assert.equal(a.scope.tab, 'tips')
@@ -200,7 +201,7 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
   for (const always of ['ng-click="save()"', 'data.balance', 'notice(data)', 'data.wreck.cost', 'conquered', 'Sponsor bonus in', 'Sponsor bonuses earned']) {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
-  for (const id of ['route', 'garage', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
+  for (const id of ['route', 'garage', 'carkov', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
   for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'startNextStage()', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
     assert.ok(html.includes(`ng-click="${action}"`), action)
   }
@@ -250,4 +251,63 @@ test('a perk offer shows in the message box, below a sponsor bonus and a perk fl
   const badge = html.indexOf('data.perk.held.name')
   assert.ok(badge > -1 && badge < html.indexOf('role="tablist"'), 'perk badge sits in the always-visible strip')
   assert.ok(html.includes('ng-repeat="p in data.perk.list"'), 'Tips tab lists the perks')
+})
+test('CarKov buttons only send fixed commands when Lua enabled them', () => {
+  const a = app()
+  a.scope.enterCarKov(); a.scope.quitCarKov()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carkov: { enterAllowed: true, quitAllowed: true } })
+  a.scope.enterCarKov(); a.scope.quitCarKov()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.enterCarKov() end')
+  assert.equal(a.commands[2], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.quitCarKov() end')
+  const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
+  for (const action of ['enterCarKov()', 'quitCarKov()', 'copyCoordinates(data.carkov.extraction)']) assert.ok(html.includes(`ng-click="${action}"`), action)
+})
+test('on a CarKov run the coordinates open the CarKov tab, and back on the stage the Route tab', () => {
+  const a = app()
+  a.scope.setTab('tips')
+  const drop = { state: 'READY', resume: { latitude: 1, longitude: 2 }, carkov: { active: true } }
+  a.handlers.BeamNGEarthEnduroState({}, drop)
+  assert.equal(a.scope.tab, 'carkov')
+  assert.equal(a.scope.tabAlert('carkov'), true)
+  assert.equal(a.scope.tabAlert('route'), false)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carkov: { active: true } })
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', resume: { latitude: 3, longitude: 4 }, carkov: { active: false } })
+  assert.equal(a.scope.tab, 'route')
+  assert.equal(a.scope.tabAlert('carkov'), false)
+})
+test('how a CarKov run ended shows in the message box, below a wreck', () => {
+  const a = app()
+  const ended = { carkov: { flash: { result: 'extracted', title: 'EXTRACTED', text: 'Paid.' } } }
+  assert.equal(a.scope.notice(ended).kind, 'carkov')
+  assert.equal(a.scope.notice(ended).title, 'EXTRACTED')
+  assert.equal(a.scope.notice({ ...ended, stageFinished: true }).kind, 'carkov')
+  assert.equal(a.scope.notice({ ...ended, wreck: { cost: 1 } }).kind, 'wreck')
+  assert.equal(a.scope.notice({ carkov: { active: true }, stateLabel: 'CARKOV' }).kind, 'status')
+})
+test('extraction counts down in the message box, then EXTRACTION COMPLETE stays until dismissed', () => {
+  const a = app()
+  assert.equal(a.scope.notice({ carkov: { active: true, hold: { seconds: 3, progress: 0.4 } } }).title, 'EXTRACTING... 3')
+  assert.equal(a.scope.notice({ carkov: { active: true, hold: { seconds: 3 } }, wreck: { cost: 1 } }).kind, 'wreck')
+  const done = { carkov: { complete: { reward: 15000 }, flash: { title: 'CARKOV QUIT' } }, stageFinished: true }
+  assert.equal(a.scope.notice(done).kind, 'extracted')
+  assert.match(a.scope.notice(done).title, /EXTRACTION COMPLETE/)
+  assert.doesNotMatch(a.scope.notice(done).title, /STAGE COMPLETE/)
+  const count = a.commands.length
+  a.scope.dismissExtraction()
+  assert.equal(a.commands.length, count)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', ...done })
+  a.scope.dismissExtraction()
+  assert.equal(a.commands.at(-1), 'if beamngEarthEnduro_core then beamngEarthEnduro_core.dismissExtraction() end')
+  const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
+  assert.ok(html.includes('ng-click="dismissExtraction()"'))
+  assert.ok(html.indexOf('data.carkov.complete.reward') < html.indexOf('role="tablist"'), 'the finish screen is outside the tabs')
+})
+test('the extraction distance switches to metres when closing in', () => {
+  const a = app()
+  assert.equal(a.scope.extractionDistance({ extractionDistanceMetres: 12345, closingInMetres: 1000 }), '12.3 km')
+  assert.equal(a.scope.extractionDistance({ extractionDistanceMetres: 640.4, closingInMetres: 1000 }), '640 m')
+  assert.equal(a.scope.closingIn({ extractionDistanceMetres: 640, closingInMetres: 1000 }), true)
+  assert.equal(a.scope.closingIn({ extractionDistanceMetres: 1640, closingInMetres: 1000 }), false)
+  assert.equal(a.scope.extractionDistance({}), '')
 })

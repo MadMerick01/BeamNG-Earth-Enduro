@@ -19,27 +19,31 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.briefingDismissed = null
       scope.dismissBriefing = function (stageName) { scope.briefingDismissed = stageName }
       // Each part of the HUD sits on its own tab so the app stays short.
-      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'garage', label: 'Garage' }, { id: 'tips', label: 'Tips' }]
+      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'garage', label: 'Garage' }, { id: 'carkov', label: 'CarKov' },
+        { id: 'tips', label: 'Tips' }]
       scope.tab = 'route'
       scope.setTab = function (id) { scope.tab = id }
       // Marks a tab that has something waiting for the player.
+      // On a CarKov run the coordinates to go to sit on the CarKov tab instead of the Route tab.
+      var onCarKov = function (d) { return !!d.carkov && !!d.carkov.active }
       var alerts = {
-        route: function (d) { return !!d.resume },
+        route: function (d) { return !!d.resume && !onCarKov(d) },
+        carkov: function (d) { return !!d.resume && onCarKov(d) },
         garage: function (d) { return !!d.partsChange || !!d.carChange || !!d.wreck || d.repairOwed > 0 }
       }
       scope.tabAlert = function (id) { return !!alerts[id] && alerts[id](scope.data || {}) }
       // Opens a tab when its bill, wreck or coordinates first appear; the player can switch away after.
       var autoOpen = [
         ['garage', function (d) { return !!d.wreck }], ['garage', function (d) { return !!d.carChange }],
-        ['garage', function (d) { return !!d.partsChange }], ['route', alerts.route]
+        ['garage', function (d) { return !!d.partsChange }], ['carkov', alerts.carkov], ['route', alerts.route]
       ]
       var follow = function (previous, next) {
         for (var i = 0; i < autoOpen.length; i++) {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
       }
-      // The one message under the clock: the most urgent of wreck, game over, stage complete, a sponsor
-      // bonus just paid, a perk just used or lost, a perk on offer, then the status.
+      // The one message under the clock: the most urgent of wreck, game over, extraction complete, how
+      // a CarKov run just ended, the extraction countdown, stage complete, a sponsor bonus just paid, a perk just used or lost, a perk on offer, then the status.
       var notices = {
         wreck: { kind: 'wreck', title: 'WRECKED', color: '#eb5757', alert: true },
         over: { kind: 'over', title: 'GAME OVER', color: '#eb5757', alert: true },
@@ -49,10 +53,22 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var sponsorNotice = { kind: 'sponsor', title: '', color: '#f2c94c', alert: false }
       var perkNotice = { kind: 'perk', title: '', color: '#bb86fc', alert: false }
       var offerNotice = { kind: 'offer', title: '', color: '#bb86fc', alert: false }
+      var carkovNotice = { kind: 'carkov', title: '', color: '#f2994a', alert: false }
+      var extractedNotice = { kind: 'extracted', title: '\uD83D\uDE81 EXTRACTION COMPLETE \uD83D\uDE81', color: '#6fcf97', alert: false }
+      var holdNotice = { kind: 'hold', title: '', color: '#6fcf97', alert: false }
       scope.notice = function (d) {
         if (!d) return null
         if (d.wreck) return notices.wreck
         if (d.gameOver) return notices.over
+        if (d.carkov && d.carkov.complete) return extractedNotice
+        if (d.carkov && d.carkov.flash) {
+          carkovNotice.title = d.carkov.flash.title
+          return carkovNotice
+        }
+        if (d.carkov && d.carkov.hold) {
+          holdNotice.title = 'EXTRACTING... ' + d.carkov.hold.seconds
+          return holdNotice
+        }
         if (d.stageFinished) return notices.done
         if (d.sponsor && d.sponsor.flash) {
           sponsorNotice.title = '+$' + String(Math.floor(d.sponsor.flash.amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' SPONSOR BONUS'
@@ -109,6 +125,24 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       }
       scope.activatePerk = function () {
         if (scope.data.perk && scope.data.perk.activateAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.activatePerk() end')
+      }
+      scope.enterCarKov = function () {
+        if (scope.data.carkov && scope.data.carkov.enterAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.enterCarKov() end')
+      }
+      scope.quitCarKov = function () {
+        if (scope.data.carkov && scope.data.carkov.quitAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.quitCarKov() end')
+      }
+      scope.dismissExtraction = function () {
+        if (scope.data.carkov && scope.data.carkov.complete) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.dismissExtraction() end')
+      }
+      // Distance to the extraction point: km far out, metres once closing in.
+      scope.extractionDistance = function (c) {
+        if (!c || typeof c.extractionDistanceMetres !== 'number') return ''
+        if (c.extractionDistanceMetres < c.closingInMetres) return Math.round(c.extractionDistanceMetres) + ' m'
+        return (c.extractionDistanceMetres / 1000).toFixed(1) + ' km'
+      }
+      scope.closingIn = function (c) {
+        return !!c && typeof c.extractionDistanceMetres === 'number' && c.extractionDistanceMetres < c.closingInMetres
       }
       scope.restartStage = function () {
         if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
