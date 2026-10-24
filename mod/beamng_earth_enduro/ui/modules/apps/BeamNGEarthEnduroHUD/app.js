@@ -141,6 +141,20 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.startNextStage = function () {
         if (scope.data.nextStageAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
       }
+      // Any stage can be started from the stage list; only a plain stage id is ever sent to Lua.
+      scope.startStage = function (stage) {
+        if (!scope.data.stageSelectAllowed || !stage || stage.current || !/^[a-z0-9_]+$/.test(String(stage.id))) return
+        call("if beamngEarthEnduro_core then beamngEarthEnduro_core.startStage('" + stage.id + "') end")
+      }
+      scope.stageButton = function (stage) {
+        return scope.data.stageArmed === stage.id ? 'Confirm' : 'Start'
+      }
+      // Difficulty as five pips, filled up to the stage's rating.
+      scope.difficultyPips = function (n) {
+        var level = Math.max(0, Math.min(5, Math.round(Number(n) || 0)))
+        return '\u25cf\u25cf\u25cf\u25cf\u25cf'.slice(0, level) + '\u25cb\u25cb\u25cb\u25cb\u25cb'.slice(0, 5 - level)
+      }
+      scope.difficultyNames = ['', 'Gentle', 'Moderate', 'Tough', 'Treacherous', 'Deadly']
       scope.keepPerk = function () {
         if (scope.data.perk && scope.data.perk.offerAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.keepPerk() end')
       }
