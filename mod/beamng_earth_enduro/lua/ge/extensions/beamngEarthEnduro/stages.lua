@@ -3,9 +3,13 @@
 -- start and finish, which the HUD shows so the player can find them on the map, and a short
 -- briefing shown when the stage starts, the money the player starts it with, and the time limit
 -- in seconds (the stage's Google Maps driving time; set targetIsEstimate = true to mark a guess). The finish counts once the vehicle is within
--- finishRadiusMetres of it. The first stage is where a new player starts. A stage can set its own
--- sponsorBonus (dollars) and sponsorEveryKm; otherwise the defaults below apply. Stages run in list
--- order: finishing one offers the next, which the player starts with the car and money they finished on.
+-- finishRadiusMetres of it. Each stage also has a difficulty from 1 (gentle) to 5 (deadly), shown in
+-- the stage list, and the road distance in lengthKm (approximate; leave it out and the HUD shows the
+-- straight-line distance). Pay is the same on every stage. The first stage is where a new player
+-- starts. A stage can set its own sponsorBonus (dollars) and sponsorEveryKm; otherwise the defaults
+-- below apply. Stages are optional: the player can start any stage
+-- from the Route tab at any time, taking the car and money they have. List order is only the order
+-- the HUD shows them in, and the stage a finish offers as next.
 local location = require('beamngEarthEnduro/location')
 local M = {}
 
@@ -22,6 +26,7 @@ M.list = {
     start = { latitude = 34.271288, longitude = 75.163671 },
     finish = { latitude = 34.43223, longitude = 75.80991 },
     finishRadiusMetres = 100,
+    difficulty = 3, lengthKm = 95,
     startingMoney = 3000,
     -- Time limit: 2 h 0 min.
     targetSeconds = 2 * 3600,
@@ -34,7 +39,8 @@ M.list = {
     start = { latitude = -33.601664, longitude = 150.822650 },
     finish = { latitude = -33.366081, longitude = 150.790919 },
     finishRadiusMetres = 100,
-    -- Only used if Stage 2 is ever started without coming from Stage 1.
+    difficulty = 2, lengthKm = 40,
+    -- Used when a player with no save yet starts here.
     startingMoney = 3000,
     -- Time limit: 30 min.
     targetSeconds = 30 * 60,
@@ -48,11 +54,22 @@ local function copy(stage, index)
     briefing = stage.briefing, start = location.copy(stage.start), finish = location.copy(stage.finish),
     finishRadiusMetres = stage.finishRadiusMetres, startingMoney = stage.startingMoney or 0,
     targetSeconds = stage.targetSeconds, targetIsEstimate = stage.targetIsEstimate == true,
-    sponsorBonus = stage.sponsorBonus or M.SPONSOR_BONUS, sponsorEveryKm = stage.sponsorEveryKm or M.SPONSOR_EVERY_KM,
+    difficulty = stage.difficulty or 1,
+    lengthKm = stage.lengthKm or math.floor((location.distance(stage.start, stage.finish) or 0) / 1000 + 0.5),
+    lengthIsStraight = stage.lengthKm == nil,
+    sponsorBonus = stage.sponsorBonus or M.SPONSOR_BONUS,
+    sponsorEveryKm = stage.sponsorEveryKm or M.SPONSOR_EVERY_KM,
   }
 end
 
 function M.first() return copy(M.list[1], 1) end
+
+-- Every stage, in list order.
+function M.all()
+  local out = {}
+  for i, stage in ipairs(M.list) do out[i] = copy(stage, i) end
+  return out
+end
 
 -- Returns the stage with this id, or nil when this version has no such stage.
 function M.get(id)

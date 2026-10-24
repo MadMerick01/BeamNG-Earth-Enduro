@@ -79,6 +79,21 @@ test('next stage button only sends the fixed command when Lua enabled it', () =>
   a.scope.startNextStage()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
 })
+test('stage list buttons only send a plain stage id when Lua enabled them', () => {
+  const a = app()
+  a.scope.startStage({ id: 'stage_2' })
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', stageSelectAllowed: true, stageArmed: 'stage_2' })
+  a.scope.startStage({ id: 'stage_1', current: true })
+  a.scope.startStage({ id: "x') os.exit() --" })
+  assert.equal(a.commands.length, 1)
+  a.scope.startStage({ id: 'stage_2' })
+  assert.equal(a.commands[1], "if beamngEarthEnduro_core then beamngEarthEnduro_core.startStage('stage_2') end")
+  assert.equal(a.scope.stageButton({ id: 'stage_2' }), 'Confirm')
+  assert.equal(a.scope.stageButton({ id: 'stage_3' }), 'Start')
+  assert.equal(a.scope.difficultyPips(3), '\u25cf\u25cf\u25cf\u25cb\u25cb')
+  assert.equal(a.scope.difficultyPips(9), '\u25cf\u25cf\u25cf\u25cf\u25cf')
+})
 test('car buttons only send fixed commands when Lua enabled them', () => {
   const a = app()
   a.scope.buyCar(); a.scope.revertCar()
@@ -198,7 +213,7 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
   for (const id of ['route', 'garage', 'carkov', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
-  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'startNextStage()', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
+  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'startNextStage()', 'startStage(s)', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
     assert.ok(html.includes(`ng-click="${action}"`), action)
   }
 })
@@ -208,6 +223,7 @@ test('on a CarKov run the Route tab hides the stage and the Garage still sells p
   const garage = html.slice(html.indexOf(`ng-if="tab === 'garage'"`), html.indexOf(`ng-if="tab === 'carkov'"`))
   assert.ok(route.includes('ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active"'), 'up next hidden')
   assert.ok(route.includes('ng-if="!data.carkov.active" title="Starts the stage again'), 'restart hidden')
+  assert.ok(route.includes('ng-if="data.stageList.length && !data.carkov.active"'), 'stage list hidden')
   assert.ok(route.includes('ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip'), 'stage tip hidden')
   for (const card of ['Buy parts', 'Buy a vehicle']) {
     assert.ok(garage.includes(`>${card}</div>`), card)

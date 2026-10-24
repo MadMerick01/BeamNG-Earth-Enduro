@@ -113,6 +113,19 @@
         <button type="button" ng-if="!data.carkov.active" title="Starts the stage again with the car and money you started it with. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
         <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
       </div>
+      <div ng-if="data.stageList.length && !data.carkov.active" style="margin-top:10px;padding:10px;border:1px solid #568d7a;border-radius:6px;">
+        <div style="font-weight:bold;color:#a7e5c9;">Stages</div>
+        <div style="font-size:12px;color:#c9d6d2;margin-top:2px;">Start any stage at any time. Your car and money come with you.</div>
+        <div ng-repeat="s in data.stageList" style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid rgba(86,141,122,.4);">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:bold;" ng-style="s.current ? {color:'#f2c94c'} : {}"><span ng-if="s.completed" style="color:#6fcf97;" aria-label="completed">&#10003; </span>{{s.name}}</div>
+            <div style="font-size:12px;color:#c9d6d2;"><span style="color:#f2994a;" aria-label="difficulty {{s.difficulty}} of 5">{{difficultyPips(s.difficulty)}}</span> {{difficultyNames[s.difficulty]}} &middot; {{s.lengthIsStraight ? '' : '~'}}{{s.lengthKm | number:0}} km<span ng-if="s.lengthIsStraight"> straight line</span><span ng-if="s.targetSeconds"> &middot; {{s.estimate ? '~' : ''}}{{clock(s.targetSeconds)}} limit</span></div>
+            <div ng-if="s.startTown" style="font-size:12px;color:#c9d6d2;">{{s.startTown}} to {{s.finishTown}}</div>
+          </div>
+          <span ng-if="s.current" style="font-size:12px;font-weight:bold;color:#f2c94c;">CURRENT</span>
+          <button type="button" ng-if="!s.current" ng-click="startStage(s)" ng-disabled="!data.stageSelectAllowed" ng-style="data.stageArmed === s.id ? {background:'#f2c94c',color:'#0c1318',fontWeight:'bold',borderColor:'#f2c94c'} : {}" style="padding:5px 12px;">{{stageButton(s)}}</button>
+        </div>
+      </div>
     </div>
     <div ng-if="tab === 'garage'">
       <div ng-if="data.carChange" style="margin:0 0 8px;padding:10px;border:1px solid #f2c94c;border-radius:6px;">
@@ -210,7 +223,7 @@
         <li>Your sponsor pays a bonus for every stretch of driving: the bar under your money shows how far to the next one. Teleports do not count.</li>
         <li>Save often. Money, mileage and parts since your last Save are lost when you exit or load the level again.</li>
         <li>One save: you live with your damage and your bills. There is no wreck limit, but a car you cannot drive and cannot pay to fix leaves you stuck: restart the stage, or quit the run on CarKov.</li>
-        <li>Finish a stage to open the next one. Your car and money come with you, and a restart takes you back to how you started it.</li>
+        <li>Stages are optional: start any of them from the Stages list on the Route tab. Your car and money come with you, and a restart takes you back to how you started the stage. A &#10003; marks the stages you have finished.</li>
         <li>Keep some money back for repairs. A badly damaged car can cost thousands to fix, up to $20,000.</li>
         <li>Parts taken off are traded in for 30% of their value. Trying parts on and swapping back is free.</li>
         <li>Driving more than 25 m with an unpaid parts or car bill puts your paid-for car back.</li>

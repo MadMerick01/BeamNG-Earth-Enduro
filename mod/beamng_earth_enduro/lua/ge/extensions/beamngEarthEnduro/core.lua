@@ -176,7 +176,7 @@ function M.new(deps)
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
     self.stuck, self.still, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, nil, false, nil, nil, nil
-    self.quitArmed, self.extractHold = false, nil
+    self.quitArmed, self.extractHold, self.stageArmed = false, nil, nil
     -- A puncture not yet repaired; a reload respawns the car, so its tyre repair is owed instead.
     self.punctureDamage, self.punctureFlash, self.offRoad, self.offRoadCheckedAt = 0, nil, nil, nil
     self.configuration, self.configError = config.load(deps.io)
@@ -1012,11 +1012,12 @@ function M.new(deps)
     return saved
   end
 
-  -- Where the stage starts. config.json's base, when set, moves the first stage's start.
-  function c:stageStart()
-    if self.stage.id == stages.first().id then return location.copy(self.configuration.base) end
-    return location.copy(self.stage.start)
+  -- Where a stage starts. config.json's base, when set, moves the first stage's start.
+  function c:startOf(stage)
+    if stage.id == stages.first().id then return location.copy(self.configuration.base) end
+    return location.copy(stage.start)
   end
+  function c:stageStart() return self:startOf(self.stage) end
 
   -- What a restart goes back to: the money and car the stage was started with, or, on the first
   -- stage, its starting money and the starter car.
@@ -1027,41 +1028,102 @@ function M.new(deps)
     return self.stage.startingMoney, {}, nil
   end
 
-  -- Moves a finished stage's save on to the next stage, with the car and money the player has now.
-  -- Mileage, the clock and sponsor bonuses start again; the player goes to the next start for their car.
-  -- The perk held comes too. A perk running now, or one on offer, stays behind with the stage.
+  -- The ids of the stages the player has finished, each once, under its current id.
+  function c:completedStageIds()
+    local ids, seen = {}, {}
+    local function add(id)
+      local stage = stages.get(id)
+      local key = stage and stage.id or id
+      if not seen[key] then seen[key] = true; ids[#ids + 1] = key end
+    end
+    for _, id in ipairs(self.profile and self.profile.completedStages or {}) do add(id) end
+    if self.stageFinished and self.stage then add(self.stage.id) end
+    return ids
+  end
+
+  -- Why the player cannot pick a stage now, or nil when they can.
+  function c:stageSelectBlocked()
+    if self.error or not self.configuration or not self.stage then return 'Stages cannot be started right now. Check the status above.' end
+    if self.carkov then return 'Quit your CarKov run on the CarKov tab before you start another stage.' end
+    if self.pendingParts or self.pendingCar then
+      return 'Pay for or put back your parts or car change on the Garage tab before you move on.'
+    end
+    return nil
+  end
+
+  -- Moves the save on to any stage, with the car and money the player has now. Stages are optional:
+  -- none has to be finished first. Mileage, the clock and sponsor bonuses start again; the player
+  -- goes to the stage's start for their car. The perk held comes too; a perk running now, or one on
+  -- offer, stays behind with the stage. Leaving a stage that is not finished loses its progress, so
+  -- the first press asks to confirm. A new player who has not saved yet starts it fresh, in the
+  -- starter car with the stage's starting money.
+  function c:startStage(id, confirmed)
+    local target = type(id) == 'string' and stages.get(id) or nil
+    if not target then
+      self.feedback = 'That stage is not in this version of the mod.'
+      return false
+    end
+    local blocked = self:stageSelectBlocked()
+    if blocked then self.feedback = blocked; return false end
+    if target.id == self.stage.id then
+      self.feedback = 'You are on ' .. target.name .. ' already. Press Restart stage to start it again.'
+      return false
+    end
+    local fresh = not self.profile or (self.profile.generation == 0 and not self.arrived)
+    local losing = not fresh and not self.stageFinished
+    if losing and not confirmed and self.stageArmed ~= target.id then
+      self.stageArmed, self.restartArmed = target.id, false
+      self.feedback = 'Press Confirm to leave ' .. self.stage.name .. ' for ' .. target.name
+        .. '. Your car and money come with you, but this stage\'s mileage, clock and sponsor bonuses are lost.'
+      return false
+    end
+    self.stageArmed = nil
+    local start = self:startOf(target)
+    local candidate = { base = start, resume = start, stage = target.id, atStart = true }
+    local carried = false
+    if not fresh then
+      -- On the stage, the car and money as they are now; otherwise as last saved.
+      local vehicle
+      if self.state == 'READY' and self.arrived then
+        local config = self:savedVehicleConfig()
+        vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() }
+      else
+        local saved = self.profile.vehicle or {}
+        vehicle = { model = saved.model, config = saved.config, damage = saved.damage }
+      end
+      local balance = self.profile.progression.balance
+      local perk = self:heldPerk()
+      carried = vehicle.config ~= nil
+      candidate.vehicle, candidate.completedStages = vehicle, self:completedStageIds()
+      candidate.entry = { balance = balance, vehicle = vehicle, perk = perk }
+      candidate.progression = { balance = balance, totalDistanceKm = 0, drivingSeconds = 0, penaltySeconds = 0,
+        sponsorBonuses = 0, perkOffers = 0, perk = perk }
+    else
+      candidate.vehicle = {}
+      candidate.progression = { balance = target.startingMoney, totalDistanceKm = 0, drivingSeconds = 0,
+        penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0 }
+    end
+    local saved, why = self:record(candidate)
+    if not saved then
+      self.feedback = 'Could not start ' .. target.name .. ' just now. Your save is unchanged. Try again.'
+      self.diag:event('stage_start_failed', tostring(why), 'E')
+      return false
+    end
+    self.diag:event('stage_started', target.id .. (carried and '' or ' (car not carried)'))
+    self:reload()
+    self.feedback = target.name .. ' is ready. Go to the start' .. (self.carriedCar and ' to get your car.' or ' to get the starter car.')
+    return true
+  end
+
+  -- The finish screen's shortcut: the stage after this one, once this one is finished.
   function c:startNextStage()
     local nextStage = self.stage and stages.after(self.stage.id)
     if not nextStage or not self.stageFinished or self.error or self.state ~= 'READY'
         or not self.arrived or not self.profile then
-      self.feedback = 'The next stage is not open yet. Finish this stage first.'
+      self.feedback = 'Finish this stage first, or pick any stage from the list on the Route tab.'
       return false
     end
-    if self.pendingParts or self.pendingCar then
-      self.feedback = 'Pay for or put back your parts or car change on the Garage tab before you move on.'
-      return false
-    end
-    local config = self:savedVehicleConfig()
-    local vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() }
-    local balance = self.profile.progression.balance
-    local perk = self:heldPerk()
-    local completed = {}
-    for i, id in ipairs(self.profile.completedStages or {}) do completed[i] = id end
-    completed[#completed + 1] = self.stage.id
-    local start = location.copy(nextStage.start)
-    local saved, why = self:record({ base = start, resume = start, progression = { balance = balance, totalDistanceKm = 0,
-      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0, perk = perk },
-      stage = nextStage.id, vehicle = vehicle, atStart = true, completedStages = completed,
-      entry = { balance = balance, vehicle = vehicle, perk = perk } })
-    if not saved then
-      self.feedback = 'Could not start ' .. nextStage.name .. ' just now. Your finish is still saved. Try again.'
-      self.diag:event('next_stage_failed', tostring(why), 'E')
-      return false
-    end
-    self.diag:event('next_stage', nextStage.id .. (config and '' or ' (car not carried)'))
-    self:reload()
-    self.feedback = nextStage.name .. ' is ready. Go to the start' .. (self.carriedCar and ' to get your car.' or ' to get the starter car.')
-    return true
+    return self:startStage(nextStage.id, true)
   end
 
   -- Starts the stage again: money, mileage, car and perk go back to the start, and the save is replaced.
@@ -1076,7 +1138,7 @@ function M.new(deps)
       return false
     end
     if not self.restartArmed then
-      self.restartArmed = true
+      self.restartArmed, self.stageArmed = true, nil
       self.feedback = 'Press Confirm restart to start ' .. self.stage.name
         .. ' again. Your car, money, mileage, clock and perk go back to the start.'
       return false
@@ -1393,6 +1455,22 @@ function M.new(deps)
     }
   end
 
+  function c:stageListView()
+    local done = {}
+    for _, id in ipairs(self:completedStageIds()) do done[id] = true end
+    local out = {}
+    for i, stage in ipairs(stages.all()) do
+      out[i] = {
+        id = stage.id, name = stage.name, number = stage.number, startTown = stage.startTown, finishTown = stage.finishTown,
+        difficulty = stage.difficulty, lengthKm = stage.lengthKm, lengthIsStraight = stage.lengthIsStraight,
+        targetSeconds = stage.targetSeconds, estimate = stage.targetIsEstimate,
+        sponsorBonus = stage.sponsorBonus, sponsorEveryKm = stage.sponsorEveryKm,
+        completed = done[stage.id] == true, current = self.stage ~= nil and self.stage.id == stage.id,
+      }
+    end
+    return out
+  end
+
   function c:view()
     local current = self.lastSample and self.lastSample.valid and location.copy(self.lastSample) or nil
     -- Where the player goes to carry on: the last save, or the start before the first save.
@@ -1413,7 +1491,7 @@ function M.new(deps)
     elseif self.state == 'READY' and self.stageFinished then
       status = nextStage and ('You conquered ' .. stageName .. '! Press Start ' .. nextStage.name .. ' to take your car and money on to '
           .. nextStage.startTown .. '.')
-        or ('You conquered ' .. stageName .. '! More stages are coming. Press Restart stage to run it again.')
+        or ('You conquered ' .. stageName .. '! Pick another stage from the list on the Route tab, or press Restart stage to run it again.')
     elseif self.state == 'READY' and self.stuck then
       status = 'Out of money and can\'t drive? The repair costs ' .. dollars(self.stuck.cost) .. ' and you have '
         .. dollars(self.profile.progression.balance) .. '. If your car will not move, '
@@ -1518,6 +1596,10 @@ function M.new(deps)
       nextStageAllowed = nextStage ~= nil and self.state == 'READY' and self.arrived
         and not self.error and not self.pendingParts and not self.pendingCar,
       carriedCar = self.carriedCar,
+      -- Every stage, any of which the player can start; the one they are on and those finished are marked.
+      stageList = self:stageListView(),
+      stageSelectAllowed = self:stageSelectBlocked() == nil,
+      stageArmed = self.stageArmed,
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
@@ -1701,6 +1783,7 @@ function M.buyCar() return safely(function() return ensure():buyCar() end) end
 function M.revertCar() return safely(function() return ensure():revertCar(false) end) end
 function M.restartStage() return safely(function() return ensure():restartStage() end) end
 function M.startNextStage() return safely(function() return ensure():startNextStage() end) end
+function M.startStage(id) return safely(function() return ensure():startStage(id) end) end
 function M.enterCarKov() return safely(function() return ensure():enterCarKov() end) end
 function M.quitCarKov() return safely(function() return ensure():quitCarKov() end) end
 function M.dismissExtraction() return safely(function() return ensure():dismissExtraction() end) end

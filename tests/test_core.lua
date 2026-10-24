@@ -468,7 +468,7 @@ do
   m:vehicleSpawned(); m:tick(0.1)
   ma.pose = F.position(second.finish.latitude, second.finish.longitude); m:tick(0.1)
   T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after Stage 2'); T.eq(m:view().upcomingStage, nil, 'nothing up next after Stage 2')
-  T.check(m:view().sessionStatus:find('More stages are coming'), 'last stage says more are coming')
+  T.check(m:view().sessionStatus:find('Pick another stage'), 'last stage points to the stage list')
 end
 
 -- Out of money and can't drive: a damaged car the player cannot pay to repair, standing still for
