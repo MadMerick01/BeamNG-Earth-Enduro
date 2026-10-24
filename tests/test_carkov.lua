@@ -293,4 +293,14 @@ do
   T.eq(P.validate(F.save(1)).carkov, nil, 'older saves have no run')
 end
 
+-- New game on a CarKov run ends the run as well: back to Stage 1 with the starting money.
+do
+  local c, io, a = F.controller({ random = seeded(11), startingMoney = 5000 })
+  c:tick(0.1); onStage(c, a, 1000)
+  T.check(c:enterCarKov(), 'entered CarKov'); T.check(c:view().newGameAllowed, 'new game offered on the run')
+  T.check(not c:newGame() and c:newGame(), 'new game confirmed')
+  T.eq(c.carkov, nil, 'run ended'); T.eq(c.profile.carkov, nil, 'run wiped from the save'); T.eq(c.mode, 'start', 'sent to the stage start')
+  T.eq(c:view().balance, 5000, 'starting money, not the run balance'); T.check(not c.carriedCar, 'starter car waiting')
+end
+
 T.done('CarKov')

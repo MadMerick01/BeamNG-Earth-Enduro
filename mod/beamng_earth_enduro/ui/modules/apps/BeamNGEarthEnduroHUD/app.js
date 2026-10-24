@@ -182,6 +182,10 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.restartStage = function () {
         if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
       }
+      // The first press asks Lua to confirm; the second wipes the save.
+      scope.newGame = function () {
+        if (scope.data.newGameAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.newGame() end')
+      }
       // Stage clock: h:mm:ss of the size of a number of seconds; the sign is shown by the caller.
       scope.clock = function (seconds) {
         if (typeof seconds !== 'number' || !isFinite(seconds)) return '-:--:--'

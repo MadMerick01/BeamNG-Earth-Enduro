@@ -237,6 +237,11 @@
           <li ng-repeat="p in data.perk.list"><b>{{p.name}}</b><span ng-if="p.activate"> (Activate)</span>: {{p.description}}</li>
         </ul>
       </div>
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(86,141,122,.4);">
+        <div style="font-weight:bold;color:#a7e5c9;">Start over</div>
+        <div style="font-size:13px;">New game wipes everything and starts the rally again on Stage 1 in the starter car with $3,000: finished stages, perks, any CarKov run, mileage and sponsor bonuses. It cannot be undone.</div>
+        <button type="button" title="Starts the whole rally over. Replaces your save." ng-click="newGame()" ng-disabled="!data.newGameAllowed" ng-style="data.newGameArmed ? {background:'#eb5757',color:'#0c1318',fontWeight:'bold',borderColor:'#eb5757'} : {}" style="margin-top:6px;padding:7px 12px;">{{data.newGameArmed ? 'Confirm new game' : 'New game'}}</button>
+      </div>
     </div>
   </div>
 </div>

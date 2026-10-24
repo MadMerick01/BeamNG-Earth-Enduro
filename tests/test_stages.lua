@@ -99,6 +99,43 @@ do
   T.eq(m:view().balance, S.get('stage_2').startingMoney, 'restart keeps the Stage 2 starting money')
 end
 
+-- New game wipes everything: back to Stage 1 in the starter car with its starting money, with no
+-- finished stages, perk, mileage or sponsor bonuses. The first press only asks to confirm.
+do
+  local m,mio,ma,_,_,g=F.controller({ startingMoney = 3000 })
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  for i = 1, 20 do ma.pose = F.position(0, i * 0.0005); m:tick(1) end
+  m:addTestMoney()
+  local first = S.get('stage_1')
+  ma.pose = F.position(first.finish.latitude, first.finish.longitude); m:tick(0.1)
+  T.check(m:view().stageFinished, 'Stage 1 finished'); T.check(m:startStage('stage_2'), 'on to Stage 2')
+  m.profile.progression.perk = 'insurance'; m.profile.progression.sponsorBonuses = 2
+  T.check(m.profile.entry ~= nil and #m.profile.completedStages == 1, 'progress to wipe')
+  T.check(m:view().newGameAllowed, 'new game offered')
+  T.check(not m:newGame(), 'first press asks to confirm'); T.check(m:view().newGameArmed, 'button asks to confirm')
+  T.check(m:view().saveFeedback:find('lost'), 'player told everything is lost'); T.eq(m.stage.id, 'stage_2', 'nothing changed yet')
+  T.check(not m:restartStage() and not m:view().newGameArmed, 'another confirm clears it'); T.check(not m:newGame(), 'asks again')
+  T.check(m:newGame(), 'second press starts a new game')
+  local saved = mio.files[P.DIRECTORY .. 'save-' .. m.store.slot .. '.json']
+  T.eq(m.stage.id, 'stage_1', 'back on Stage 1'); T.eq(m.mode, 'start', 'sent to the Stage 1 start')
+  T.check(not m.carriedCar, 'starter car waiting'); T.eq(m:view().balance, 3000, 'starting money')
+  T.eq(saved.progression.balance, 3000, 'starting money saved'); T.eq(saved.completedStages, nil, 'finished stages wiped')
+  T.eq(saved.entry, nil, 'stage entry wiped'); T.eq(saved.progression.perk, nil, 'perk wiped')
+  T.eq(saved.progression.sponsorBonuses, 0, 'sponsor bonuses wiped'); T.eq(saved.progression.totalDistanceKm, 0, 'mileage wiped')
+  T.check(not m:view().stageList[1].completed, 'Stage 1 no longer ticked'); T.check(not m:view().newGameArmed, 'confirm cleared')
+  T.eq(m:view().resume.latitude, m:startOf(first).latitude, 'Stage 1 start shown')
+  local spawns = #g.spawns
+  ma.pose = m:startOf(first); m:tick(0.1)
+  T.eq(#g.spawns, spawns + 1, 'car given at the start'); T.eq(g.spawns[#g.spawns].model, 'burnside', 'the starter car')
+  -- A restart afterwards also goes back to the starter car and starting money.
+  m:vehicleSpawned(); m:tick(0.1); m:addTestMoney()
+  T.check(not m:restartStage() and m:restartStage(), 'restarted'); T.eq(m:view().balance, 3000, 'restart keeps the starting money')
+  T.check(not m.carriedCar, 'restart gives the starter car')
+  -- A failed write leaves the save as it was.
+  mio.writeFails = true; m:newGame(); T.check(not m:newGame(), 'failed new game reported')
+  T.check(m:view().saveFeedback:find('unchanged'), 'save unchanged'); T.check(not m:view().newGameArmed, 'asks again next time')
+end
+
 -- Saves from before the stage list load as they were.
 do
   local old = F.save(1); old.stage = 'zoji_la'; old.completedStages = { 'zoji_la' }

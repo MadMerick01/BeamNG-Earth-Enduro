@@ -71,6 +71,14 @@ test('restart button only sends the fixed command when Lua enabled it', () => {
   a.scope.restartStage()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
 })
+test('new game button only sends the fixed command when Lua enabled it', () => {
+  const a = app()
+  a.scope.newGame()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', newGameAllowed: true })
+  a.scope.newGame()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.newGame() end')
+})
 test('next stage button only sends the fixed command when Lua enabled it', () => {
   const a = app()
   a.scope.startNextStage()
@@ -211,7 +219,7 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
   for (const id of ['route', 'garage', 'carkov', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
-  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'startNextStage()', 'startStage(s)', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
+  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'newGame()', 'startNextStage()', 'startStage(s)', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
     assert.ok(html.includes(`ng-click="${action}"`), action)
   }
 })
