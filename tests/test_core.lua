@@ -430,7 +430,7 @@ do
   local S = require('beamngEarthEnduro/stages')
   local second = S.get('stage_2')
   T.eq(second.name, 'Stage 2: Colo River', 'Stage 2 defined'); T.eq(S.after('stage_1').id, 'stage_2', 'Stage 2 follows Stage 1')
-  T.eq(second.start.latitude, -33.601664, 'Stage 2 starts at Windsor'); T.eq(second.finish.longitude, 150.790919, 'Stage 2 finishes at Colo Heights')
+  T.eq(second.start.latitude, -33.442415, 'Stage 2 starts at Colo'); T.eq(second.finish.longitude, 150.790919, 'Stage 2 finishes at Colo Heights')
   T.eq(second.targetSeconds, 30 * 60, 'Stage 2 limit is 30 min'); T.eq(S.after('stage_2').id, 'death_road', 'Stage 3 follows Stage 2')
   T.eq(S.after(S.list[#S.list].id), nil, 'nothing after the last stage')
   local m,mio,ma,_,_,g=F.controller()
@@ -442,7 +442,7 @@ do
   local first = S.get('stage_1')
   ma.pose = F.position(first.finish.latitude, first.finish.longitude); m:tick(0.1)
   T.check(m:view().stageFinished, 'Stage 1 finished'); T.eq(m:view().nextStage.name, 'Stage 2: Colo River', 'Stage 2 offered')
-  T.check(m:view().nextStageAllowed, 'Start Stage 2 allowed'); T.check(m:view().sessionStatus:find('Windsor, NSW'), 'status points to Windsor')
+  T.check(m:view().nextStageAllowed, 'Start Stage 2 allowed'); T.check(m:view().sessionStatus:find('Colo, NSW'), 'status points to Colo')
   g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
   T.check(not m:view().nextStageAllowed, 'an open parts bill blocks the next stage'); T.check(not m:startNextStage(), 'next stage refused with a bill open')
   m:revertParts(false); m:tick(0.1); g.damage = 200

@@ -36,14 +36,15 @@ M.list = {
   },
   {
     id = 'stage_2', name = 'Stage 2: Colo River',
-    summary = 'Bush roads north of the Hawkesbury River.',
-    startTown = 'Windsor, NSW', finishTown = 'Colo Heights, NSW',
-    briefing = 'Drive from the Windsor Bridge on the Hawkesbury River, Windsor, north through the Colo River country '
-      .. 'to the bush tracks at Colo Heights. Reach the finish to complete the stage.',
-    start = { latitude = -33.601664, longitude = 150.822650 },
+    summary = 'Bush roads north from the Colo River.',
+    startTown = 'Colo, NSW', finishTown = 'Colo Heights, NSW',
+    briefing = 'Drive from the Colo River at Colo north through the bush '
+      .. 'to the tracks at Colo Heights. Reach the finish to complete the stage.',
+    start = { latitude = -33.442415, longitude = 150.825953 },
     finish = { latitude = -33.366081, longitude = 150.790919 },
     finishRadiusMetres = 100,
-    difficulty = 2, lengthKm = 40,
+    -- No road length yet, so the stage list shows the straight-line distance.
+    difficulty = 2,
     -- Used when a player with no save yet starts here.
     startingMoney = 3000,
     -- Time limit: 30 min.
