@@ -31,6 +31,8 @@ On the run, driving pay ($100/km), repairs, parts, new cars, Save and Service Pe
 
 **Restart stage.** Starts the stage again from its start, in the starter car with the starting money on Stage 1, or on a later stage with the car and money you started it with, no mileage and a fresh clock, and replaces your save. The first press asks you to confirm, because your progress is lost.
 
+**New game.** At the bottom of the Tips tab, **New game** starts the whole rally over: Stage 1 in the starter car with $3,000, no finished stages, no perk, no CarKov run, no mileage and no sponsor bonuses. It replaces your save and works on a CarKov run too. The first press asks you to confirm, because none of it can be undone.
+
 These numbers are constants at the top of `core.lua` (`WRECKED_DAMAGE`, `GAME_OVER_DELAY`) and in `stages.lua` (`finishRadiusMetres`, `startingMoney` per stage), so they are easy to tune after testing in game.
 
 This prototype has passed automated logic, filesystem/JSON and HUD lifecycle tests with mocked game APIs.

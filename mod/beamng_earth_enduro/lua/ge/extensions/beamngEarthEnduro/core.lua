@@ -176,7 +176,7 @@ function M.new(deps)
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
     self.stuck, self.still, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, nil, false, nil, nil, nil
-    self.quitArmed, self.extractHold, self.stageArmed = false, nil, nil
+    self.quitArmed, self.extractHold, self.stageArmed, self.newGameArmed = false, nil, nil, false
     -- A puncture not yet repaired; a reload respawns the car, so its tyre repair is owed instead.
     self.punctureDamage, self.punctureFlash, self.offRoad, self.offRoadCheckedAt = 0, nil, nil, nil
     self.configuration, self.configError = config.load(deps.io)
@@ -999,11 +999,11 @@ function M.new(deps)
   -- The stages completed and the stage's entry carry over from the loaded save unless the candidate sets them.
   function c:record(candidate)
     candidate.schemaVersion, candidate.profileId = 1, 'default'
-    if candidate.completedStages == nil and self.profile then candidate.completedStages = self.profile.completedStages end
-    if candidate.entry == nil and self.profile then candidate.entry = self.profile.entry end
-    -- A CarKov run carries over too; false ends it.
-    if candidate.carkov == nil and self.profile then candidate.carkov = self.profile.carkov end
-    if candidate.carkov == false then candidate.carkov = nil end
+    -- Finished stages, the stage entry and a CarKov run carry over; false clears them.
+    for _, key in ipairs({ 'completedStages', 'entry', 'carkov' }) do
+      if candidate[key] == nil and self.profile then candidate[key] = self.profile[key] end
+      if candidate[key] == false then candidate[key] = nil end
+    end
     local saved, why = self.store:save(candidate)
     if not saved then return nil, why end
     self.profile, self.unsavedBase = saved, nil
@@ -1072,7 +1072,7 @@ function M.new(deps)
     local fresh = not self.profile or (self.profile.generation == 0 and not self.arrived)
     local losing = not fresh and not self.stageFinished
     if losing and not confirmed and self.stageArmed ~= target.id then
-      self.stageArmed, self.restartArmed = target.id, false
+      self.stageArmed, self.restartArmed, self.newGameArmed = target.id, false, false
       self.feedback = 'Press Confirm to leave ' .. self.stage.name .. ' for ' .. target.name
         .. '. Your car and money come with you, but this stage\'s mileage, clock and sponsor bonuses are lost.'
       return false
@@ -1138,7 +1138,7 @@ function M.new(deps)
       return false
     end
     if not self.restartArmed then
-      self.restartArmed, self.stageArmed = true, nil
+      self.restartArmed, self.stageArmed, self.newGameArmed = true, nil, false
       self.feedback = 'Press Confirm restart to start ' .. self.stage.name
         .. ' again. Your car, money, mileage, clock and perk go back to the start.'
       return false
@@ -1157,6 +1157,41 @@ function M.new(deps)
     self.diag:event('stage_restarted', self.stage.id)
     self:reload()
     self.feedback = 'Stage restarted. Go to the start to get ' .. (self.carriedCar and 'your car.' or 'your starter car.')
+    return true
+  end
+
+  -- Starts the whole rally over: Stage 1 in the starter car with its starting money. Finished
+  -- stages, perks, a CarKov run, mileage, the clock and sponsor bonuses are all wiped, and the save
+  -- is replaced. A second press confirms, since none of it can be got back.
+  function c:newGameAllowed()
+    return self.configuration ~= nil and not self.store.blocked
+  end
+
+  function c:newGame()
+    if not self:newGameAllowed() then
+      self.feedback = 'New game is unavailable right now. Check the status above.'
+      return false
+    end
+    if not self.newGameArmed then
+      self.newGameArmed, self.restartArmed, self.stageArmed = true, false, nil
+      self.feedback = 'Press Confirm new game to start the rally over in the starter car with '
+        .. dollars(stages.first().startingMoney) .. '. Every stage, perk, CarKov run and dollar you have now is lost.'
+      return false
+    end
+    local first = stages.first()
+    local start = self:startOf(first)
+    local saved, why = self:record({ base = start, resume = start, progression = { balance = first.startingMoney,
+      totalDistanceKm = 0, drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0 },
+      stage = first.id, vehicle = {}, atStart = true, completedStages = false, entry = false, carkov = false })
+    if not saved then
+      self.newGameArmed = false
+      self.feedback = 'Could not start a new game just now. Your save is unchanged. Press New game to try again.'
+      self.diag:event('new_game_failed', tostring(why), 'E')
+      return false
+    end
+    self.diag:event('new_game', first.id)
+    self:reload()
+    self.feedback = 'New game started. Go to the start of ' .. first.name .. ' to get your starter car.'
     return true
   end
 
@@ -1609,6 +1644,8 @@ function M.new(deps)
         action = self.carkov and 'quit' or 'restart' } or nil,
       restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error and not self.carkov,
       restartArmed = self.restartArmed,
+      newGameAllowed = self:newGameAllowed(),
+      newGameArmed = self.newGameArmed,
       vehicle = current and self.lastSample.vehicle and {
         model = self.lastSample.vehicle.model, id = self.lastSample.vehicle.id,
       } or nil,
@@ -1782,6 +1819,7 @@ function M.revertParts() return safely(function() return ensure():revertParts(fa
 function M.buyCar() return safely(function() return ensure():buyCar() end) end
 function M.revertCar() return safely(function() return ensure():revertCar(false) end) end
 function M.restartStage() return safely(function() return ensure():restartStage() end) end
+function M.newGame() return safely(function() return ensure():newGame() end) end
 function M.startNextStage() return safely(function() return ensure():startNextStage() end) end
 function M.startStage(id) return safely(function() return ensure():startStage(id) end) end
 function M.enterCarKov() return safely(function() return ensure():enterCarKov() end) end
