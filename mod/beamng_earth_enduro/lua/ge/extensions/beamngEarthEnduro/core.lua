@@ -867,7 +867,8 @@ function M.new(deps)
     -- Where the player goes to carry on: the last save, or the start before the first save.
     local resume = not self.arrived and not self.error and not self.gameOver and location.copy(self.startupTarget) or nil
     local stageName = self.stage and self.stage.name or ''
-    local nextStage = self.stage and self.stageFinished and stages.after(self.stage.id) or nil
+    local upcoming = self.stage and stages.after(self.stage.id) or nil
+    local nextStage = self.stageFinished and upcoming or nil
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
     -- A quote only stands for the vehicle it was made for.
@@ -945,6 +946,8 @@ function M.new(deps)
         startTown = self.stage.startTown, finishTown = self.stage.finishTown, briefing = self.stage.briefing,
         number = self.stage.number, count = self.stage.count,
       } or nil,
+      -- The stage after this one, shown while driving so the player knows where the rally goes next.
+      upcomingStage = upcoming and { name = upcoming.name, startTown = upcoming.startTown } or nil,
       -- Offered once the stage is finished, when there is a stage after it.
       nextStage = nextStage and { name = nextStage.name, startTown = nextStage.startTown } or nil,
       nextStageAllowed = nextStage ~= nil and self.state == 'READY' and self.arrived and not self.gameOver

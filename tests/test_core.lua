@@ -428,6 +428,7 @@ do
   local m,mio,ma,_,_,g=F.controller()
   m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
   T.eq(m:view().stage.number, 1, 'HUD numbers the stage'); T.eq(m:view().stage.count, 2, 'HUD counts the stages')
+  T.eq(m:view().upcomingStage.name, 'Stage 2: Colo River', 'Stage 2 shown as up next while driving Stage 1')
   T.eq(m:view().nextStage, nil, 'next stage not offered before the finish'); T.check(not m:startNextStage(), 'next stage refused before the finish')
   m:addTestMoney(); g.damage = 200
   local first = S.get('stage_1')
@@ -465,7 +466,7 @@ do
   T.eq(g.spawns[#g.spawns].model, 'pickup', 'arrival car given again after the restart')
   m:vehicleSpawned(); m:tick(0.1)
   ma.pose = F.position(second.finish.latitude, second.finish.longitude); m:tick(0.1)
-  T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after Stage 2')
+  T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after Stage 2'); T.eq(m:view().upcomingStage, nil, 'nothing up next after Stage 2')
   T.check(m:view().sessionStatus:find('More stages are coming'), 'last stage says more are coming')
 end
 
