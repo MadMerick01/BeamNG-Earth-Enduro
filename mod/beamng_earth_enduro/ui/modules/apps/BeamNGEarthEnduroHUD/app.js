@@ -19,13 +19,15 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.briefingDismissed = null
       scope.dismissBriefing = function (stageName) { scope.briefingDismissed = stageName }
       // Each part of the HUD sits on its own tab so the app stays short.
-      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'garage', label: 'Garage' }, { id: 'carkov', label: 'CarKov' },
-        { id: 'tips', label: 'Tips' }]
+      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'stages', label: 'Stages' }, { id: 'garage', label: 'Garage' },
+        { id: 'carkov', label: 'CarKov' }, { id: 'tips', label: 'Tips' }]
       scope.tab = 'route'
       scope.setTab = function (id) { scope.tab = id }
       // Marks a tab that has something waiting for the player.
       // On a CarKov run the coordinates to go to sit on the CarKov tab instead of the Route tab.
       var onCarKov = function (d) { return !!d.carkov && !!d.carkov.active }
+      // A stage cannot be picked on a CarKov run, so the Stages tab is left out until the run ends.
+      scope.tabShown = function (id) { return id !== 'stages' || !onCarKov(scope.data || {}) }
       var alerts = {
         route: function (d) { return !!d.resume && !onCarKov(d) },
         carkov: function (d) { return !!d.resume && onCarKov(d) },
@@ -54,6 +56,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         for (var i = 0; i < autoOpen.length; i++) {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
+        if (scope.tab === 'stages' && onCarKov(next)) scope.tab = 'carkov'
       }
       // The one message under the clock: the most urgent of out of money and can't drive, extraction complete, a
       // hostile inbound, a puncture just now, how a CarKov run just ended or its hostile was dealt with, the extraction
@@ -141,6 +144,14 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.startNextStage = function () {
         if (scope.data.nextStageAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
       }
+      // Any stage can be started from the stage list; only a plain stage id is ever sent to Lua.
+      scope.startStage = function (stage) {
+        if (!scope.data.stageSelectAllowed || !stage || stage.current || !/^[a-z0-9_]+$/.test(String(stage.id))) return
+        call("if beamngEarthEnduro_core then beamngEarthEnduro_core.startStage('" + stage.id + "') end")
+      }
+      scope.stageButton = function (stage) {
+        return scope.data.stageArmed === stage.id ? 'Confirm' : 'Start'
+      }
       scope.keepPerk = function () {
         if (scope.data.perk && scope.data.perk.offerAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.keepPerk() end')
       }
@@ -170,6 +181,10 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       }
       scope.restartStage = function () {
         if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
+      }
+      // The first press asks Lua to confirm; the second wipes the save.
+      scope.newGame = function () {
+        if (scope.data.newGameAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.newGame() end')
       }
       // Stage clock: h:mm:ss of the size of a number of seconds; the sign is shown by the caller.
       scope.clock = function (seconds) {

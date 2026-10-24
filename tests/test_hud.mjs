@@ -71,6 +71,14 @@ test('restart button only sends the fixed command when Lua enabled it', () => {
   a.scope.restartStage()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
 })
+test('new game button only sends the fixed command when Lua enabled it', () => {
+  const a = app()
+  a.scope.newGame()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', newGameAllowed: true })
+  a.scope.newGame()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.newGame() end')
+})
 test('next stage button only sends the fixed command when Lua enabled it', () => {
   const a = app()
   a.scope.startNextStage()
@@ -78,6 +86,19 @@ test('next stage button only sends the fixed command when Lua enabled it', () =>
   a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', stageFinished: true, nextStageAllowed: true })
   a.scope.startNextStage()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
+})
+test('stage list buttons only send a plain stage id when Lua enabled them', () => {
+  const a = app()
+  a.scope.startStage({ id: 'stage_2' })
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', stageSelectAllowed: true, stageArmed: 'stage_2' })
+  a.scope.startStage({ id: 'stage_1', current: true })
+  a.scope.startStage({ id: "x') os.exit() --" })
+  assert.equal(a.commands.length, 1)
+  a.scope.startStage({ id: 'stage_2' })
+  assert.equal(a.commands[1], "if beamngEarthEnduro_core then beamngEarthEnduro_core.startStage('stage_2') end")
+  assert.equal(a.scope.stageButton({ id: 'stage_2' }), 'Confirm')
+  assert.equal(a.scope.stageButton({ id: 'stage_3' }), 'Start')
 })
 test('car buttons only send fixed commands when Lua enabled them', () => {
   const a = app()
@@ -138,7 +159,7 @@ test('the stage briefing can be dismissed without sending a command', () => {
 test('tabs switch without sending a command and flag what needs attention', () => {
   const a = app()
   const count = a.commands.length
-  assert.equal(a.scope.tabs.map(t => t.id).join(), 'route,garage,carkov,tips')
+  assert.equal(a.scope.tabs.map(t => t.id).join(), 'route,stages,garage,carkov,tips')
   assert.equal(a.scope.tab, 'route')
   a.scope.setTab('tips')
   assert.equal(a.scope.tab, 'tips')
@@ -198,16 +219,17 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
   for (const id of ['route', 'garage', 'carkov', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
-  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'startNextStage()', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
+  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'newGame()', 'startNextStage()', 'startStage(s)', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
     assert.ok(html.includes(`ng-click="${action}"`), action)
   }
 })
 test('on a CarKov run the Route tab hides the stage and the Garage still sells parts and cars', () => {
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
-  const route = html.slice(html.indexOf(`ng-if="tab === 'route'"`), html.indexOf(`ng-if="tab === 'garage'"`))
+  const route = html.slice(html.indexOf(`ng-if="tab === 'route'"`), html.indexOf(`ng-if="tab === 'stages'"`))
   const garage = html.slice(html.indexOf(`ng-if="tab === 'garage'"`), html.indexOf(`ng-if="tab === 'carkov'"`))
-  assert.ok(route.includes('ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active"'), 'up next hidden')
+  assert.ok(!html.includes('upcomingStage'), 'no Up next: every stage is optional')
   assert.ok(route.includes('ng-if="!data.carkov.active" title="Starts the stage again'), 'restart hidden')
+  assert.ok(!route.includes('data.stageList'), 'the stage list is on its own tab')
   assert.ok(route.includes('ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip'), 'stage tip hidden')
   for (const card of ['Buy parts', 'Buy a vehicle']) {
     assert.ok(garage.includes(`>${card}</div>`), card)
@@ -346,7 +368,7 @@ test('header follows the mode: the mod before a stage, the stage, then a CarKov 
   assert.equal(run.title, 'CarKov Off-Road')
   assert.equal(run.subtitle, 'Reach extraction · 15 km')
   assert.equal(a.scope.header({ stage, carkov: { active: false, extractionKm: 15 } }).title, 'Stage 1: Zoji La Pass')
-  assert.equal(a.scope.tabs.map(t => t.label).join(), 'Route,Garage,CarKov,Tips')
+  assert.equal(a.scope.tabs.map(t => t.label).join(), 'Route,Stages,Garage,CarKov,Tips')
 })
 test('a puncture shows PUNCTURE! in red below a hostile inbound, and marks the Garage tab until repaired', () => {
   const a = app()
@@ -364,4 +386,19 @@ test('a puncture shows PUNCTURE! in red below a hostile inbound, and marks the G
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
   assert.ok(html.includes("notice(data).kind === 'puncture'"))
   assert.ok(html.includes('data.puncture.tyreCost'))
+})
+test('the Stages tab lists each stage by name, summary and length, and is left out on a CarKov run', () => {
+  const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
+  const stages = html.slice(html.indexOf(`ng-if="tab === 'stages'"`), html.indexOf(`ng-if="tab === 'garage'"`))
+  assert.ok(stages.includes('ng-repeat="s in data.stageList"'), 'every stage listed')
+  for (const field of ['s.name', 's.summary', 's.lengthKm']) assert.ok(stages.includes(field), field)
+  const a = app()
+  assert.equal(a.scope.tabShown('stages'), true)
+  a.scope.setTab('stages')
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carkov: { active: true } })
+  assert.equal(a.scope.tabShown('stages'), false)
+  assert.equal(a.scope.tabShown('route'), true)
+  assert.equal(a.scope.tab, 'carkov', 'an open Stages tab moves to the run')
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', carkov: { active: false } })
+  assert.equal(a.scope.tabShown('stages'), true)
 })

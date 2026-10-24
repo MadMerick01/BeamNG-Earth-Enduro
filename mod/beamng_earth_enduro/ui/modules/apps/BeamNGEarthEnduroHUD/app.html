@@ -51,6 +51,7 @@
       </div>
     </div>
     <div ng-if="notice(data).kind === 'done'" style="color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left<span ng-if="data.timer">, in {{clock(data.timer.elapsedSeconds)}}</span>.</div>
+    <div ng-if="notice(data).kind === 'done' && data.stage.finishReward" style="margin-top:4px;color:#6fcf97;font-weight:bold;">Stage complete reward: +${{data.stage.finishReward | number:0}}</div>
     <div ng-if="notice(data).kind === 'done' && data.sponsor" style="margin-top:4px;color:#f2c94c;font-weight:bold;">Sponsor bonuses earned: {{data.sponsor.earned}} (${{data.sponsor.earnedMoney | number:0}})</div>
     <div ng-if="notice(data).kind === 'done' && data.nextStage" style="margin-top:8px;">
       <div style="color:#f2f6f5;">Next: {{data.nextStage.name}}, starting at {{data.nextStage.startTown}}. Your car and ${{data.balance | number:0}} come with you.</div>
@@ -76,7 +77,7 @@
     <div style="height:6px;margin-top:2px;border-radius:3px;background:rgba(242,201,76,.2);overflow:hidden;"><div ng-style="{width: (data.sponsor.progress * 100) + '%'}" style="height:100%;background:#f2c94c;"></div></div>
   </div>
   <div role="tablist" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;border-bottom:1px solid #568d7a;">
-    <button type="button" role="tab" ng-repeat="t in tabs" ng-click="setTab(t.id)" aria-selected="{{tab === t.id}}" ng-style="tab === t.id ? {background:'#568d7a',color:'#0c1318',fontWeight:'bold'} : {}" style="padding:5px 9px;border:1px solid #568d7a;border-bottom:none;border-radius:6px 6px 0 0;">{{t.label}}<span ng-if="tabAlert(t.id)" style="color:#f2c94c;" aria-label="needs attention"> &#9679;</span></button>
+    <button type="button" role="tab" ng-repeat="t in tabs" ng-if="tabShown(t.id)" ng-click="setTab(t.id)" aria-selected="{{tab === t.id}}" ng-style="tab === t.id ? {background:'#568d7a',color:'#0c1318',fontWeight:'bold'} : {}" style="padding:5px 9px;border:1px solid #568d7a;border-bottom:none;border-radius:6px 6px 0 0;">{{t.label}}<span ng-if="tabAlert(t.id)" style="color:#f2c94c;" aria-label="needs attention"> &#9679;</span></button>
   </div>
   <div role="tabpanel" style="padding-top:10px;">
     <div ng-if="tab === 'route'">
@@ -107,11 +108,21 @@
           <button type="button" aria-label="Copy finish coordinates" ng-click="copyCoordinates(data.stage.finish)">Copy</button>
         </div>
       </div>
-      <div ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active" style="margin:0 0 8px;font-size:13px;color:#c9d6d2;">Up next: <b>{{data.upcomingStage.name}}</b>, {{data.upcomingStage.startTown}}. Your car and money come with you.</div>
       <div ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip: paste the finish coordinates into the map search and click the finish point. The map plots a route from where you are and shows arrows and road markers in game.</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
         <button type="button" ng-if="!data.carkov.active" title="Starts the stage again with the car and money you started it with. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>
         <button type="button" title="Testing only" ng-click="addTestMoney()" ng-disabled="!data.testMoneyAllowed" style="padding:7px 12px;">+$10000 (test)</button>
+      </div>
+    </div>
+    <div ng-if="tab === 'stages'">
+      <div style="font-size:12px;color:#c9d6d2;">Start any stage at any time. Your car and money come with you.</div>
+      <div ng-repeat="s in data.stageList" style="display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(86,141,122,.4);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:bold;" ng-style="s.current ? {color:'#f2c94c'} : {}"><span ng-if="s.completed" style="color:#6fcf97;" aria-label="completed">&#10003; </span>{{s.name}} <span style="font-size:12px;font-weight:normal;color:#c9d6d2;white-space:nowrap;">&middot; {{s.lengthIsStraight ? '' : '~'}}{{s.lengthKm | number:0}} km<span ng-if="s.lengthIsStraight"> straight line</span></span></div>
+          <div ng-if="s.summary" style="font-size:12px;color:#c9d6d2;">{{s.summary}}</div>
+        </div>
+        <span ng-if="s.current" style="font-size:12px;font-weight:bold;color:#f2c94c;">CURRENT</span>
+        <button type="button" ng-if="!s.current" ng-click="startStage(s)" ng-disabled="!data.stageSelectAllowed" ng-style="data.stageArmed === s.id ? {background:'#f2c94c',color:'#0c1318',fontWeight:'bold',borderColor:'#f2c94c'} : {}" style="padding:5px 12px;">{{stageButton(s)}}</button>
       </div>
     </div>
     <div ng-if="tab === 'garage'">
@@ -206,11 +217,12 @@
       <div style="font-weight:bold;color:#a7e5c9;">Tips</div>
       <ul style="margin:4px 0 0;padding-left:18px;">
         <li>Copy the coordinates on the Route tab, paste them into the map search and teleport there to start or resume.</li>
-        <li>You earn $100 for every kilometre you drive. Teleports earn nothing.</li>
-        <li>Your sponsor pays a bonus for every stretch of driving: the bar under your money shows how far to the next one. Teleports do not count.</li>
+        <li>You earn $250 for every kilometre you drive. Teleports earn nothing.</li>
+        <li>Your sponsor pays $4,000 for every 10 km of driving: the bar under your money shows how far to the next one. Teleports do not count.</li>
+        <li>Reaching a stage's finish pays a $25,000 stage complete reward. A CarKov extraction pays $15,000.</li>
         <li>Save often. Money, mileage and parts since your last Save are lost when you exit or load the level again.</li>
         <li>One save: you live with your damage and your bills. There is no wreck limit, but a car you cannot drive and cannot pay to fix leaves you stuck: restart the stage, or quit the run on CarKov.</li>
-        <li>Finish a stage to open the next one. Your car and money come with you, and a restart takes you back to how you started it.</li>
+        <li>Stages are optional: start any of them from the Stages tab. Your car and money come with you, and a restart takes you back to how you started the stage. A &#10003; marks the stages you have finished.</li>
         <li>Keep some money back for repairs. A badly damaged car can cost thousands to fix, up to $20,000.</li>
         <li>Parts taken off are traded in for 30% of their value. Trying parts on and swapping back is free.</li>
         <li>Driving more than 25 m with an unpaid parts or car bill puts your paid-for car back.</li>
@@ -225,6 +237,11 @@
         <ul style="margin:4px 0 0;padding-left:18px;">
           <li ng-repeat="p in data.perk.list"><b>{{p.name}}</b><span ng-if="p.activate"> (Activate)</span>: {{p.description}}</li>
         </ul>
+      </div>
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(86,141,122,.4);">
+        <div style="font-weight:bold;color:#a7e5c9;">Start over</div>
+        <div style="font-size:13px;">New game wipes everything and starts the rally again on Stage 1 in the starter car with $3,000: finished stages, perks, any CarKov run, mileage and sponsor bonuses. It cannot be undone.</div>
+        <button type="button" title="Starts the whole rally over. Replaces your save." ng-click="newGame()" ng-disabled="!data.newGameAllowed" ng-style="data.newGameArmed ? {background:'#eb5757',color:'#0c1318',fontWeight:'bold',borderColor:'#eb5757'} : {}" style="margin-top:6px;padding:7px 12px;">{{data.newGameArmed ? 'Confirm new game' : 'New game'}}</button>
       </div>
     </div>
   </div>

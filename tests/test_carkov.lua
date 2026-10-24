@@ -135,7 +135,7 @@ do
   F.advance(c, 1.1)
   v = c:view()
   T.eq(v.carkov.active, false, 'run over')
-  T.check(v.balance >= balance + REWARD + 780 and v.balance <= balance + REWARD + 820, 'reward and the last 8 km paid')
+  T.check(v.balance >= balance + REWARD + 1950 and v.balance <= balance + REWARD + 2050, 'reward and the last 8 km paid')
   local done = v.carkov.complete
   T.check(done ~= nil, 'EXTRACTION COMPLETE shown'); T.eq(done.reward, REWARD, 'shows the reward'); T.eq(done.balance, v.balance, 'shows the balance')
   T.check(done.distanceKm > runKm + 7, 'shows the run distance'); T.check(done.seconds >= runSeconds, 'shows the run time')
@@ -163,7 +163,7 @@ do
   local balance = c:view().balance
   T.check(not c:quitCarKov(), 'first press asks to confirm'); T.eq(c:view().carkov.quitArmed, true, 'Confirm quit shown')
   T.check(c:quitCarKov(), 'quit'); T.eq(c:view().carkov.active, false, 'run over')
-  T.eq(c:view().balance, balance, 'money earned on the run kept'); T.check(balance < 5000 - FEE + 300, 'fee not refunded')
+  T.eq(c:view().balance, balance, 'money earned on the run kept'); T.check(balance < 5000 - FEE + 750, 'fee not refunded')
   T.eq(c:view().carkov.flash.result, 'quit', 'quit shown'); T.eq(c:view().mode, 'resume', 'back to the stage')
   T.check(not c:quitCarKov(), 'nothing left to quit')
 end
@@ -291,6 +291,16 @@ do
     T.check(ok == nil and why == 'invalid_carkov', 'a bad ' .. name .. ' is refused')
   end
   T.eq(P.validate(F.save(1)).carkov, nil, 'older saves have no run')
+end
+
+-- New game on a CarKov run ends the run as well: back to Stage 1 with the starting money.
+do
+  local c, io, a = F.controller({ random = seeded(11), startingMoney = 5000 })
+  c:tick(0.1); onStage(c, a, 1000)
+  T.check(c:enterCarKov(), 'entered CarKov'); T.check(c:view().newGameAllowed, 'new game offered on the run')
+  T.check(not c:newGame() and c:newGame(), 'new game confirmed')
+  T.eq(c.carkov, nil, 'run ended'); T.eq(c.profile.carkov, nil, 'run wiped from the save'); T.eq(c.mode, 'start', 'sent to the stage start')
+  T.eq(c:view().balance, 5000, 'starting money, not the run balance'); T.check(not c.carriedCar, 'starter car waiting')
 end
 
 T.done('CarKov')

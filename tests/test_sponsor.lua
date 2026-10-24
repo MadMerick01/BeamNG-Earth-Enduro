@@ -5,14 +5,14 @@ local stages = require('beamngEarthEnduro/stages')
 local A = P.DIRECTORY .. 'save-a.json'
 local north = 1 / 111195.0802 -- degrees latitude per metre
 local BONUS, EVERY = stages.first().sponsorBonus, stages.first().sponsorEveryKm
-T.eq(BONUS, 2000, 'sponsor pays $2,000'); T.eq(EVERY, 10, 'every 10 km')
+T.eq(BONUS, 4000, 'sponsor pays $4,000'); T.eq(EVERY, 10, 'every 10 km')
 
 -- Drives north from the current odometer reading, in 100 m steps at 100 m/s.
 local function drive(c, a, fromMetres, metres)
   for step = 1, math.floor(metres / 100) do a.pose = F.position((fromMetres + step * 100) * north); c:tick(1) end
   return fromMetres + metres
 end
-local DRIVING_PAY = 100 -- dollars per km
+local DRIVING_PAY = 250 -- dollars per km
 
 do
   local c, io, a = F.controller()
@@ -35,7 +35,7 @@ do
   T.eq(c:view().sponsor.earned, 2, 'second bonus at 20 km')
   c:reload(); a.pose = F.position(at * north); c:tick(0.1)
   T.eq(c:view().sponsor.earned, 1, 'reload restores the saved count'); T.eq(c:view().balance, 10 * DRIVING_PAY + BONUS, 'and the saved balance')
-  drive(c, a, at, 9900); T.eq(c:view().sponsor.earned, 1, 'no bonus before 20 km'); T.eq(c:view().balance, 10 * DRIVING_PAY + BONUS + 990, 'only driving pay')
+  drive(c, a, at, 9900); T.eq(c:view().sponsor.earned, 1, 'no bonus before 20 km'); T.eq(c:view().balance, 10 * DRIVING_PAY + BONUS + 99 * DRIVING_PAY / 10, 'only driving pay')
   drive(c, a, at + 9900, 100); T.eq(c:view().sponsor.earned, 2, 'paid once at 20 km')
   -- No bonus after the finish.
   c.stageFinished = true; drive(c, a, at + 10000, 10000); T.eq(c:view().sponsor.earned, 2, 'no bonus after the finish')
@@ -54,8 +54,8 @@ do
   T.eq(c.profile.progression.sponsorBonuses, 2, 'older save counts 20 km as paid')
   local balance = c.profile.progression.balance
   a.pose = F.position(0, 0); c:tick(0.1)
-  drive(c, a, 0, 4900); T.eq(c:view().sponsor.earned, 2, 'nothing back-paid'); T.eq(c:view().balance, balance + 490, 'only driving pay')
-  drive(c, a, 4900, 100); T.eq(c:view().sponsor.earned, 3, 'next bonus at 30 km'); T.eq(c:view().balance, balance + 500 + BONUS, 'bonus paid')
+  drive(c, a, 0, 4900); T.eq(c:view().sponsor.earned, 2, 'nothing back-paid'); T.eq(c:view().balance, balance + 49 * DRIVING_PAY / 10, 'only driving pay')
+  drive(c, a, 4900, 100); T.eq(c:view().sponsor.earned, 3, 'next bonus at 30 km'); T.eq(c:view().balance, balance + 5 * DRIVING_PAY + BONUS, 'bonus paid')
 end
 
 -- Saves reject a bad bonus count.
