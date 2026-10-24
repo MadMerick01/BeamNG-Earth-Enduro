@@ -39,7 +39,7 @@ do
   T.check(not c:answerPerkOffer(true), 'nothing left to answer')
   -- Double Cash doubles driving pay while held.
   local balance = c:view().balance
-  at = drive(c, a, at, 1000); T.eq(c:view().balance, balance + 100 * perks.DOUBLE_CASH_MULTIPLIER, 'Double Cash pays $200 per km')
+  at = drive(c, a, at, 1000); T.eq(c:view().balance, balance + 250 * perks.DOUBLE_CASH_MULTIPLIER, 'Double Cash pays $500 per km')
   -- An unanswered offer is replaced by the next one; Swap puts the new perk in the slot.
   at = drive(c, a, at, 4000); T.eq(c:view().perk.offer.id, 'sponsorBoost', 'next offer is never the perk held')
   T.check(c:manualSave(), 'saved'); T.eq(io.files[A].progression.perk, 'doubleCash', 'perk saved'); T.eq(io.files[A].progression.perkOffer, 'sponsorBoost', 'offer saved')
@@ -50,7 +50,7 @@ do
   -- Sponsor Boost: the next sponsor bonus pays double, then it is used up.
   balance = c:view().balance
   at = drive(c, a, at, 5000)
-  T.eq(c:view().balance, balance + 500 + BONUS * perks.SPONSOR_BOOST_MULTIPLIER, 'boosted sponsor bonus')
+  T.eq(c:view().balance, balance + 1250 + BONUS * perks.SPONSOR_BOOST_MULTIPLIER, 'boosted sponsor bonus')
   T.eq(c:view().sponsor.flash.amount, BONUS * 2, 'flash shows the boosted bonus'); T.eq(c:view().perk.held, nil, 'Sponsor Boost used up')
   -- Restart clears the perk and the offers.
   give(c, 'insurance')
@@ -88,8 +88,8 @@ do
   local balance = c:view().balance
   T.near(c:view().perk.luckyKm, 5, 1e-9, 'lucky distance shown')
   local at = drive(c, a, 0, 5000)
-  T.eq(c:view().balance, balance + 500 * perks.LUCKY_MILE_MULTIPLIER, 'five lucky km pay triple'); T.eq(c:view().perk.luckyKm, nil, 'Lucky Mile over')
-  balance = c:view().balance; drive(c, a, at, 1000); T.eq(c:view().balance, balance + 100, 'normal pay after')
+  T.eq(c:view().balance, balance + 1250 * perks.LUCKY_MILE_MULTIPLIER, 'five lucky km pay triple'); T.eq(c:view().perk.luckyKm, nil, 'Lucky Mile over')
+  balance = c:view().balance; drive(c, a, at, 1000); T.eq(c:view().balance, balance + 250, 'normal pay after')
   T.check(c:manualSave(), 'saved'); T.eq(io.files[A].progression.timeCreditSeconds, perks.PACE_GIFT_SECONDS, 'credit saved')
 end
 
