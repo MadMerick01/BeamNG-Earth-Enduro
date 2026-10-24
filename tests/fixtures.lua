@@ -105,6 +105,7 @@ function F.hostiles()
   local h = { spawns = {}, removed = {}, chases = 0, alive = {}, nextId = 100 }
   function h:spawn(model, config, behind)
     if self.fails then return nil, 'spawn_failed', 'rejected' end
+    if self.noGround then return nil, 'no_ground' end
     self.nextId = self.nextId + 1
     self.spawns[#self.spawns + 1] = { id = self.nextId, model = model, config = F.copy(config), behind = behind }
     self.alive[self.nextId] = { speed = 15, damage = 0, distance = behind }

@@ -1197,6 +1197,7 @@ function M.new(deps)
     stranded = { title = 'CARKOV FAILED', text = 'You were out of money and could not drive, so the run is over and the entry fee is lost.' },
     hostile_disabled = { title = 'HOSTILE DISABLED', text = 'You took out the hostile and earned ' .. dollars(hostile.REWARD) .. '. Save to keep it.' },
     hostile_lost = { title = 'HOSTILE LOST', text = 'You left the hostile far behind. It is gone.' },
+    hostile_fell = { title = 'HOSTILE LOST', text = 'The hostile fell out of the world. It is gone.' },
   }
   function c:flashCarKov(result, extra)
     local shown = carkovResults[result]
@@ -1290,11 +1291,18 @@ function M.new(deps)
       if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_BEHIND_METRES)
       else why = 'car_unavailable' end
       if not id then
+        -- No ground with collision behind the player yet (BeamNG.Earth still streaming it in): try
+        -- again each second for a while.
+        encounter.waited = (encounter.waited or 0) + 1
+        if why == 'no_ground' and encounter.waited <= hostile.SPAWN_WAIT_SECONDS then
+          encounter.left = 1
+          return
+        end
         self.hostile = nil
         self.diag:event('hostile_spawn_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
         return
       end
-      self.hostile = { phase = 'chasing', id = id, still = 0, brain = {} }
+      self.hostile = { phase = 'chasing', id = id, still = 0, brain = {}, airborne = 0, respawns = encounter.respawns or 0 }
       self.diag:event('hostile_spawned', tostring(model) .. ' #' .. tostring(id))
       return
     end
@@ -1307,6 +1315,19 @@ function M.new(deps)
       return
     end
     encounter.damage, encounter.distance = status.damage, status.distance
+    -- Fallen through the world (no ground under it): respawned behind the player, a few times a run.
+    encounter.airborne = status.grounded == false and encounter.airborne + step or 0
+    if encounter.airborne >= hostile.FALL_SECONDS then
+      local respawns = encounter.respawns + 1
+      self:clearHostile('fell')
+      if respawns > hostile.RESPAWN_TRIES then
+        self:flashCarKov('hostile_fell')
+        return
+      end
+      self.hostile = { phase = 'inbound', left = 1, respawns = respawns }
+      self.diag:event('hostile_respawn', tostring(respawns), 'W')
+      return
+    end
     -- The brain picks how it drives: straight at the player, the chase AI, reversing out when
     -- stuck, or backing off to ram again.
     local mode = encounter.brain.mode

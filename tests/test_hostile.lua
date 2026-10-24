@@ -12,6 +12,7 @@ T.eq(hostile.pickKm(function() return 0 end), 3, 'earliest at 3 km'); T.near(hos
 -- Game side: spawns behind the player, facing the same way, never entering it, and sets it chasing.
 do
   local commands, deleted, spawned = {}, {}, nil
+  local groundAt = function() return 42 end
   local function point(x, y, z) return { x = x, y = y, z = z } end
   local objects = {
     [7] = { pos = point(1000, 2000, 50), vel = point(20, 0, 0), damage = 0 },
@@ -32,7 +33,7 @@ do
     objectById = function(id) return world[id] and car(id) or nil end,
     point = point,
     rotation = function(x, y) return { x = x, y = y } end,
-    ground = function() return 42 end,
+    ground = function(x, y, z) return groundAt(x, y, z) end,
   }
   local h = hostile.new(env)
   local config = { model = 'pickup', parts = { engine = 'v8' } }
@@ -47,6 +48,12 @@ do
   local status = h:status(8)
   T.near(status.speed, 0.5, 1e-9, 'reads its speed'); T.eq(status.damage, 2500, 'reads its damage'); T.near(status.distance, 5, 1e-9, 'distance to the player')
   T.near(status.angle, math.deg(math.atan2(3, -4)), 1e-9, 'the player is behind it on its left')
+  T.eq(status.grounded, true, 'ground under it')
+  groundAt = function() return nil end
+  T.eq(h:status(8).grounded, false, 'no ground under it: fallen through')
+  groundAt = function() error('changed') end
+  T.eq(h:status(8).grounded, nil, 'unknown when the ground cannot be read')
+  groundAt = function() return 42 end
   T.check(h:chase(8), 'chase order sent again'); T.eq(#commands, 2, 'second order')
   -- Steered from the mod: the AI is turned off once, and the gearbox only shifts on a change.
   T.check(h:drive(8, { kind = 'drive', gear = -1, throttle = 0.6, steer = 0.5 }), 'drive order sent')
@@ -68,6 +75,16 @@ do
   objects[9] = nil; world[9] = true
   _, why = h:status(9)
   T.eq(why, 'not_ready', 'no reading yet just after a spawn')
+  -- Only where there is ground: closer in when there is none at the first distance, none at all refused.
+  local tried = {}
+  groundAt = function(x, y) tried[#tried + 1] = 2000 - y; if 2000 - y <= 100 then return 40 end end
+  world[8] = nil
+  T.eq(h:spawn('pickup', config, 150), 8, 'spawned closer in'); T.near(spawned.options.pos.y, 1910, 1e-9, '90 m behind, the first spot with ground')
+  T.eq(table.concat(tried, ','), '150,120,90', 'tried 150, 120 then 90 m'); T.near(spawned.options.pos.z, 40.5, 1e-9, 'on that ground')
+  groundAt = function() return nil end
+  spawned = nil
+  T.eq(select(2, h:spawn('pickup', config, 150)), 'no_ground', 'no ground anywhere: refused'); T.eq(spawned, nil, 'nothing spawned')
+  groundAt = function() return 42 end
   -- Failures are contained.
   T.eq(select(2, hostile.new({ player = function() return nil end }):spawn('pickup', config, 300)), 'vehicle_required', 'needs a player car')
   env.vehicles = function() return {} end
@@ -167,10 +184,10 @@ do
   T.eq(c:view().carkov.hostile.seconds, 2, 'counting down')
   F.advance(c, 2.5)
   v = c:view()
-  T.eq(#h.spawns, 1, 'hostile spawned'); T.eq(h.spawns[1].behind, 300, '300 m behind')
+  T.eq(#h.spawns, 1, 'hostile spawned'); T.eq(h.spawns[1].behind, 150, '150 m behind, inside Earth\'s ground')
   T.eq(h.spawns[1].model, 'roamer', 'a Roamer'); T.eq(h.spawns[1].config, 'vehicles/roamer/robber_light.pc', 'in the Robber Light config')
-  T.eq(v.carkov.hostile.phase, 'chasing', 'chasing'); T.eq(v.carkov.hostile.distanceMetres, 300, 'distance shown')
-  T.eq(c.hostile.brain.mode, 'direct', '300 m back it drives straight at the player'); T.eq(h.orders[1].kind, 'drive', 'steered from the mod')
+  T.eq(v.carkov.hostile.phase, 'chasing', 'chasing'); T.eq(v.carkov.hostile.distanceMetres, 150, 'distance shown')
+  T.eq(c.hostile.brain.mode, 'direct', '150 m back it drives straight at the player'); T.eq(h.orders[1].kind, 'drive', 'steered from the mod')
   h.alive[h:current()].distance = 100; c:tick(0.1)
   T.eq(c.hostile.brain.mode, 'chase', 'close in it hands over to the chase AI'); T.eq(h.orders[#h.orders].kind, 'chase', 'chase order sent')
   -- Stuck with no damage, beside the player, for longer than 10 s: not disabled, no bounty.
@@ -260,6 +277,41 @@ do
   h.fails = true
   drive(c, a, 4050); F.advance(c, 6)
   T.eq(c:view().carkov.hostile, nil, 'failed spawn clears the warning'); T.eq(c:view().carkov.active, true, 'run carries on')
+end
+
+-- No ground behind the player yet: it waits and tries each second, then gives up.
+do
+  local c, a, h = onRun()
+  h.noGround = true
+  drive(c, a, 4050); F.advance(c, 5.1)
+  T.eq(#h.spawns, 0, 'nothing spawned without ground'); T.eq(c:view().carkov.hostile.phase, 'inbound', 'still coming')
+  F.advance(c, 3)
+  h.noGround = false; F.advance(c, 1.1)
+  T.eq(#h.spawns, 1, 'spawned once the ground is in')
+  c, a, h = onRun()
+  h.noGround = true
+  drive(c, a, 4050); F.advance(c, 5 + hostile.SPAWN_WAIT_SECONDS + 1.5)
+  T.eq(c:view().carkov.hostile, nil, 'gives up after waiting'); T.eq(#h.spawns, 0, 'nothing spawned')
+end
+
+-- Fallen through the world: respawned behind the player, twice, then removed.
+do
+  local c, a, h = onRun()
+  drive(c, a, 4050); F.advance(c, 5.1)
+  local id = h:current()
+  h.alive[id].grounded = false; F.advance(c, 1)
+  T.eq(h:current(), id, 'a moment with no ground is not a fall')
+  h.alive[id].grounded = true; c:tick(0.1); h.alive[id].grounded = false
+  F.advance(c, hostile.FALL_SECONDS + 0.1)
+  T.eq(h.removed[#h.removed], id, 'fallen hostile removed'); T.eq(c:view().carkov.hostile.phase, 'inbound', 'and coming again')
+  F.advance(c, 1.1)
+  T.eq(#h.spawns, 2, 'respawned behind the player'); T.eq(c.hostile.respawns, 1, 'counted')
+  for n = 2, 3 do
+    id = h:current(); h.alive[id].grounded = false
+    F.advance(c, hostile.FALL_SECONDS + 1.3)
+  end
+  T.eq(#h.spawns, 3, 'only twice'); T.eq(h:current(), nil, 'then removed')
+  T.eq(c:view().carkov.hostile, nil, 'HUD clear'); T.eq(c:view().carkov.flash.title, 'HOSTILE LOST', 'HUD says it is gone')
 end
 
 -- No hostile spawner (or off a run), nothing happens.

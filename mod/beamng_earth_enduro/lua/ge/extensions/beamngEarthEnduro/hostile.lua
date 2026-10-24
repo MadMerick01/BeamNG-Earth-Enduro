@@ -10,7 +10,21 @@ M.REWARD = 5000
 M.SPAWN_FROM_KM, M.SPAWN_TO_KM = 3, 10 -- driven on the run before the hostile comes
 M.SAFE_EXTRACTION_METRES = 1000 -- never spawns this close to the extraction point
 M.WARNING_SECONDS = 5 -- HOSTILE INBOUND shows this long before the spawn
-M.SPAWN_BEHIND_METRES = 300
+-- BeamNG.Earth only has ground with collision near the player: its terrain block follows the
+-- player's car and, on its smaller 512 x 512 block, keeps the car at least 250 m inside its edge
+-- (follow.lua), with road and bridge collision 320 m around it (roads.lua COLLIDE_M). A car spawned
+-- beyond that falls through the world, so the hostile comes SPAWN_BEHIND_METRES behind, well inside
+-- both. It only spawns where a ray finds ground; with none there it tries SPAWN_STEP_METRES closer,
+-- down to SPAWN_MIN_METRES, and failing that waits and tries again for up to SPAWN_WAIT_SECONDS.
+M.SPAWN_BEHIND_METRES = 150
+M.SPAWN_MIN_METRES = 60
+M.SPAWN_STEP_METRES = 30
+M.SPAWN_WAIT_SECONDS = 10
+-- A hostile with no ground under it for FALL_SECONDS has fallen through the world (left behind
+-- off the terrain block, or spawned before the ground was in): it is respawned behind the player,
+-- up to RESPAWN_TRIES times a run, then removed.
+M.FALL_SECONDS = 1.5
+M.RESPAWN_TRIES = 2
 -- Disabled: stopped (no faster than STILL_SPEED m/s) for STILL_SECONDS, with at least
 -- DISABLED_DAMAGE damage, so an AI car that is merely stuck pays nothing. BeamNG's own traffic
 -- code calls about 1000 moderate damage. The player claims it by getting within CLAIM_METRES.
@@ -227,7 +241,8 @@ function M.new(environment)
   function h:chase(id) return h:drive(id, { kind = 'chase' }) end
 
   -- Spawns the hostile behind the player vehicle, facing the way it faces, and sets it chasing.
-  -- config is a .pc path or a config table. Returns the new vehicle's id, or nil and a reason.
+  -- config is a .pc path or a config table. Returns the new vehicle's id, or nil and a reason
+  -- ('no_ground' when no ground with collision was found behind the player).
   function h:spawn(model, config, behindMetres)
     local vehicle, playerId = player()
     if not vehicle then return nil, 'vehicle_required' end
@@ -237,9 +252,16 @@ function M.new(environment)
     local flat = length(fx, fy)
     if not flat or flat ~= flat or flat < 1e-3 then fx, fy, flat = 0, 1, 1 end
     fx, fy = fx / flat, fy / flat
-    local x, y = pos.x - fx * behindMetres, pos.y - fy * behindMetres
-    local groundOK, z = pcall(env.ground, x, y, pos.z + 200)
-    if not groundOK or type(z) ~= 'number' or z ~= z then z = pos.z end
+    -- Only where there is ground with collision: from behindMetres back, then closer in.
+    local x, y, z
+    local back = behindMetres
+    while back >= M.SPAWN_MIN_METRES do
+      local px, py = pos.x - fx * back, pos.y - fy * back
+      local groundOK, height = pcall(env.ground, px, py, pos.z + 200)
+      if groundOK and type(height) == 'number' and height == height then x, y, z = px, py, height; break end
+      back = back - M.SPAWN_STEP_METRES
+    end
+    if not x then return nil, 'no_ground' end
     local vehicles = env.vehicles()
     if type(vehicles) ~= 'table' or type(vehicles.spawnNewVehicle) ~= 'function' then return nil, 'spawn_unavailable' end
     local spawned, hostile = pcall(function()
@@ -255,7 +277,8 @@ function M.new(environment)
   end
 
   -- Returns { speed (m/s), damage, distance (m to the player), angle (degrees the player is to the
-  -- left of its nose, negative to the right; nil when unknown) } for the hostile, or nil and
+  -- left of its nose, negative to the right; nil when unknown), grounded (whether a ray down from it
+  -- finds ground; nil when that cannot be read) } for the hostile, or nil and
   -- 'vehicle_gone' when it no longer exists, or 'not_ready' while the game has no reading yet.
   function h:status(id)
     local ok, vehicle = pcall(env.objectById, id)
@@ -277,7 +300,11 @@ function M.new(environment)
         angle = math.deg(math.atan2(dx * ty - dy * tx, dx * tx + dy * ty))
       end
     end
-    return { speed = speed, damage = damage, distance = distance, angle = angle }
+    -- Fallen through the world: below the ground, a ray down meets nothing (collision is one-sided).
+    local groundOK, height = pcall(env.ground, entry.pos.x, entry.pos.y, entry.pos.z + 2)
+    local grounded = nil
+    if groundOK then grounded = type(height) == 'number' and height == height end
+    return { speed = speed, damage = damage, distance = distance, angle = angle, grounded = grounded }
   end
 
   -- Removes the hostile from the world, if it still exists.
