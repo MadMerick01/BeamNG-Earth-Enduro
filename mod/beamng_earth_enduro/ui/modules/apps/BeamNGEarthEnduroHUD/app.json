@@ -1,14 +1,14 @@
 {
   "domElement": "<beamng-earth-enduro-hud></beamng-earth-enduro-hud>",
-  "name": "World Ironman Enduro Rally",
+  "name": "Earth Enduro",
   "types": ["ui.apps.categories.utility"],
-  "description": "World Ironman Enduro Rally: long BeamNG.Earth stages where you live with your damage and your bills.",
+  "description": "Earth Enduro: Rally Stages · CarKov Off-Road. Long BeamNG.Earth rally stages and off-road survival runs where you live with your damage and your bills.",
   "css": {"width": "360px", "height": "600px", "top": "100px", "left": "20px"},
-  "author": "World Ironman Enduro Rally",
+  "author": "Earth Enduro",
   "version": "0.1.0",
   "directive": "beamngEarthEnduroHud",
   "appName": "BeamNGEarthEnduroHUD",
-  "category": "World Ironman Enduro Rally",
+  "category": "Earth Enduro",
   "isAuxiliary": false,
   "interactive": "yes"
 }

@@ -334,3 +334,17 @@ test('the extraction distance switches to metres when closing in', () => {
   assert.equal(a.scope.closingIn({ extractionDistanceMetres: 1640, closingInMetres: 1000 }), false)
   assert.equal(a.scope.extractionDistance({}), '')
 })
+test('header follows the mode: the mod before a stage, the stage, then a CarKov run', () => {
+  const a = app()
+  assert.equal(a.scope.header({}).title, 'Earth Enduro')
+  assert.equal(a.scope.header({}).subtitle, 'Rally Stages · CarKov Off-Road')
+  const stage = { name: 'Stage 1: Zoji La Pass', number: 1, count: 2 }
+  assert.equal(a.scope.header({ stage }).title, 'Stage 1: Zoji La Pass')
+  assert.equal(a.scope.header({ stage }).subtitle, 'Earth Enduro · Stage 1 of 2')
+  assert.equal(a.scope.header({ stage: { name: 'Solo', number: 1, count: 1 } }).subtitle, 'Earth Enduro')
+  const run = a.scope.header({ stage, carkov: { active: true, extractionKm: 15 } })
+  assert.equal(run.title, 'CarKov Off-Road')
+  assert.equal(run.subtitle, 'Reach extraction · 15 km')
+  assert.equal(a.scope.header({ stage, carkov: { active: false, extractionKm: 15 } }).title, 'Stage 1: Zoji La Pass')
+  assert.equal(a.scope.tabs.map(t => t.label).join(), 'Route,Garage,CarKov,Tips')
+})

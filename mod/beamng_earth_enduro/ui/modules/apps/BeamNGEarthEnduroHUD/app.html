@@ -1,6 +1,6 @@
 <div class="bngApp" style="height:100%;width:100%;overflow:auto;box-sizing:border-box;padding:14px;background:rgba(12,19,24,.9);color:#f2f6f5;font:14px/1.4 sans-serif;border:1px solid #568d7a;border-radius:8px;">
-  <div style="font-size:16px;font-weight:bold;letter-spacing:1px;">WORLD IRONMAN ENDURO RALLY</div>
-  <div ng-if="data.stage" style="margin-top:2px;color:#c9d6d2;">{{data.stage.name}}<span ng-if="data.stage.count > 1"> &middot; Stage {{data.stage.number}} of {{data.stage.count}}</span></div>
+  <div ng-style="{color: header(data).color}" style="font-size:16px;font-weight:bold;letter-spacing:1px;">{{header(data).title}}</div>
+  <div ng-if="header(data).subtitle" style="margin-top:2px;color:#c9d6d2;">{{header(data).subtitle}}</div>
   <style>@keyframes enduroPulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }</style>
   <div ng-if="data.timer" role="timer" ng-style="{borderColor: timerColor(data.timer), boxShadow: '0 0 12px ' + timerColor(data.timer)}" style="margin:10px 0 4px;padding:10px 12px;border:2px solid;border-radius:8px;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(12,19,24,.85));">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -85,7 +85,7 @@
         <button type="button" ng-click="dismissBriefing(data.stage.name)" style="margin-top:6px;padding:5px 10px;">Got it</button>
       </div>
       <div ng-if="data.carkov.active" role="note" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">
-        <div style="font-weight:bold;color:#f2994a;">You are on a CarKov run</div>
+        <div style="font-weight:bold;color:#f2994a;">You are on a CarKov Off-Road run</div>
         <div style="margin-top:4px;">The only ways out are reaching the extraction point or quitting the run, both on the CarKov tab. Your stage is saved and you go back to it afterwards.</div>
       </div>
       <div ng-if="data.resume && !data.carkov.active" style="margin:0 0 8px;padding:10px;border:1px solid #a7e5c9;border-radius:6px;">
@@ -162,7 +162,7 @@
     </div>
     <div ng-if="tab === 'carkov'">
       <div ng-if="!data.carkov.active" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">
-        <div style="font-weight:bold;color:#f2994a;">CarKov</div>
+        <div style="font-weight:bold;color:#f2994a;">CarKov Off-Road</div>
         <div style="margin-top:4px;">Your car is dropped somewhere random on Earth. Reach the extraction point {{data.carkov.extractionKm}} km away in a straight line, on road or off, to earn ${{data.carkov.reward | number:0}}.</div>
         <ul style="margin:6px 0 0;padding-left:18px;font-size:13px;">
           <li>Entry costs ${{data.carkov.fee | number:0}}. Entering saves your stage where you are now, and you go back to it afterwards.</li>
@@ -172,7 +172,7 @@
           <li>If you are out of money and your car cannot move, quit the run: the fee is lost and the repair takes what money you have.</li>
           <li>You can quit at any time, but the fee is lost.</li>
         </ul>
-        <button type="button" ng-click="enterCarKov()" ng-disabled="!data.carkov.enterAllowed" style="margin-top:8px;padding:7px 12px;background:#f2994a;color:#0c1318;font-weight:bold;border:1px solid #f2994a;border-radius:4px;">Save stage and enter for ${{data.carkov.fee | number:0}}</button>
+        <button type="button" ng-click="enterCarKov()" ng-disabled="!data.carkov.enterAllowed" style="margin-top:8px;padding:7px 12px;background:#f2994a;color:#0c1318;font-weight:bold;border:1px solid #f2994a;border-radius:4px;">Enter CarKov Off-Road for ${{data.carkov.fee | number:0}}</button>
       </div>
       <div ng-if="data.carkov.active && data.resume" style="margin:0 0 8px;padding:10px;border:1px solid #a7e5c9;border-radius:6px;">
         <label><span style="font-weight:bold;color:#a7e5c9;">1. {{data.mode === 'drop' ? 'Go to the drop point' : 'Go back to your last save'}}</span>
@@ -207,7 +207,7 @@
         <li>You earn $100 for every kilometre you drive. Teleports earn nothing.</li>
         <li>Your sponsor pays a bonus for every stretch of driving: the bar under your money shows how far to the next one. Teleports do not count.</li>
         <li>Save often. Money, mileage and parts since your last Save are lost when you exit or load the level again.</li>
-        <li>Ironman: one save, and you live with your damage and your bills. There is no wreck limit, but a car you cannot drive and cannot pay to fix leaves you stuck: restart the stage, or quit the run on CarKov.</li>
+        <li>One save: you live with your damage and your bills. There is no wreck limit, but a car you cannot drive and cannot pay to fix leaves you stuck: restart the stage, or quit the run on CarKov.</li>
         <li>Finish a stage to open the next one. Your car and money come with you, and a restart takes you back to how you started it.</li>
         <li>Keep some money back for repairs. A badly damaged car can cost thousands to fix, up to $20,000.</li>
         <li>Parts taken off are traded in for 30% of their value. Trying parts on and swapping back is free.</li>
@@ -215,7 +215,7 @@
         <li>Beat the clock: the time limit counts down while you drive and stops while the game is paused. Every repair, and every new car, costs you 5 minutes. Buying parts costs no time.</li>
         <li>Pace compares your time with how far you are, in a straight line, from start to finish. Winding roads can put you behind early on and ahead later.</li>
         <li>Missing the time limit is not game over: the clock keeps counting in red as overtime.</li>
-        <li>CarKov, on its own tab, is a side run you can enter at any time: pay to be dropped somewhere random on Earth and reach the extraction point for a big payout, then go back to your stage.</li>
+        <li>CarKov Off-Road, on the CarKov tab, is a side run you can enter at any time: pay to be dropped somewhere random on Earth and reach the extraction point for a big payout, then go back to your stage.</li>
       </ul>
       <div ng-if="data.perk" style="margin-top:10px;">
         <div style="font-weight:bold;color:#d6b8ff;">Service Perks</div>

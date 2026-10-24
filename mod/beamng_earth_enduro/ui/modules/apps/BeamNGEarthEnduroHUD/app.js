@@ -32,6 +32,19 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         garage: function (d) { return !!d.partsChange || !!d.carChange || d.repairOwed > 0 }
       }
       scope.tabAlert = function (id) { return !!alerts[id] && alerts[id](scope.data || {}) }
+      // The header names what the player is doing: the CarKov run, the stage, or the mod itself.
+      scope.header = function (d) {
+        d = d || {}
+        if (onCarKov(d)) {
+          return { title: 'CarKov Off-Road', color: '#f2994a',
+            subtitle: d.carkov.extractionKm != null ? 'Reach extraction \u00b7 ' + d.carkov.extractionKm + ' km' : 'Reach extraction' }
+        }
+        if (d.stage) {
+          return { title: String(d.stage.name), color: null,
+            subtitle: d.stage.count > 1 ? 'Earth Enduro \u00b7 Stage ' + d.stage.number + ' of ' + d.stage.count : 'Earth Enduro' }
+        }
+        return { title: 'Earth Enduro', color: null, subtitle: 'Rally Stages \u00b7 CarKov Off-Road' }
+      }
       // Opens a tab when its bill or coordinates first appear; the player can switch away after.
       var autoOpen = [
         ['garage', function (d) { return !!d.carChange }],
