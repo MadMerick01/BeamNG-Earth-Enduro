@@ -1,14 +1,14 @@
 -- The rally's stages. To add one, add an entry to the list: an id that never changes (saves
 -- store it; ids it had before go in oldIds so older saves still load), the name the HUD shows, the start and finish coordinates, and the towns nearest the
--- start and finish, which the HUD shows so the player can find them on the map, and a short
--- briefing shown when the stage starts, the money the player starts it with, and the time limit
+-- start and finish, which the HUD shows so the player can find them on the map, a one-line
+-- summary for the Stages tab, a short briefing shown when the stage starts, the money the player starts it with, and the time limit
 -- in seconds (the stage's Google Maps driving time; set targetIsEstimate = true to mark a guess). The finish counts once the vehicle is within
--- finishRadiusMetres of it. Each stage also has a difficulty from 1 (gentle) to 5 (deadly), shown in
--- the stage list, and the road distance in lengthKm (approximate; leave it out and the HUD shows the
+-- finishRadiusMetres of it. Each stage also has a difficulty from 1 (gentle) to 5 (deadly), not shown in the HUD,
+-- and the road distance in lengthKm, shown in the stage list (approximate; leave it out and the HUD shows the
 -- straight-line distance). Pay is the same on every stage. The first stage is where a new player
 -- starts. A stage can set its own sponsorBonus (dollars) and sponsorEveryKm; otherwise the defaults
 -- below apply. Stages are optional: the player can start any stage
--- from the Route tab at any time, taking the car and money they have. List order is only the order
+-- from the Stages tab at any time, taking the car and money they have. List order is only the order
 -- the HUD shows them in, and the stage a finish offers as next.
 local location = require('beamngEarthEnduro/location')
 local M = {}
@@ -20,6 +20,7 @@ M.SPONSOR_EVERY_KM = 10
 M.list = {
   {
     id = 'stage_1', oldIds = { 'zoji_la' }, name = 'Stage 1: Zoji La Pass',
+    summary = 'Shelf road over a 3,528 m Himalayan pass.',
     startTown = 'Sind River, Kashmir', finishTown = 'Dras, Ladakh',
     briefing = 'Drive from the Sind River, Kashmir, up the Sind valley past Sonamarg and over the Zoji La Pass to Dras, Ladakh. '
       .. 'Reach the finish to complete the stage.',
@@ -33,6 +34,7 @@ M.list = {
   },
   {
     id = 'stage_2', name = 'Stage 2: Colo River',
+    summary = 'Bush roads north of the Hawkesbury River.',
     startTown = 'Windsor, NSW', finishTown = 'Colo Heights, NSW',
     briefing = 'Drive from the Windsor Bridge on the Hawkesbury River, Windsor, north through the Colo River country '
       .. 'to the bush tracks at Colo Heights. Reach the finish to complete the stage.',
@@ -49,6 +51,7 @@ M.list = {
   -- in game; time limits are estimates, not Google Maps times.
   {
     id = 'death_road', name = 'Stage 3: Death Road',
+    summary = 'Cliff-edge dirt track from 4,650 m into the jungle.',
     startTown = 'La Cumbre pass, Bolivia', finishTown = 'Yolosa, Bolivia',
     briefing = 'Drive from the La Cumbre pass at 4,650 m down the North Yungas Road, the Death Road, '
       .. 'a cliff-edge dirt track that drops into the jungle at Yolosa. Reach the finish to complete the stage.',
@@ -62,6 +65,7 @@ M.list = {
   },
   {
     id = 'fairy_meadows', name = 'Stage 4: Fairy Meadows Road',
+    summary = 'Gravel shelf above the Indus with no guardrails.',
     startTown = 'Raikot Bridge, Gilgit-Baltistan', finishTown = 'Tato, Gilgit-Baltistan',
     briefing = 'Drive from the Raikot Bridge on the Karakoram Highway up the Fairy Meadows Road, a narrow gravel shelf '
       .. 'above the Indus with no guardrails, to Tato village. Reach the finish to complete the stage.',
@@ -75,6 +79,7 @@ M.list = {
   },
   {
     id = 'sani_pass', name = 'Stage 5: Sani Pass',
+    summary = 'Gravel hairpins up into Lesotho.',
     startTown = 'Sani Pass border post, South Africa', finishTown = 'Sani Top, Lesotho',
     briefing = 'Drive from the South African border post up the gravel hairpins of the Sani Pass '
       .. 'to Sani Top in Lesotho. Reach the finish to complete the stage.',
@@ -88,6 +93,7 @@ M.list = {
   },
   {
     id = 'skippers_canyon', name = 'Stage 6: Skippers Canyon',
+    summary = 'One-lane canyon road to a bridge 91 m up.',
     startTown = 'Skippers Saddle, Queenstown', finishTown = 'Skippers Bridge, Otago',
     briefing = 'Drive from Skippers Saddle down the one-lane Skippers Canyon Road to the Skippers Bridge, '
       .. '91 m above the Shotover River. Reach the finish to complete the stage.',
@@ -101,6 +107,7 @@ M.list = {
   },
   {
     id = 'dalton_highway', name = 'Stage 7: Dalton Highway',
+    summary = 'Arctic haul road over the Atigun Pass.',
     startTown = 'Chandalar Shelf, Alaska', finishTown = 'Galbraith Lake, Alaska',
     briefing = 'Drive the Dalton Highway from the Chandalar Shelf over the Atigun Pass and across the Brooks Range '
       .. 'to Galbraith Lake. Reach the finish to complete the stage.',
@@ -114,6 +121,7 @@ M.list = {
   },
   {
     id = 'transfagarasan', name = 'Stage 8: Transfăgărășan',
+    summary = 'Carpathian hairpins up to a glacial lake.',
     startTown = 'Cârțișoara, Romania', finishTown = 'Bâlea Lac, Romania',
     briefing = 'Drive from Cârțișoara up the hairpins of the Transfăgărășan to the glacial lake at Bâlea Lac. '
       .. 'Reach the finish to complete the stage.',
@@ -131,7 +139,7 @@ local function copy(stage, index)
   return {
     number = index, count = #M.list,
     id = stage.id, name = stage.name, startTown = stage.startTown, finishTown = stage.finishTown,
-    briefing = stage.briefing, start = location.copy(stage.start), finish = location.copy(stage.finish),
+    summary = stage.summary, briefing = stage.briefing, start = location.copy(stage.start), finish = location.copy(stage.finish),
     finishRadiusMetres = stage.finishRadiusMetres, startingMoney = stage.startingMoney or 0,
     targetSeconds = stage.targetSeconds, targetIsEstimate = stage.targetIsEstimate == true,
     difficulty = stage.difficulty or 1,

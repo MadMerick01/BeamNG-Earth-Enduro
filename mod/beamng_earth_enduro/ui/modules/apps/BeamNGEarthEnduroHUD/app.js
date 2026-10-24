@@ -19,13 +19,15 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.briefingDismissed = null
       scope.dismissBriefing = function (stageName) { scope.briefingDismissed = stageName }
       // Each part of the HUD sits on its own tab so the app stays short.
-      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'garage', label: 'Garage' }, { id: 'carkov', label: 'CarKov' },
-        { id: 'tips', label: 'Tips' }]
+      scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'stages', label: 'Stages' }, { id: 'garage', label: 'Garage' },
+        { id: 'carkov', label: 'CarKov' }, { id: 'tips', label: 'Tips' }]
       scope.tab = 'route'
       scope.setTab = function (id) { scope.tab = id }
       // Marks a tab that has something waiting for the player.
       // On a CarKov run the coordinates to go to sit on the CarKov tab instead of the Route tab.
       var onCarKov = function (d) { return !!d.carkov && !!d.carkov.active }
+      // A stage cannot be picked on a CarKov run, so the Stages tab is left out until the run ends.
+      scope.tabShown = function (id) { return id !== 'stages' || !onCarKov(scope.data || {}) }
       var alerts = {
         route: function (d) { return !!d.resume && !onCarKov(d) },
         carkov: function (d) { return !!d.resume && onCarKov(d) },
@@ -54,6 +56,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         for (var i = 0; i < autoOpen.length; i++) {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
+        if (scope.tab === 'stages' && onCarKov(next)) scope.tab = 'carkov'
       }
       // The one message under the clock: the most urgent of out of money and can't drive, extraction complete, a
       // hostile inbound, a puncture just now, how a CarKov run just ended or its hostile was dealt with, the extraction
@@ -149,12 +152,6 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       scope.stageButton = function (stage) {
         return scope.data.stageArmed === stage.id ? 'Confirm' : 'Start'
       }
-      // Difficulty as five pips, filled up to the stage's rating.
-      scope.difficultyPips = function (n) {
-        var level = Math.max(0, Math.min(5, Math.round(Number(n) || 0)))
-        return '\u25cf\u25cf\u25cf\u25cf\u25cf'.slice(0, level) + '\u25cb\u25cb\u25cb\u25cb\u25cb'.slice(0, 5 - level)
-      }
-      scope.difficultyNames = ['', 'Gentle', 'Moderate', 'Tough', 'Treacherous', 'Deadly']
       scope.keepPerk = function () {
         if (scope.data.perk && scope.data.perk.offerAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.keepPerk() end')
       }

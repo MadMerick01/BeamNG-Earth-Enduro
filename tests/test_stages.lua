@@ -17,6 +17,7 @@ do
     for _, old in ipairs(S.list[i].oldIds or {}) do T.check(not ids[old], label .. ' old id is unique'); ids[old] = true end
     T.check(type(stage.name) == 'string' and stage.name ~= '', label .. ' has a name')
     T.check(type(stage.briefing) == 'string' and stage.briefing ~= '', label .. ' has a briefing')
+    T.check(type(stage.summary) == 'string' and stage.summary ~= '' and #stage.summary <= 60, label .. ' has a short summary')
     T.check(location.valid(stage.start) and location.valid(stage.finish), label .. ' has valid coordinates')
     T.check(type(stage.targetSeconds) == 'number' and stage.targetSeconds > 0, label .. ' has a time limit')
     T.check(stage.finishRadiusMetres > 0, label .. ' has a finish radius')
@@ -33,13 +34,13 @@ do
   S.list[2] = saved
 end
 
--- The Route tab lists every stage, and any of them can be started at any time.
+-- The Stages tab lists every stage, and any of them can be started at any time.
 do
   local m,_,ma,_,_,g=F.controller()
   m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
   local list = m:view().stageList
   T.eq(#list, #S.list, 'every stage listed'); T.check(list[1].current and not list[2].current, 'Stage 1 is the current one')
-  T.eq(list[1].difficulty, 3, 'difficulty shown'); T.eq(list[1].lengthKm, 95, 'length shown'); T.eq(list[2].targetSeconds, 1800, 'time limit shown')
+  T.eq(list[1].difficulty, 3, 'difficulty shown'); T.eq(list[1].lengthKm, 95, 'length shown'); T.eq(list[1].summary, S.list[1].summary, 'summary shown'); T.eq(list[2].targetSeconds, 1800, 'time limit shown')
   T.check(not list[1].completed and not list[2].completed, 'nothing completed yet'); T.check(m:view().stageSelectAllowed, 'stages can be picked')
   T.check(not m:startStage('stage_1'), 'the current stage is not started from the list')
   T.check(m:view().saveFeedback:find('Restart stage'), 'player pointed to Restart stage')
