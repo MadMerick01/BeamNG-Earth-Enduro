@@ -1120,7 +1120,7 @@ function M.new(deps)
     local nextStage = self.stage and stages.after(self.stage.id)
     if not nextStage or not self.stageFinished or self.error or self.state ~= 'READY'
         or not self.arrived or not self.profile then
-      self.feedback = 'Finish this stage first, or pick any stage from the list on the Route tab.'
+      self.feedback = 'Finish this stage first, or pick any stage from the Stages tab.'
       return false
     end
     return self:startStage(nextStage.id, true)
@@ -1462,7 +1462,7 @@ function M.new(deps)
     for i, stage in ipairs(stages.all()) do
       out[i] = {
         id = stage.id, name = stage.name, number = stage.number, startTown = stage.startTown, finishTown = stage.finishTown,
-        difficulty = stage.difficulty, lengthKm = stage.lengthKm, lengthIsStraight = stage.lengthIsStraight,
+        summary = stage.summary, difficulty = stage.difficulty, lengthKm = stage.lengthKm, lengthIsStraight = stage.lengthIsStraight,
         targetSeconds = stage.targetSeconds, estimate = stage.targetIsEstimate,
         sponsorBonus = stage.sponsorBonus, sponsorEveryKm = stage.sponsorEveryKm,
         completed = done[stage.id] == true, current = self.stage ~= nil and self.stage.id == stage.id,
@@ -1491,7 +1491,7 @@ function M.new(deps)
     elseif self.state == 'READY' and self.stageFinished then
       status = nextStage and ('You conquered ' .. stageName .. '! Press Start ' .. nextStage.name .. ' to take your car and money on to '
           .. nextStage.startTown .. '.')
-        or ('You conquered ' .. stageName .. '! Pick another stage from the list on the Route tab, or press Restart stage to run it again.')
+        or ('You conquered ' .. stageName .. '! Pick another stage from the Stages tab, or press Restart stage to run it again.')
     elseif self.state == 'READY' and self.stuck then
       status = 'Out of money and can\'t drive? The repair costs ' .. dollars(self.stuck.cost) .. ' and you have '
         .. dollars(self.profile.progression.balance) .. '. If your car will not move, '
