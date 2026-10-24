@@ -41,7 +41,7 @@ function M.list()
     { id = 'paceGift', name = 'Pace Gift', activate = true,
       description = 'Activate to take ' .. minutes(M.PACE_GIFT_SECONDS) .. ' off your stage clock.' },
     { id = 'insurance', name = 'Insurance',
-      description = 'If a wreck you cannot pay for would end your run, it pays for the repair once. Repairs do not lose it.' },
+      description = 'If you are out of money and your damaged car cannot move, it pays for the repair once. Repairs do not lose it.' },
     { id = 'luckyMile', name = 'Lucky Mile', activate = true,
       description = 'Activate to make the next ' .. M.LUCKY_MILE_KM .. ' km of driving pay ' .. times(M.LUCKY_MILE_MULTIPLIER) .. '.' },
   }

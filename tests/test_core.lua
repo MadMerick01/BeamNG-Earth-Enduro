@@ -471,39 +471,36 @@ do
   T.check(m:view().sessionStatus:find('More stages are coming'), 'last stage says more are coming')
 end
 
--- Ironman: a wrecked car the player cannot pay to repair ends the run after a short warning,
--- the game over is saved, and Restart stage starts again from the stage start.
+-- Out of money and can't drive: a damaged car the player cannot pay to repair, standing still for
+-- STUCK_SECONDS, gets the prompt with Restart stage. Nothing ends the run by itself.
 do
   local Core = require('beamngEarthEnduro/core')
   local m,mio,ma,_,_,g=F.controller()
   g.starter = { engine = 'burnside_engine_i6' }
   m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
-  g.damage = Core.WRECKED_DAMAGE - 1; m:tick(0.1)
-  T.eq(m:view().wreck, nil, 'heavy but not wrecked damage is no game over')
-  g.damage = Core.WRECKED_DAMAGE; m:tick(0.1)
-  T.check(m:view().wreck ~= nil, 'wrecked car the player cannot pay for starts the countdown')
-  T.eq(m:view().stateLabel, 'WRECKED', 'HUD warns of the wreck'); T.eq(m:view().wreck.cost, Core.repairCost(Core.WRECKED_DAMAGE), 'warning shows the repair')
-  m:addTestMoney(); m:tick(0.1); T.eq(m:view().wreck, nil, 'being able to pay ends the warning')
-  g.damage = 40000; m:tick(0.1); T.check(m:view().wreck ~= nil, 'a bigger wreck than the balance warns again')
-  F.advance(m, Core.GAME_OVER_DELAY + 0.5)
-  T.check(m:view().gameOver, 'still unable to pay after the warning: game over'); T.eq(m:view().stateLabel, 'GAME OVER', 'game over label')
+  g.damage = Core.STUCK_DAMAGE - 1; F.advance(m, Core.STUCK_SECONDS + 1)
+  T.eq(m:view().stuck, nil, 'light damage is never stuck')
+  g.damage = 10000; F.advance(m, Core.STUCK_SECONDS - 1)
+  T.eq(m:view().stuck, nil, 'not stuck before the car has stood still long enough')
+  F.advance(m, 2)
+  T.check(m:view().stuck ~= nil, 'broke and standing still: stuck'); T.eq(m:view().stateLabel, 'STUCK', 'HUD label')
+  T.eq(m:view().stuck.cost, Core.repairCost(10000), 'prompt shows the repair'); T.eq(m:view().stuck.action, 'restart', 'Restart stage offered')
   T.check(m:view().sessionStatus:find('Restart stage'), 'player told how to go on')
-  T.eq(mio.files[A].gameOver, true, 'game over saved straight away')
-  T.check(not m:view().saveAllowed and not m:view().testMoneyAllowed and not m:view().repairQuoteAllowed, 'everything but restart locked')
-  T.check(not m:manualSave(), 'save refused after game over'); T.check(not m:addTestMoney(), 'no money after game over')
-  local distance = m:view().totalDistanceKm
-  ma.pose = F.position(0.0001, 0); m:tick(0.1); T.eq(m:view().totalDistanceKm, distance, 'no mileage after game over')
-  m:reload(); T.check(m:view().gameOver, 'reloading does not undo game over')
-  T.check(m:view().restartAllowed, 'restart offered')
-  local spawns = #g.spawns
-  T.check(m:restartStage(), 'game over restarts with one press')
-  T.eq(m:view().gameOver, false, 'restart clears game over'); T.eq(m:view().balance, 0, 'money reset')
+  F.advance(m, 60); T.eq(m:view().gameOver, nil, 'no game over'); T.check(m:view().saveAllowed, 'Save still works')
+  ma.pose = F.position(0.0001, 0); m:tick(0.1); T.eq(m:view().stuck, nil, 'moving off clears it')
+  F.advance(m, Core.STUCK_SECONDS + 1); T.check(m:view().stuck ~= nil, 'stuck again after standing still')
+  m:addTestMoney(); m:tick(0.1); T.eq(m:view().stuck, nil, 'being able to pay clears it')
+  m.paused = function() return true end; m.profile.progression.balance = 0
+  F.advance(m, Core.STUCK_SECONDS + 1); T.eq(m:view().stuck, nil, 'paused time does not count')
+  m.paused = function() return false end
+
+  -- Restart stage from the prompt still asks to confirm.
+  F.advance(m, Core.STUCK_SECONDS + 1); T.check(m:view().stuck ~= nil, 'stuck')
+  T.check(not m:restartStage(), 'first press asks to confirm'); T.check(m:restartStage(), 'second press restarts')
+  T.eq(m:view().stuck, nil, 'restart clears it'); T.eq(m:view().balance, 0, 'money reset')
   T.eq(m:view().totalDistanceKm, 0, 'mileage reset'); T.eq(m.mode, 'start', 'player sent to the start')
-  T.eq(m:view().resume.latitude, 0, 'start coordinates shown'); T.eq(mio.files[B].atStart, true, 'restart saved')
-  g.spawnedFrom = nil; ma.pose = F.position(); m:tick(0.1)
-  T.eq(#g.spawns, spawns + 1, 'starter car given at the start again')
+  T.eq(m:view().resume.latitude, 0, 'start coordinates shown'); T.eq(m.profile.atStart, true, 'restart saved')
   local r = F.controller({ io = mio }); T.eq(r.mode, 'start', 'a restarted save still sends the player to the start')
-  T.check(r:view().resume ~= nil and not r:view().gameOver, 'restarted save loads at the start')
   local config = mio.files[CONFIG]; mio.files[CONFIG] = { base = F.position(0.5, 0.5), resumeRadiusMetres = 50 }
   r = F.controller({ io = mio }); T.eq(r:view().resume.latitude, 0.5, 'a restarted save goes to the stage start after it moves')
   mio.files[CONFIG] = config
@@ -514,14 +511,23 @@ do
   T.check(m:restartStage(), 'second press restarts'); T.eq(m:view().balance, 0, 'confirmed restart resets the money')
   mio.writeFails = true; m:restartStage(); T.check(not m:restartStage(), 'failed restart reported')
   T.check(m:view().saveFeedback:find('try again'), 'failed restart says to try again')
+  mio.writeFails = false
 
-  -- A part change cannot be used to mend a wreck the player cannot pay for.
+  -- A save from when a wreck ended the run is restarted when it loads.
+  m,mio,ma=F.controller()
+  m:tick(0.1); m:addTestMoney(); T.check(m:manualSave(), 'saved')
+  for _, file in ipairs({ A, B }) do if type(mio.files[file]) == 'table' then mio.files[file].gameOver = true end end
+  r = F.controller({ io = mio })
+  T.eq(r.mode, 'start', 'old game over sent to the start'); T.eq(r:view().balance, 0, 'with the stage starting money')
+  T.check(r:view().saveFeedback:find('no longer end'), 'player told why')
+
+  -- A part change can be reverted on a damaged car the player cannot pay for; the repair stays owed.
   m,_,_,_,_,g=F.controller()
   m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
   g.damage = 40000; m:tick(0.1)
   g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
-  T.check(not m:revertParts(false), 'revert refused for an unpaid wreck'); T.check(m:view().wreck ~= nil, 'wreck still counted after the change')
-  F.advance(m, Core.GAME_OVER_DELAY + 0.5); T.check(m:view().gameOver, 'parts change does not escape game over')
+  T.check(m:revertParts(false), 'revert allowed'); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().repairOwed, Core.repairCost(40000), 'repair still owed after the revert')
 end
 
 -- Each stage sets its starting money: Stage 1 starts with $3000, on a fresh start and after a restart.

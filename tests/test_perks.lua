@@ -122,7 +122,7 @@ do
   T.check(c:buyCar(), 'second car bought'); T.eq(c:view().timer.penaltySeconds, 300, 'No Penalty covers the new car'); T.eq(c:view().perk.held, nil, 'and is used up')
 end
 
--- Insurance: keeps the player in the rally once instead of game over, and survives repairs.
+-- Insurance: pays the repair once when the player is out of money and can't drive, and survives repairs.
 do
   local Core = require('beamngEarthEnduro/core')
   local c, io, _, _, _, g = F.controller()
@@ -131,14 +131,13 @@ do
   T.eq(c:view().perk.repairNote, 'Repairs keep your Insurance perk.', 'Garage says repairs keep Insurance')
   T.check(c:repairVehicle(), 'repaired'); T.eq(c:view().perk.held.id, 'insurance', 'repair keeps Insurance')
   c.profile.progression.balance = 0
-  g.damage = 40000; c:tick(0.1); T.check(c:view().wreck.insured, 'wreck notice says Insurance will pay')
-  F.advance(c, Core.GAME_OVER_DELAY + 0.5)
-  T.eq(c:view().gameOver, false, 'Insurance prevents game over'); T.eq(g.damage, 0, 'car repaired'); T.eq(c:view().balance, 0, 'for free')
+  local penalty = c:view().timer.penaltySeconds
+  g.damage = 40000; F.advance(c, Core.STUCK_SECONDS + 1)
+  T.eq(g.damage, 0, 'car repaired'); T.eq(c:view().balance, 0, 'for free'); T.eq(c:view().stuck, nil, 'not stuck')
+  T.eq(c:view().timer.penaltySeconds, penalty + Core.PENALTY_SECONDS, 'the repair costs time')
   T.eq(c:view().perk.held, nil, 'Insurance used up'); T.eq(c:view().perk.flash.title, 'INSURANCE PAID', 'player told')
-  T.eq(c:view().wreck, nil, 'wreck cleared')
-  g.damage = 40000; c:tick(0.1); F.advance(c, Core.GAME_OVER_DELAY + 0.5)
-  T.check(c:view().gameOver, 'only once: the next wreck is game over')
-  T.eq(io.files[A].gameOver, true, 'game over saved')
+  g.damage = 40000; F.advance(c, Core.STUCK_SECONDS + 1)
+  T.check(c:view().stuck ~= nil, 'only once: next time the player is stuck')
 end
 
 -- Stage 2: the perk held comes along; a running perk and an offer stay behind. Restart goes back to it.

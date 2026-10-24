@@ -2,7 +2,7 @@
   "domElement": "<beamng-earth-enduro-hud></beamng-earth-enduro-hud>",
   "name": "World Ironman Enduro Rally",
   "types": ["ui.apps.categories.utility"],
-  "description": "World Ironman Enduro Rally: long BeamNG.Earth stages where a wreck you cannot pay for ends the run.",
+  "description": "World Ironman Enduro Rally: long BeamNG.Earth stages where you live with your damage and your bills.",
   "css": {"width": "360px", "height": "600px", "top": "100px", "left": "20px"},
   "author": "World Ironman Enduro Rally",
   "version": "0.1.0",

@@ -188,22 +188,24 @@ do
   T.eq(c:view().balance, 500, 'fee lost'); T.eq(c.profile.vehicle.damage, 600, 'car comes back with its damage owed')
 end
 
--- A totalled car the player cannot pay for ends the run, not the rally.
+-- Out of money and can't drive on a run: Quit run is offered, and quitting repairs the car as far as
+-- the money goes. Nothing ends the run by itself.
 do
+  local Core = require('beamngEarthEnduro/core')
   local c, io, a, _, _, g = F.controller({ random = seeded(9), startingMoney = 3000 })
   c:tick(0.1)
   T.check(c:enterCarKov(), 'entered')
   a.pose = location.copy(c:view().resume); c:tick(0.1)
   T.eq(c:view().balance, 1000, '$1,000 left')
-  g.damage = 20000; c:tick(0.1)
-  T.eq(c:view().stateLabel, 'WRECKED', 'wreck shown'); T.check(c:view().sessionStatus:find('CarKov run is over'), 'says the run ends, not the rally')
-  F.advance(c, 11)
+  g.damage = 20000; F.advance(c, Core.STUCK_SECONDS + 1)
+  T.eq(c:view().stateLabel, 'STUCK', 'stuck shown'); T.eq(c:view().stuck.action, 'quit', 'Quit run offered')
+  T.check(c:view().sessionStatus:find('Quit run'), 'status says to quit the run')
+  F.advance(c, 30); T.eq(c:view().carkov.active, true, 'the run is not ended for the player')
+  c:quitCarKov(); T.check(c:quitCarKov(), 'quit confirmed')
   local v = c:view()
-  T.eq(v.gameOver, false, 'not game over'); T.eq(v.carkov.active, false, 'run over'); T.eq(v.carkov.flash.result, 'wrecked', 'failure shown')
+  T.eq(v.carkov.active, false, 'run over'); T.eq(v.carkov.flash.result, 'stranded', 'failure shown')
   T.eq(v.balance, 0, 'the repair took what money there was'); T.eq(c.profile.vehicle.damage, nil, 'car comes back repaired')
   T.eq(g.damage, 0, 'car mended'); T.eq(v.mode, 'resume', 'back to the stage')
-  a.pose = F.position(); c:tick(0.1); F.advance(c, 11)
-  T.eq(c:view().gameOver, false, 'the stage carries on')
 end
 
 -- Reverting a part change the player cannot afford on a damaged car leaves the money alone; the
@@ -238,14 +240,17 @@ do
   T.eq(c:view().carkov.active, true, 'still on the run')
 end
 
--- Insurance still pays for a wreck on the run; repairs on the run cost no time and keep No Penalty.
+-- Insurance pays when the player is out of money and can't drive on the run; repairs on the run
+-- cost no time and keep No Penalty.
 do
+  local Core = require('beamngEarthEnduro/core')
   local c, io, a, _, _, g = F.controller({ random = seeded(13), startingMoney = 2000 })
   c:tick(0.1)
   c.profile.progression.perk = 'insurance'
   T.check(c:enterCarKov(), 'entered')
   a.pose = location.copy(c:view().resume); c:tick(0.1)
-  g.damage = 20000; F.advance(c, 11)
+  g.damage = 20000; F.advance(c, Core.STUCK_SECONDS + 1)
+  T.eq(g.damage, 0, 'Insurance paid the repair'); T.eq(c:view().stuck, nil, 'no longer stuck')
   T.eq(c:view().carkov.active, true, 'Insurance kept the run going'); T.eq(c.profile.progression.penaltySeconds, 0, 'no time penalty on the run')
   c.profile.progression.perk = 'noPenalty'; c:addTestMoney(); g.damage = 500
   T.check(c:requestRepairQuote() and c:repairVehicle(), 'repaired on the run')
@@ -256,7 +261,7 @@ do
   T.check(c:view().perk.activateAllowed, 'Lucky Mile works on the run')
 end
 
--- Entry needs the player on their stage with no open bill or wreck.
+-- Entry needs the player on their stage with no open bill.
 do
   local c, io, a, _, _, g = F.controller({ random = seeded(17), startingMoney = 50000 })
   T.check(not c:enterCarKov(), 'not before the stage has started')

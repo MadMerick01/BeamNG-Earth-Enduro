@@ -29,12 +29,12 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var alerts = {
         route: function (d) { return !!d.resume && !onCarKov(d) },
         carkov: function (d) { return !!d.resume && onCarKov(d) },
-        garage: function (d) { return !!d.partsChange || !!d.carChange || !!d.wreck || d.repairOwed > 0 }
+        garage: function (d) { return !!d.partsChange || !!d.carChange || d.repairOwed > 0 }
       }
       scope.tabAlert = function (id) { return !!alerts[id] && alerts[id](scope.data || {}) }
-      // Opens a tab when its bill, wreck or coordinates first appear; the player can switch away after.
+      // Opens a tab when its bill or coordinates first appear; the player can switch away after.
       var autoOpen = [
-        ['garage', function (d) { return !!d.wreck }], ['garage', function (d) { return !!d.carChange }],
+        ['garage', function (d) { return !!d.carChange }],
         ['garage', function (d) { return !!d.partsChange }], ['carkov', alerts.carkov], ['route', alerts.route]
       ]
       var follow = function (previous, next) {
@@ -42,12 +42,11 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           if (autoOpen[i][1](next) && !autoOpen[i][1](previous)) { scope.tab = autoOpen[i][0]; return }
         }
       }
-      // The one message under the clock: the most urgent of wreck, game over, extraction complete, a
+      // The one message under the clock: the most urgent of out of money and can't drive, extraction complete, a
       // hostile inbound, how a CarKov run just ended or its hostile was dealt with, the extraction
       // countdown, a hostile on the player's tail, stage complete, a sponsor bonus just paid, a perk just used or lost, a perk on offer, then the status.
       var notices = {
-        wreck: { kind: 'wreck', title: 'WRECKED', color: '#eb5757', alert: true },
-        over: { kind: 'over', title: 'GAME OVER', color: '#eb5757', alert: true },
+        stuck: { kind: 'stuck', title: 'OUT OF MONEY AND CAN\'T DRIVE?', color: '#eb5757', alert: true },
         done: { kind: 'done', title: '\uD83C\uDFC1 STAGE COMPLETE \uD83C\uDFC1', color: '#f2c94c', alert: false }
       }
       var statusNotice = { kind: 'status', title: '', color: '#a7e5c9', alert: false }
@@ -60,8 +59,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var hostileNotice = { kind: 'hostile', title: '', color: '#eb5757', alert: true }
       scope.notice = function (d) {
         if (!d) return null
-        if (d.wreck) return notices.wreck
-        if (d.gameOver) return notices.over
+        if (d.stuck) return notices.stuck
         if (d.carkov && d.carkov.complete) return extractedNotice
         var threat = d.carkov && d.carkov.hostile
         if (threat && threat.phase === 'inbound') {
