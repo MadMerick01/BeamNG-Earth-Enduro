@@ -4,7 +4,7 @@ local location = require('beamngEarthEnduro/location')
 local hostile = require('beamngEarthEnduro/hostile')
 local north = 1 / 111195.0802 -- degrees latitude per metre
 T.eq(hostile.REWARD, 5000, 'bounty is $5,000'); T.eq(hostile.STILL_SECONDS, 10, 'stopped for 10 s'); T.eq(hostile.CLAIM_METRES, 10, 'claimed within 10 m')
-T.eq(hostile.MODEL, nil, 'uses the player car for now'); T.eq(hostile.CONFIG, nil, 'no hostile config yet')
+T.eq(hostile.MODEL, 'roamer', 'the hostile is a Roamer'); T.eq(hostile.CONFIG, 'vehicles/roamer/robber_light.pc', 'the Robber Light config')
 
 -- The distance into the run is between 3 and 10 km.
 T.eq(hostile.pickKm(function() return 0 end), 3, 'earliest at 3 km'); T.near(hostile.pickKm(function() return 0.999999 end), 10, 1e-4, 'latest at 10 km')
@@ -96,7 +96,7 @@ do
   F.advance(c, 2.5)
   v = c:view()
   T.eq(#h.spawns, 1, 'hostile spawned'); T.eq(h.spawns[1].behind, 300, '300 m behind')
-  T.eq(h.spawns[1].model, g.model, 'in the player car model'); T.eq(h.spawns[1].config.parts.engine, g.fitted.engine, 'with its parts')
+  T.eq(h.spawns[1].model, 'roamer', 'a Roamer'); T.eq(h.spawns[1].config, 'vehicles/roamer/robber_light.pc', 'in the Robber Light config')
   T.eq(v.carkov.hostile.phase, 'chasing', 'chasing'); T.eq(v.carkov.hostile.distanceMetres, 300, 'distance shown')
   F.advance(c, 2.1)
   T.eq(h.chases, 1, 'chase order sent again after the spawn')
@@ -128,6 +128,16 @@ do
   T.check(c:manualSave(), 'saved'); T.eq(c.profile.carkov.hostileDone, true, 'save records the hostile came')
   c:reload(); c:tick(0.1); drive(c, a, 500)
   T.eq(#h.spawns, 1, 'no second hostile after a reload')
+end
+
+-- With no hostile config set, the hostile is a copy of the player's car.
+do
+  local model, config = hostile.MODEL, hostile.CONFIG
+  hostile.MODEL, hostile.CONFIG = nil, nil
+  local c, a, h, g = onRun()
+  drive(c, a, 4050); F.advance(c, 5.1)
+  T.eq(h.spawns[1].model, g.model, 'in the player car model'); T.eq(h.spawns[1].config.parts.engine, g.fitted.engine, 'with its parts')
+  hostile.MODEL, hostile.CONFIG = model, config
 end
 
 -- The run ending removes the hostile.
