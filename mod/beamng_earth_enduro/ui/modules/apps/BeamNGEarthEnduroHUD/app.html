@@ -51,6 +51,7 @@
       </div>
     </div>
     <div ng-if="notice(data).kind === 'done'" style="color:#f2f6f5;">{{data.stage.name}} conquered in {{data.totalDistanceKm | number:1}} km with ${{data.balance | number:0}} left<span ng-if="data.timer">, in {{clock(data.timer.elapsedSeconds)}}</span>.</div>
+    <div ng-if="notice(data).kind === 'done' && data.stage.finishReward" style="margin-top:4px;color:#6fcf97;font-weight:bold;">Stage complete reward: +${{data.stage.finishReward | number:0}}</div>
     <div ng-if="notice(data).kind === 'done' && data.sponsor" style="margin-top:4px;color:#f2c94c;font-weight:bold;">Sponsor bonuses earned: {{data.sponsor.earned}} (${{data.sponsor.earnedMoney | number:0}})</div>
     <div ng-if="notice(data).kind === 'done' && data.nextStage" style="margin-top:8px;">
       <div style="color:#f2f6f5;">Next: {{data.nextStage.name}}, starting at {{data.nextStage.startTown}}. Your car and ${{data.balance | number:0}} come with you.</div>
@@ -216,8 +217,9 @@
       <div style="font-weight:bold;color:#a7e5c9;">Tips</div>
       <ul style="margin:4px 0 0;padding-left:18px;">
         <li>Copy the coordinates on the Route tab, paste them into the map search and teleport there to start or resume.</li>
-        <li>You earn $100 for every kilometre you drive. Teleports earn nothing.</li>
-        <li>Your sponsor pays a bonus for every stretch of driving: the bar under your money shows how far to the next one. Teleports do not count.</li>
+        <li>You earn $250 for every kilometre you drive. Teleports earn nothing.</li>
+        <li>Your sponsor pays $4,000 for every 10 km of driving: the bar under your money shows how far to the next one. Teleports do not count.</li>
+        <li>Reaching a stage's finish pays a $25,000 stage complete reward. A CarKov extraction pays $15,000.</li>
         <li>Save often. Money, mileage and parts since your last Save are lost when you exit or load the level again.</li>
         <li>One save: you live with your damage and your bills. There is no wreck limit, but a car you cannot drive and cannot pay to fix leaves you stuck: restart the stage, or quit the run on CarKov.</li>
         <li>Stages are optional: start any of them from the Stages tab. Your car and money come with you, and a restart takes you back to how you started the stage. A &#10003; marks the stages you have finished.</li>

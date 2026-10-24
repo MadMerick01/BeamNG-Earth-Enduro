@@ -135,7 +135,7 @@ do
   F.advance(c, 1.1)
   v = c:view()
   T.eq(v.carkov.active, false, 'run over')
-  T.check(v.balance >= balance + REWARD + 780 and v.balance <= balance + REWARD + 820, 'reward and the last 8 km paid')
+  T.check(v.balance >= balance + REWARD + 1950 and v.balance <= balance + REWARD + 2050, 'reward and the last 8 km paid')
   local done = v.carkov.complete
   T.check(done ~= nil, 'EXTRACTION COMPLETE shown'); T.eq(done.reward, REWARD, 'shows the reward'); T.eq(done.balance, v.balance, 'shows the balance')
   T.check(done.distanceKm > runKm + 7, 'shows the run distance'); T.check(done.seconds >= runSeconds, 'shows the run time')
@@ -163,7 +163,7 @@ do
   local balance = c:view().balance
   T.check(not c:quitCarKov(), 'first press asks to confirm'); T.eq(c:view().carkov.quitArmed, true, 'Confirm quit shown')
   T.check(c:quitCarKov(), 'quit'); T.eq(c:view().carkov.active, false, 'run over')
-  T.eq(c:view().balance, balance, 'money earned on the run kept'); T.check(balance < 5000 - FEE + 300, 'fee not refunded')
+  T.eq(c:view().balance, balance, 'money earned on the run kept'); T.check(balance < 5000 - FEE + 750, 'fee not refunded')
   T.eq(c:view().carkov.flash.result, 'quit', 'quit shown'); T.eq(c:view().mode, 'resume', 'back to the stage')
   T.check(not c:quitCarKov(), 'nothing left to quit')
 end

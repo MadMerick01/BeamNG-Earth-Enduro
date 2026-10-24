@@ -14,7 +14,7 @@ local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
 -- Money earned per kilometre of counted driving, and the amount the HUD test button adds.
-local EARNINGS_PER_KM = 100
+local EARNINGS_PER_KM = 250
 local TEST_MONEY = 10000
 local MAX_BALANCE = 9007199254740991
 -- Repair pricing from the vehicle's overall damage (BeamNG's own traffic code treats about 50 as a
@@ -951,12 +951,14 @@ function M.new(deps)
       end
       return
     end
-    -- Reaching the finish completes the stage, and the finish is saved straight away.
+    -- Reaching the finish completes the stage and pays the stage complete reward, and the finish
+    -- is saved straight away.
     if self.arrived and not self.stageFinished then
       local left = location.distance(sample, self.stage.finish)
       if left and left <= self.stage.finishRadiusMetres then
         self.stageFinished, self.stuck, self.still = true, nil, nil
         self.profile.progression.perkOffer = nil
+        self:addMoney(self.stage.finishReward)
         self.diag:event('stage_finished', self.stage.id .. string.format(' %.1f km', self.profile.progression.totalDistanceKm))
         self:manualSave()
       end
@@ -1499,7 +1501,7 @@ function M.new(deps)
         id = stage.id, name = stage.name, number = stage.number, startTown = stage.startTown, finishTown = stage.finishTown,
         summary = stage.summary, difficulty = stage.difficulty, lengthKm = stage.lengthKm, lengthIsStraight = stage.lengthIsStraight,
         targetSeconds = stage.targetSeconds, estimate = stage.targetIsEstimate,
-        sponsorBonus = stage.sponsorBonus, sponsorEveryKm = stage.sponsorEveryKm,
+        sponsorBonus = stage.sponsorBonus, sponsorEveryKm = stage.sponsorEveryKm, finishReward = stage.finishReward,
         completed = done[stage.id] == true, current = self.stage ~= nil and self.stage.id == stage.id,
       }
     end
@@ -1622,7 +1624,7 @@ function M.new(deps)
       stage = self.stage and {
         name = self.stage.name, finish = location.copy(self.stage.finish),
         startTown = self.stage.startTown, finishTown = self.stage.finishTown, briefing = self.stage.briefing,
-        number = self.stage.number, count = self.stage.count,
+        number = self.stage.number, count = self.stage.count, finishReward = self.stage.finishReward,
       } or nil,
       -- Offered once the stage is finished, when there is a stage after it.
       nextStage = nextStage and { name = nextStage.name, startTown = nextStage.startTown } or nil,

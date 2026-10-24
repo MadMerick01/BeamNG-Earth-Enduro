@@ -6,16 +6,18 @@
 -- finishRadiusMetres of it. Each stage also has a difficulty from 1 (gentle) to 5 (deadly), not shown in the HUD,
 -- and the road distance in lengthKm, shown in the stage list (approximate; leave it out and the HUD shows the
 -- straight-line distance). Pay is the same on every stage. The first stage is where a new player
--- starts. A stage can set its own sponsorBonus (dollars) and sponsorEveryKm; otherwise the defaults
--- below apply. Stages are optional: the player can start any stage
+-- starts. A stage can set its own sponsorBonus (dollars), sponsorEveryKm and finishReward (dollars,
+-- paid on reaching the finish); otherwise the defaults below apply. Stages are optional: the player can start any stage
 -- from the Stages tab at any time, taking the car and money they have. List order is only the order
 -- the HUD shows them in, and the stage a finish offers as next.
 local location = require('beamngEarthEnduro/location')
 local M = {}
 
 -- Sponsor bonus: paid once for every SPONSOR_EVERY_KM of counted driving on a stage.
-M.SPONSOR_BONUS = 2000
+M.SPONSOR_BONUS = 4000
 M.SPONSOR_EVERY_KM = 10
+-- Stage complete reward: paid once when the player reaches the finish.
+M.FINISH_REWARD = 25000
 
 M.list = {
   {
@@ -147,6 +149,7 @@ local function copy(stage, index)
     lengthIsStraight = stage.lengthKm == nil,
     sponsorBonus = stage.sponsorBonus or M.SPONSOR_BONUS,
     sponsorEveryKm = stage.sponsorEveryKm or M.SPONSOR_EVERY_KM,
+    finishReward = stage.finishReward or M.FINISH_REWARD,
   }
 end
 
