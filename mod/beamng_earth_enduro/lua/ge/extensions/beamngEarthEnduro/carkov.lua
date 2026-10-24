@@ -11,6 +11,7 @@ M.ENTRY_FEE = 2000
 M.REWARD = 15000
 M.EXTRACTION_KM = 15 -- straight line from the drop
 M.EXTRACTION_RADIUS_METRES = 100 -- the extraction counts once the car is this close
+M.DROP_RADIUS_METRES = 500 -- arriving anywhere this close to the drop point starts the run
 -- Random tries before giving up: drop points, then extraction bearings around each drop.
 local DROP_TRIES, BEARING_TRIES = 5000, 64
 

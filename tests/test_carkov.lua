@@ -93,6 +93,9 @@ do
   T.near(saved.carkov.stage.progression.totalDistanceKm, stageKm, 1e-9, 'stage mileage kept'); T.near(saved.carkov.stage.progression.drivingSeconds, stageDriving, 1e-9, 'stage clock kept')
   T.eq(saved.progression.perk, 'luckyMile', 'perk held goes on the run'); T.eq(saved.progression.totalDistanceKm, 0, 'run mileage starts at zero')
   T.eq(saved.vehicle.damage, 400, 'car damage goes on the run'); T.check(saved.vehicle.config ~= nil, 'car goes on the run')
+  -- The drop zone reaches 500 m from the drop point: just outside does not count.
+  T.eq(c:view().carkov.dropRadiusMetres, 500, 'HUD shows the drop zone')
+  a.pose = location.destination(v.resume, 90, 520); c:tick(0.1); T.eq(c:view().arrived, false, '520 m off is outside the drop zone')
   -- Reaching the drop brings the player's car; driving pays, and perks keep coming.
   local spawns = #g.spawns
   a.pose = location.copy(v.resume); c:tick(0.1)
@@ -141,6 +144,17 @@ do
   T.eq(c:view().balance, balance, 'money earned on the run kept'); T.check(balance < 5000 - FEE + 300, 'fee not refunded')
   T.eq(c:view().carkov.flash.result, 'quit', 'quit shown'); T.eq(c:view().mode, 'resume', 'back to the stage')
   T.check(not c:quitCarKov(), 'nothing left to quit')
+end
+
+-- Teleporting a little way off the drop point, inside the zone, starts the run.
+do
+  local c, io, a = F.controller({ random = seeded(21), startingMoney = 2000 })
+  c:tick(0.1); T.check(c:enterCarKov(), 'entered'); c:tick(0.1)
+  local drop = c:view().resume
+  a.pose = location.destination(drop, 200, 450); c:tick(0.1)
+  T.eq(c:view().arrived, true, '450 m off the drop point counts'); T.eq(c:view().stateLabel, 'CARKOV', 'run under way')
+  T.check(c:manualSave(), 'saved'); c:reload(); a.pose = location.destination(c.profile.resume, 0, 100); c:tick(0.1)
+  T.eq(c:view().arrived, false, 'a save on the run uses the normal 50 m')
 end
 
 -- Quitting before reaching the drop goes back with the car entered with.

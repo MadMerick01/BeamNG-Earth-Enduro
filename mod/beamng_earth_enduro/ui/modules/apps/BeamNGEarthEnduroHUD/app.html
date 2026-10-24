@@ -153,6 +153,7 @@
             <button type="button" aria-label="Copy CarKov drop coordinates" ng-click="copyCoordinates(data.resume)" ng-disabled="!coordinates(data.resume)">Copy</button>
           </div>
         </label>
+        <div ng-if="data.mode === 'drop'" style="margin-top:4px;font-size:13px;">Anywhere within {{data.carkov.dropRadiusMetres | number:0}} m of the drop point counts, so you can click a little way off on the map to dodge a cliff or river.</div>
         <div ng-if="data.resumeDistanceMetres != null" style="margin-top:4px;">You are {{data.resumeDistanceMetres / 1000 | number:1}} km away.</div>
       </div>
       <div ng-if="data.carkov.active" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">

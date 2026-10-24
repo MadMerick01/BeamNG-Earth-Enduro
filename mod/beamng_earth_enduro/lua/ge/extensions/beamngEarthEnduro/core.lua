@@ -873,7 +873,9 @@ function M.new(deps)
     -- confirms the player is back on their trek.
     if not self.arrived and self.startupTarget then
       local away = location.distance(sample, self.startupTarget)
-      if away and away <= self.configuration.resumeRadiusMetres then
+      -- A CarKov drop zone is wider, so the player can teleport a little way off to dodge a cliff or river.
+      local radius = self.mode == 'drop' and carkov.DROP_RADIUS_METRES or self.configuration.resumeRadiusMetres
+      if away and away <= radius then
         self.arrived = true
         self.diag:event('arrived', string.format('%.1f m', away))
       end
@@ -1204,6 +1206,7 @@ function M.new(deps)
     local flash = self.carkovFlash and self.clock - self.carkovFlash.at < CARKOV_SHOWN_FOR
     return {
       fee = carkov.ENTRY_FEE, reward = carkov.REWARD, extractionKm = carkov.EXTRACTION_KM,
+      dropRadiusMetres = carkov.DROP_RADIUS_METRES,
       active = run ~= nil,
       enterAllowed = self:carkovEntryProblem() == nil,
       extraction = run and location.copy(run.extraction) or nil,
