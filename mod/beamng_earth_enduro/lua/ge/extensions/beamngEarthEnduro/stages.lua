@@ -3,23 +3,19 @@
 -- start and finish, which the HUD shows so the player can find them on the map, and a short
 -- briefing shown when the stage starts, the money the player starts it with, and the time limit
 -- in seconds (the stage's Google Maps driving time; set targetIsEstimate = true to mark a guess). The finish counts once the vehicle is within
--- finishRadiusMetres of it. Each stage also has a difficulty from 1 (gentle) to 5 (deadly), which
--- sets its pay (see PAY_BY_DIFFICULTY), and the road distance in lengthKm (approximate; leave it out
--- and the HUD shows the straight-line distance). The first stage is where a new player starts. A
--- stage can set its own earningsPerKm, sponsorBonus (dollars) and sponsorEveryKm; otherwise its
--- difficulty and the defaults below set them. Stages are optional: the player can start any stage
+-- finishRadiusMetres of it. Each stage also has a difficulty from 1 (gentle) to 5 (deadly), shown in
+-- the stage list, and the road distance in lengthKm (approximate; leave it out and the HUD shows the
+-- straight-line distance). Pay is the same on every stage. The first stage is where a new player
+-- starts. A stage can set its own sponsorBonus (dollars) and sponsorEveryKm; otherwise the defaults
+-- below apply. Stages are optional: the player can start any stage
 -- from the Route tab at any time, taking the car and money they have. List order is only the order
 -- the HUD shows them in, and the stage a finish offers as next.
 local location = require('beamngEarthEnduro/location')
 local M = {}
 
--- Driving pay per km, and the sponsor bonus paid once for every SPONSOR_EVERY_KM of counted
--- driving on a stage, before the stage's difficulty scales them.
-M.EARNINGS_PER_KM = 100
+-- Sponsor bonus: paid once for every SPONSOR_EVERY_KM of counted driving on a stage.
 M.SPONSOR_BONUS = 2000
 M.SPONSOR_EVERY_KM = 10
--- How much a stage of each difficulty multiplies its pay by, so the rough roads are worth the risk.
-M.PAY_BY_DIFFICULTY = { 1, 1, 1, 1.5, 2 }
 
 M.list = {
   {
@@ -52,19 +48,16 @@ M.list = {
 }
 
 local function copy(stage, index)
-  local difficulty = stage.difficulty or 1
-  local pay = M.PAY_BY_DIFFICULTY[difficulty] or 1
   return {
     number = index, count = #M.list,
     id = stage.id, name = stage.name, startTown = stage.startTown, finishTown = stage.finishTown,
     briefing = stage.briefing, start = location.copy(stage.start), finish = location.copy(stage.finish),
     finishRadiusMetres = stage.finishRadiusMetres, startingMoney = stage.startingMoney or 0,
     targetSeconds = stage.targetSeconds, targetIsEstimate = stage.targetIsEstimate == true,
-    difficulty = difficulty,
+    difficulty = stage.difficulty or 1,
     lengthKm = stage.lengthKm or math.floor((location.distance(stage.start, stage.finish) or 0) / 1000 + 0.5),
     lengthIsStraight = stage.lengthKm == nil,
-    earningsPerKm = stage.earningsPerKm or math.floor(M.EARNINGS_PER_KM * pay + 0.5),
-    sponsorBonus = stage.sponsorBonus or math.floor(M.SPONSOR_BONUS * pay + 0.5),
+    sponsorBonus = stage.sponsorBonus or M.SPONSOR_BONUS,
     sponsorEveryKm = stage.sponsorEveryKm or M.SPONSOR_EVERY_KM,
   }
 end

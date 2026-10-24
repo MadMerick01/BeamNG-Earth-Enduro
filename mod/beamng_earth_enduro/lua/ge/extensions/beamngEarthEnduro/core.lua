@@ -865,8 +865,7 @@ function M.new(deps)
       local metres = location.distance(self.odometer, sample)
       if metres and metres <= MAX_DRIVING_SPEED * dt then
         local progression = self.profile.progression
-        -- A stage pays by its difficulty; a CarKov run pays the flat rate.
-        local rate = (not self.carkov and self.stage.earningsPerKm or EARNINGS_PER_KM) * (self:heldPerk() == 'doubleCash' and perks.DOUBLE_CASH_MULTIPLIER or 1)
+        local rate = EARNINGS_PER_KM * (self:heldPerk() == 'doubleCash' and perks.DOUBLE_CASH_MULTIPLIER or 1)
         if progression.luckyUntilKm then
           if progression.totalDistanceKm < progression.luckyUntilKm then rate = rate * perks.LUCKY_MILE_MULTIPLIER end
           if progression.totalDistanceKm + metres / 1000 >= progression.luckyUntilKm then progression.luckyUntilKm = nil end
@@ -1465,7 +1464,7 @@ function M.new(deps)
         id = stage.id, name = stage.name, number = stage.number, startTown = stage.startTown, finishTown = stage.finishTown,
         difficulty = stage.difficulty, lengthKm = stage.lengthKm, lengthIsStraight = stage.lengthIsStraight,
         targetSeconds = stage.targetSeconds, estimate = stage.targetIsEstimate,
-        earningsPerKm = stage.earningsPerKm, sponsorBonus = stage.sponsorBonus, sponsorEveryKm = stage.sponsorEveryKm,
+        sponsorBonus = stage.sponsorBonus, sponsorEveryKm = stage.sponsorEveryKm,
         completed = done[stage.id] == true, current = self.stage ~= nil and self.stage.id == stage.id,
       }
     end

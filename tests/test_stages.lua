@@ -24,16 +24,12 @@ do
     T.check(S.list[i].difficulty ~= nil, label .. ' sets its difficulty')
     T.check(stage.lengthKm > 0, label .. ' has a length')
   end
-  T.eq(S.first().earningsPerKm, 100, 'Zoji La pays the base rate'); T.eq(S.first().sponsorBonus, 2000, 'and the base sponsor bonus')
-  T.eq(S.get('stage_2').earningsPerKm, 100, 'Colo River pays the base rate')
-  -- Harder stages pay more; a stage can still set its own pay.
+  -- Pay does not depend on difficulty.
   local saved = S.list[2]
   S.list[2] = { id = 'deadly', name = 'Deadly', difficulty = 5, start = F.position(1, 1), finish = F.position(1, 1.1),
     finishRadiusMetres = 100, targetSeconds = 600 }
-  T.eq(S.get('deadly').earningsPerKm, 200, 'difficulty 5 doubles driving pay'); T.eq(S.get('deadly').sponsorBonus, 4000, 'and the sponsor bonus')
+  T.eq(S.get('deadly').sponsorBonus, S.first().sponsorBonus, 'a deadly stage pays the same sponsor bonus')
   T.check(S.get('deadly').lengthIsStraight and S.get('deadly').lengthKm == 11, 'no lengthKm falls back to the straight line')
-  S.list[2].difficulty, S.list[2].earningsPerKm = 4, 175
-  T.eq(S.get('deadly').earningsPerKm, 175, 'a stage can set its own pay'); T.eq(S.get('deadly').sponsorBonus, 3000, 'difficulty 4 pays 1.5 times the bonus')
   S.list[2] = saved
 end
 
