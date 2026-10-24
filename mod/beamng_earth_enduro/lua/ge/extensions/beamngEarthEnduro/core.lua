@@ -19,11 +19,15 @@ local EARNINGS_PER_KM = 250
 local TEST_MONEY = 10000
 local MAX_BALANCE = 9007199254740991
 -- Repair pricing from the vehicle's overall damage (BeamNG's own traffic code treats about 50 as a
--- scratch, 1000 as moderate and 30000 as major). Tune these after testing in game.
+-- scratch, 1000 as moderate and 30000 as major), scaled by what the car is worth: a car with a
+-- game Value of REFERENCE_CAR_VALUE pays REPAIR_COST_PER_DAMAGE per point, a car worth half that
+-- pays half. A repair never costs more than MAX_REPAIR_SHARE of the car's Value (the call-out fee
+-- aside). Tune these after testing in game.
 local REPAIR_MIN_DAMAGE = 50
 local REPAIR_CALLOUT_FEE = 100
 local REPAIR_COST_PER_DAMAGE = 0.5
-local MAX_REPAIR_COST = 20000
+local REFERENCE_CAR_VALUE = 25000
+local MAX_REPAIR_SHARE = 0.75
 -- Part pricing: a part's jbeam value, or a flat price when it has none. Parts taken off in the same
 -- change are traded in for a share of their value, which can lower the bill but never pays out.
 local DEFAULT_PART_PRICE = 250
@@ -60,15 +64,29 @@ local PERK_SHOWN_FOR = 6
 -- How long the HUD shows how a CarKov run ended, or how its hostile was dealt with. CarKov's fee
 -- and reward are set in carkov.lua, and the hostile's in hostile.lua.
 local CARKOV_SHOWN_FOR = 10
--- A puncture's tyre repair, as damage points, so every repair quote and bill includes it.
+-- A puncture's tyre repair, as damage points, so every repair quote and bill includes it. Like
+-- other damage it is priced by the car's Value: TYRE_REPAIR_COST on a REFERENCE_CAR_VALUE car.
 local PUNCTURE_DAMAGE = punctures.TYRE_REPAIR_COST / REPAIR_COST_PER_DAMAGE
 -- Perks that work on the stage clock, which does not run on a CarKov run, so they wait for the stage.
 local CLOCK_PERKS = { timeFreeze = true, paceGift = true }
 
--- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
-function M.repairCost(damage)
+-- The car's Value for repair pricing: its game Value, or the dealer's flat price when it has none.
+local function repairValue(value)
+  if type(value) ~= 'number' or value ~= value or value <= 0 or value == math.huge then return DEFAULT_CAR_PRICE end
+  return value
+end
+
+-- Dollars per damage point for a car worth this much.
+function M.repairRate(value)
+  return REPAIR_COST_PER_DAMAGE * repairValue(value) / REFERENCE_CAR_VALUE
+end
+
+-- Whole-dollar price to repair a car worth carValue with this much damage; 0 means nothing to repair.
+function M.repairCost(damage, carValue)
   if type(damage) ~= 'number' or damage ~= damage or damage < REPAIR_MIN_DAMAGE then return 0 end
-  return math.min(MAX_REPAIR_COST, math.floor(REPAIR_CALLOUT_FEE + damage * REPAIR_COST_PER_DAMAGE + 0.5))
+  local value = repairValue(carValue)
+  local parts = math.min(damage * M.repairRate(value), value * MAX_REPAIR_SHARE)
+  return math.floor(REPAIR_CALLOUT_FEE + parts + 0.5)
 end
 
 -- Compares the paid-for parts with the fitted ones. Returns { added, removed, cost } or nil when
@@ -473,13 +491,19 @@ function M.new(deps)
     return { id = vehicle.id, damage = vehicle.damage + self.owedDamage + self.punctureDamage }
   end
 
+  -- The game Value of the player's own car, when vehicleId is that car; repairs are priced from it.
+  function c:carValueOf(vehicleId)
+    local owned = self.ownedParts
+    if owned and vehicleId ~= nil and owned.id == vehicleId then return owned.value end
+  end
+
   -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
   function c:priceRepair()
     if not self.profile or self.error then return nil, 'unavailable' end
     if not self.garage then return nil, 'repair_unavailable' end
     local vehicle, why = self:inspectDamage()
     if not vehicle then return nil, why end
-    return vehicle, M.repairCost(vehicle.damage)
+    return vehicle, M.repairCost(vehicle.damage, self:carValueOf(vehicle.id))
   end
 
   local repairMessages = {
@@ -601,7 +625,7 @@ function M.new(deps)
     local previous = self.pendingParts
     local damage = previous and previous.damage
       or (self.lastDamage and self.lastDamage.id == snapshot.id and self.lastDamage.damage) or (self.owedDamage + self.punctureDamage)
-    local repair = M.repairCost(damage)
+    local repair = M.repairCost(damage, self:carValueOf(snapshot.id))
     local position = previous and previous.position
       or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil
     local discount = self:heldPerk() == 'partsDiscount' and math.floor(diff.cost * perks.PARTS_DISCOUNT_SHARE + 0.5) or 0
@@ -629,7 +653,7 @@ function M.new(deps)
     local base = sameCar and previous.base or snapshot
     local extras = M.partsDiff(base, snapshot)
     local price = math.floor((base.value or DEFAULT_CAR_PRICE) + 0.5)
-    local repair = M.repairCost(oldDamage)
+    local repair = M.repairCost(oldDamage, owned.value)
     local tradeIn = math.max(0, math.floor((owned.value or DEFAULT_CAR_PRICE) * CAR_TRADE_IN_SHARE + 0.5) - repair)
     local extrasCost = extras and extras.cost or 0
     local discount = self:heldPerk() == 'carDeal' and math.floor(price * perks.CAR_DISCOUNT_SHARE + 0.5) or 0
@@ -1069,7 +1093,7 @@ function M.new(deps)
       local inspected = self:inspectDamage()
       damage = inspected and inspected.damage
     end
-    local cost = damage and damage >= STUCK_DAMAGE and M.repairCost(damage) or 0
+    local cost = damage and damage >= STUCK_DAMAGE and M.repairCost(damage, self:carValueOf(self.ownedParts and self.ownedParts.id)) or 0
     local moved = self.still and location.distance(self.still.position, sample)
     if cost == 0 or self:canAfford(cost) or not self.still or not moved or moved > STUCK_METRES then
       if self.stuck then self.diag:event('stuck_cleared', tostring(cost)) end
@@ -1771,7 +1795,7 @@ function M.new(deps)
       testMoneyAllowed = active,
       repairQuoteAllowed = active and self.garage ~= nil,
       repairQuote = quote and quote.cost or nil,
-      repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage) or nil,
+      repairOwed = self.owedDamage > 0 and M.repairCost(self.owedDamage, self:carValueOf(self.ownedParts and self.ownedParts.id)) or nil,
       repairAllowed = quote ~= nil and not self.pendingParts and not self.pendingCar,
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
@@ -1804,7 +1828,8 @@ function M.new(deps)
       puncture = (self.punctureDamage > 0 or punctureShown) and {
         flash = punctureShown,
         owed = self.punctureDamage > 0,
-        tyreCost = math.floor(self.punctureDamage / PUNCTURE_DAMAGE + 0.5) * punctures.TYRE_REPAIR_COST,
+        tyreCost = math.floor(self.punctureDamage / PUNCTURE_DAMAGE + 0.5)
+          * math.floor(PUNCTURE_DAMAGE * M.repairRate(self:carValueOf(self.ownedParts and self.ownedParts.id)) + 0.5),
       } or nil,
     }
   end

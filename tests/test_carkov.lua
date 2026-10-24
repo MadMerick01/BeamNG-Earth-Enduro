@@ -218,11 +218,11 @@ do
   g.damage = 8000; c:tick(0.1)
   g:fit('turbo', 'pickup_turbo'); c:vehicleSpawned(); c:tick(0.1)
   local bill = c:view().partsChange
-  T.eq(bill.repair, 4100, 'repair on the bill'); T.check(not c:view().buyPartsAllowed, 'cannot afford the part')
+  T.eq(bill.repair, 3300, 'repair on the bill'); T.check(not c:view().buyPartsAllowed, 'cannot afford the part')
   T.check(c:revertParts(false), 'revert accepted'); c:vehicleSpawned(); c:tick(0.1)
   T.eq(c:view().balance, 3000, 'revert leaves the money unchanged'); T.eq(c:view().partsChange, nil, 'no bill after reverting')
-  T.eq(c:view().repairOwed, 4100, 'the repair is still owed'); T.eq(g.fitted.turbo, nil, 'paid parts put back')
-  T.check(c:requestRepairQuote(), 'repair quoted'); T.eq(c.quote.cost, 4100, 'quote includes the owed repair')
+  T.eq(c:view().repairOwed, 3300, 'the repair is still owed'); T.eq(g.fitted.turbo, nil, 'paid parts put back')
+  T.check(c:requestRepairQuote(), 'repair quoted'); T.eq(c.quote.cost, 3300, 'quote includes the owed repair')
 end
 
 -- The Garage works on the run: a part change and a new car each get a bill, and the car costs no time.
