@@ -107,7 +107,6 @@
           <button type="button" aria-label="Copy finish coordinates" ng-click="copyCoordinates(data.stage.finish)">Copy</button>
         </div>
       </div>
-      <div ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active" style="margin:0 0 8px;font-size:13px;color:#c9d6d2;">Up next: <b>{{data.upcomingStage.name}}</b>, {{data.upcomingStage.startTown}}. Your car and money come with you.</div>
       <div ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip: paste the finish coordinates into the map search and click the finish point. The map plots a route from where you are and shows arrows and road markers in game.</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
         <button type="button" ng-if="!data.carkov.active" title="Starts the stage again with the car and money you started it with. Replaces your save." ng-click="restartStage()" ng-disabled="!data.restartAllowed" style="padding:7px 12px;">{{data.restartArmed ? 'Confirm restart' : 'Restart stage'}}</button>

@@ -1624,8 +1624,6 @@ function M.new(deps)
         startTown = self.stage.startTown, finishTown = self.stage.finishTown, briefing = self.stage.briefing,
         number = self.stage.number, count = self.stage.count,
       } or nil,
-      -- The stage after this one, shown while driving so the player knows where the rally goes next.
-      upcomingStage = upcoming and { name = upcoming.name, startTown = upcoming.startTown } or nil,
       -- Offered once the stage is finished, when there is a stage after it.
       nextStage = nextStage and { name = nextStage.name, startTown = nextStage.startTown } or nil,
       nextStageAllowed = nextStage ~= nil and self.state == 'READY' and self.arrived
