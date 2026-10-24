@@ -73,6 +73,33 @@ function M.validate(s)
   for _, flag in ipairs({ 'finished', 'gameOver', 'atStart' }) do
     if s[flag] ~= nil and s[flag] ~= true then return nil, 'invalid_stage' end
   end
+  -- Stages completed before this one, and the money and car this stage was started with, which
+  -- Restart goes back to; all optional, so older saves load. A first stage has no entry.
+  local completed = nil
+  if s.completedStages ~= nil then
+    if type(s.completedStages) ~= 'table' or #s.completedStages > 256 then return nil, 'invalid_stage' end
+    completed = {}
+    for i, id in ipairs(s.completedStages) do
+      if type(id) ~= 'string' or not optionalString(id) then return nil, 'invalid_stage' end
+      completed[i] = id
+    end
+  end
+  local entry = nil
+  if s.entry ~= nil then
+    local e = s.entry
+    if type(e) ~= 'table' or not integer(e.balance, 0) or type(e.vehicle) ~= 'table'
+        or not optionalString(e.vehicle.model) then return nil, 'invalid_stage' end
+    local entryDamage = e.vehicle.damage
+    if entryDamage ~= nil and (not location.finite(entryDamage) or entryDamage < 0 or entryDamage > MAX_INTEGER) then
+      return nil, 'invalid_stage'
+    end
+    local entryConfig = nil
+    if e.vehicle.config ~= nil then
+      entryConfig = plainConfig(e.vehicle.config)
+      if not entryConfig then return nil, 'invalid_stage' end
+    end
+    entry = { balance = e.balance, vehicle = { model = e.vehicle.model, config = entryConfig, damage = entryDamage } }
+  end
   local resume = location.copy(s.resume)
   if s.resume.altitude ~= nil then
     if not location.finite(s.resume.altitude) or s.resume.altitude < -20000
@@ -93,6 +120,7 @@ function M.validate(s)
     vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig,
       damage = damage },
     stage = s.stage, finished = s.finished, gameOver = s.gameOver, atStart = s.atStart,
+    completedStages = completed, entry = entry,
   }
 end
 
@@ -158,6 +186,7 @@ function M.new(io)
       generation = self.generation + 1, base = candidate.base, resume = candidate.resume,
       progression = candidate.progression, vehicle = candidate.vehicle,
       stage = candidate.stage, finished = candidate.finished, gameOver = candidate.gameOver, atStart = candidate.atStart,
+      completedStages = candidate.completedStages, entry = candidate.entry,
     }
     local clean, why = M.validate(prepared)
     if not clean then return nil, why end

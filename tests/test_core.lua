@@ -417,6 +417,59 @@ do
   T.eq(r.state, 'ERROR', 'unknown stage pauses Enduro'); T.check(not r:view().restartAllowed, 'unknown stage cannot be restarted')
 end
 
+-- Stage 2: Colo River follows Stage 1. Finishing Stage 1 offers it; starting it carries the car and
+-- money to Windsor, and Restart on Stage 2 goes back to how the player arrived there.
+do
+  local S = require('beamngEarthEnduro/stages')
+  local second = S.get('stage_2')
+  T.eq(second.name, 'Stage 2: Colo River', 'Stage 2 defined'); T.eq(S.after('stage_1').id, 'stage_2', 'Stage 2 follows Stage 1')
+  T.eq(second.start.latitude, -33.601664, 'Stage 2 starts at Windsor'); T.eq(second.finish.longitude, 150.790919, 'Stage 2 finishes at Colo Heights')
+  T.eq(second.targetSeconds, 30 * 60, 'Stage 2 limit is 30 min'); T.eq(S.after('stage_2'), nil, 'Stage 2 is the last stage')
+  local m,mio,ma,_,_,g=F.controller()
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().stage.number, 1, 'HUD numbers the stage'); T.eq(m:view().stage.count, 2, 'HUD counts the stages')
+  T.eq(m:view().upcomingStage.name, 'Stage 2: Colo River', 'Stage 2 shown as up next while driving Stage 1')
+  T.eq(m:view().nextStage, nil, 'next stage not offered before the finish'); T.check(not m:startNextStage(), 'next stage refused before the finish')
+  m:addTestMoney(); g.damage = 200
+  local first = S.get('stage_1')
+  ma.pose = F.position(first.finish.latitude, first.finish.longitude); m:tick(0.1)
+  T.check(m:view().stageFinished, 'Stage 1 finished'); T.eq(m:view().nextStage.name, 'Stage 2: Colo River', 'Stage 2 offered')
+  T.check(m:view().nextStageAllowed, 'Start Stage 2 allowed'); T.check(m:view().sessionStatus:find('Windsor, NSW'), 'status points to Windsor')
+  g:fit('intake', 'pickup_intake_race'); m:vehicleSpawned(); m:tick(0.1)
+  T.check(not m:view().nextStageAllowed, 'an open parts bill blocks the next stage'); T.check(not m:startNextStage(), 'next stage refused with a bill open')
+  m:revertParts(false); m:tick(0.1); g.damage = 200
+  local balance = m:view().balance
+  T.check(m:startNextStage(), 'Stage 2 started')
+  T.eq(m.stage.id, 'stage_2', 'now on Stage 2'); T.eq(m.mode, 'start', 'player sent to the Stage 2 start')
+  T.eq(m:view().balance, balance, 'money carried over'); T.eq(m:view().totalDistanceKm, 0, 'mileage starts again')
+  T.eq(m:view().timer.drivingSeconds, 0, 'clock starts again'); T.eq(m:view().stageFinished, false, 'Stage 2 not finished')
+  T.eq(m:view().resume.latitude, second.start.latitude, 'Windsor coordinates shown'); T.check(m:view().carriedCar, 'car is carried')
+  T.check(m:view().saveFeedback:find('to get your car'), 'player told the car comes with them')
+  m:tick(0.1); T.check(m:view().sessionStatus:find('Your car is waiting'), 'go-to-start message says the car is waiting')
+  local saved = mio.files[B]
+  T.eq(saved.stage, 'stage_2', 'Stage 2 saved'); T.eq(saved.atStart, true, 'saved at the start'); T.eq(saved.completedStages[1], 'stage_1', 'Stage 1 recorded as completed')
+  T.eq(saved.entry.balance, balance, 'arrival money saved'); T.eq(saved.entry.vehicle.config.model, 'pickup', 'arrival car saved')
+  T.eq(saved.entry.vehicle.damage, 200, 'unpaid damage carried')
+  local r = F.controller({ io = mio }); T.eq(r.stage.id, 'stage_2', 'reload stays on Stage 2'); T.eq(r.mode, 'start', 'reload still heads to Windsor')
+  local spawns = #g.spawns
+  ma.pose = F.position(second.start.latitude, second.start.longitude); m:tick(0.1)
+  T.eq(#g.spawns, spawns + 1, 'car given at Windsor'); T.eq(g.spawns[#g.spawns].model, 'pickup', 'it is the Stage 1 car, not the starter')
+  T.eq(type(g.spawns[#g.spawns].config), 'table', 'spawned from the carried config')
+  m:vehicleSpawned(); m:tick(0.1)
+  T.check(m:view().repairOwed > 0, 'the unpaid repair comes with the car')
+  m:addTestMoney(); T.check(m:manualSave(), 'saved on Stage 2'); T.eq(mio.files[A].entry.balance, balance, 'Save keeps the arrival snapshot')
+  T.eq(mio.files[A].completedStages[1], 'stage_1', 'Save keeps the completed stages')
+  T.check(not m:restartStage() and m:restartStage(), 'Stage 2 restarted')
+  T.eq(m:view().balance, balance, 'restart goes back to the arrival money'); T.eq(m.mode, 'start', 'restart sends the player to Windsor')
+  T.check(m.carriedCar, 'restart brings the arrival car'); T.eq(m.stage.id, 'stage_2', 'restart stays on Stage 2')
+  ma.pose = F.position(second.start.latitude, second.start.longitude); m:tick(0.1)
+  T.eq(g.spawns[#g.spawns].model, 'pickup', 'arrival car given again after the restart')
+  m:vehicleSpawned(); m:tick(0.1)
+  ma.pose = F.position(second.finish.latitude, second.finish.longitude); m:tick(0.1)
+  T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after Stage 2'); T.eq(m:view().upcomingStage, nil, 'nothing up next after Stage 2')
+  T.check(m:view().sessionStatus:find('More stages are coming'), 'last stage says more are coming')
+end
+
 -- Ironman: a wrecked car the player cannot pay to repair ends the run after a short warning,
 -- the game over is saved, and Restart stage starts again from the stage start.
 do
