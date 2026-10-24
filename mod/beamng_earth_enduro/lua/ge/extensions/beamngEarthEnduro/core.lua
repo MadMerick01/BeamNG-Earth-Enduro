@@ -767,8 +767,8 @@ function M.new(deps)
     return true
   end
 
-  -- Respawns the vehicle with the paid parts. The change already mended the damage, so the repair
-  -- part of the bill is still charged, as far as the balance allows.
+  -- Respawns the vehicle with the paid parts. Nothing is charged: the change already mended the
+  -- damage, so, as with a reverted car, the car looks new but its repair is still owed.
   function c:revertParts(droveOff)
     local pending = self.pendingParts
     if not pending or not self.ownedParts then
@@ -786,14 +786,10 @@ function M.new(deps)
       self.diag:event('parts_revert_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
       return false
     end
-    self.pendingParts, self.owedDamage = nil, 0
-    local charged = self.profile and math.min(pending.repair, self.profile.progression.balance) or 0
-    if charged > 0 then self:spend(charged, 'repair') end
-    -- Putting the parts back mended the car, so it counts as a repair on the clock.
-    local timed = self.profile and pending.repair > 0 and self:repaired()
+    -- The bill's damage already includes what was owed before the change.
+    self.pendingParts, self.owedDamage = nil, pending.damage or 0
     self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
-      or 'The paid parts were put back.') .. (charged > 0 and (' The repair cost ' .. dollars(charged) .. '.') or '')
-      .. (timed and ' The repair cost you 5 minutes.' or '')
+      or 'The paid parts were put back.') .. (pending.repair > 0 and ' Its repair is still owed.' or '')
     return true
   end
 

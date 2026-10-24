@@ -135,7 +135,7 @@
       </div>
       <div ng-if="(!data.carChange && !data.partsChange) || data.wreck || data.repairOwed > 0" style="margin:0 0 8px;padding:10px;border:1px solid #568d7a;border-radius:6px;">
         <div style="font-weight:bold;color:#a7e5c9;">Repair</div>
-        <div ng-if="data.repairOwed > 0">Owed from your last save: ${{data.repairOwed | number:0}}</div>
+        <div ng-if="data.repairOwed > 0">Repair still owed: ${{data.repairOwed | number:0}}</div>
         <div ng-if="data.repairQuote != null">Repair quote: ${{data.repairQuote | number:0}}</div>
         <div ng-if="!(data.repairOwed > 0) && data.repairQuote == null">Get a quote to price the damage to the car you are in.</div>
         <div ng-if="data.perk.repairNote" style="color:#d6b8ff;">{{data.perk.repairNote}}</div>
