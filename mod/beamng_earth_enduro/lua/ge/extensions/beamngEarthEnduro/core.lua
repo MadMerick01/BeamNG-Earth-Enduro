@@ -1589,7 +1589,7 @@ function M.new(deps)
 
   function c:mount(on)
     if self.ui:mount(on, self.clock) then
-      self.diag:clear('ui_initialised'); self.diag:event('ui_initialised', 'World Ironman Enduro Rally HUD')
+      self.diag:clear('ui_initialised'); self.diag:event('ui_initialised', 'Earth Enduro HUD')
     end
   end
 
@@ -1640,7 +1640,7 @@ local function safely(f)
 end
 
 function M.onExtensionLoaded()
-  return safely(function() local c = ensure(); c.diag:event('extension_loaded', 'World Ironman Enduro Rally') end)
+  return safely(function() local c = ensure(); c.diag:event('extension_loaded', 'Earth Enduro') end)
 end
 function M.onPreRender(dtReal)
   return safely(function() ensure():tick(dtReal) end)

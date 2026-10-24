@@ -40,13 +40,13 @@ class PackageTest(unittest.TestCase):
             manifest = json.loads(archive.read(prefix + 'app.json'))
             config = json.loads(archive.read('config.example.json'))
             self.assertEqual(manifest['appName'], 'BeamNGEarthEnduroHUD')
-            self.assertEqual(manifest['name'], 'World Ironman Enduro Rally')
+            self.assertEqual(manifest['name'], 'Earth Enduro')
             self.assertEqual(manifest['directive'], 'beamngEarthEnduroHud')
             self.assertIn('beamng-earth-enduro-hud', manifest['domElement'])
             self.assertEqual(config['base']['latitude'], 34.271288)
             self.assertEqual(config['base']['longitude'], 75.163671)
             self.assertIn(b'/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', archive.read(prefix + 'app.js'))
-            self.assertIn(b'WORLD IRONMAN ENDURO RALLY', archive.read(prefix + 'app.html'))
+            self.assertIn(b'Rally Stages \\u00b7 CarKov Off-Road', archive.read(prefix + 'app.js'))
             self.assertIn(b'beamngEarthEnduro_core', archive.read('scripts/beamngEarthEnduro/modScript.lua'))
 
     def test_starter_car_config_is_packaged(self):
@@ -59,7 +59,7 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(config['model'], 'burnside')
         self.assertEqual(config['mainPartName'], 'burnside')
         self.assertIsInstance(config['parts'], dict)
-        self.assertEqual(info['Configuration'], 'WorldIronManEnduro_Starter')
+        self.assertEqual(info['Configuration'], 'Earth Enduro Starter')
         self.assertEqual(thumbnail[:3], b'\xff\xd8\xff')
         self.assertIn(b"'" + (prefix + 'worldironmanenduro_starter.pc').encode() + b"'", core)
 

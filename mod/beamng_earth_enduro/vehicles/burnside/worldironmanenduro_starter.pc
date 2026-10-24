@@ -1,5 +1,5 @@
 {
-  "Configuration":"WorldIronManEnduro_Starter",
+  "Configuration":"Earth Enduro Starter",
   "format":2,
   "mainPartName":"burnside",
   "mainPartPath":"/burnside",
