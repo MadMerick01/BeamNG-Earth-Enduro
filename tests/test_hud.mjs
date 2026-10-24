@@ -206,6 +206,18 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
     assert.ok(html.includes(`ng-click="${action}"`), action)
   }
 })
+test('on a CarKov run the Route tab hides the stage and the Garage still sells parts and cars', () => {
+  const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
+  const route = html.slice(html.indexOf(`ng-if="tab === 'route'"`), html.indexOf(`ng-if="tab === 'garage'"`))
+  const garage = html.slice(html.indexOf(`ng-if="tab === 'garage'"`), html.indexOf(`ng-if="tab === 'carkov'"`))
+  assert.ok(route.includes('ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active"'), 'up next hidden')
+  assert.ok(route.includes('ng-if="!data.carkov.active" title="Starts the stage again'), 'restart hidden')
+  assert.ok(route.includes('ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip'), 'stage tip hidden')
+  for (const card of ['Buy parts', 'Buy a vehicle']) {
+    assert.ok(garage.includes(`>${card}</div>`), card)
+  }
+  assert.ok(!/ng-if="[^"]*carkov[^"]*">\s*<div style="font-weight:bold;color:#a7e5c9;">Buy/.test(garage), 'buy cards are not tied to CarKov')
+})
 test('the stage clock shows h:mm:ss, signed pace and colours by time left', () => {
   const a = app()
   assert.equal(a.scope.clock(12600), '3:30:00')

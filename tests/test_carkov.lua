@@ -223,6 +223,21 @@ do
   T.check(c:requestRepairQuote(), 'repair quoted'); T.eq(c.quote.cost, 4100, 'quote includes the owed repair')
 end
 
+-- The Garage works on the run: a part change and a new car each get a bill, and the car costs no time.
+do
+  local c, _, a, _, _, g = F.controller({ random = seeded(12), startingMoney = 60000 })
+  c:tick(0.1)
+  T.check(c:enterCarKov(), 'entered')
+  a.pose = location.copy(c:view().resume); c:tick(0.1); c:vehicleSpawned(); c:tick(0.1)
+  g:fit('turbo', 'pickup_turbo'); c:vehicleSpawned(); c:tick(0.1)
+  T.check(c:view().partsChange ~= nil, 'parts bill on the run'); T.check(c:view().buyPartsAllowed, 'parts can be bought')
+  T.check(c:buyParts(), 'parts bought on the run')
+  g.model, g.fitted = 'sport', { engine = 'sport_v12' }; c:vehicleSpawned(); c:tick(0.1)
+  T.check(c:view().carChange ~= nil, 'car bill on the run'); T.check(c:buyCar(), 'car bought on the run')
+  T.eq(c.profile.progression.penaltySeconds, 0, 'no time penalty for a car on the run')
+  T.eq(c:view().carkov.active, true, 'still on the run')
+end
+
 -- Insurance still pays for a wreck on the run; repairs on the run cost no time and keep No Penalty.
 do
   local c, io, a, _, _, g = F.controller({ random = seeded(13), startingMoney = 2000 })
