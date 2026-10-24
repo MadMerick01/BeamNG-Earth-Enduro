@@ -288,7 +288,8 @@ do
   T.check(m:view().partsChange ~= nil, 'failed revert keeps the bill'); T.eq(g.fitted.turbo, 'pickup_turbo', 'parts unchanged on failed revert')
   g.accepts = true; ma.pose = F.position(0, 0.002); m:tick(0.1)
   T.eq(g.fitted.turbo, nil, 'driving off puts the paid parts back'); T.eq(m:view().partsChange, nil, 'bill cleared after driving off')
-  T.eq(m:view().balance, 10000 - 1370 - 200 + 1, 'driving off still pays the repair (the first 11 m driven earned $1)')
+  T.eq(m:view().balance, 10000 - 1370 + 1, 'driving off charges nothing (the first 11 m driven earned $1)')
+  T.eq(m:view().repairOwed, 200, 'the repair the change mended is still owed')
 
   g.partsUnreadable = true; m:vehicleSpawned(); m:tick(0.1); T.check(m.partsCheckDue, 'unreadable parts retried')
 end
@@ -449,7 +450,7 @@ do
   local saved = mio.files[B]
   T.eq(saved.stage, 'stage_2', 'Stage 2 saved'); T.eq(saved.atStart, true, 'saved at the start'); T.eq(saved.completedStages[1], 'stage_1', 'Stage 1 recorded as completed')
   T.eq(saved.entry.balance, balance, 'arrival money saved'); T.eq(saved.entry.vehicle.config.model, 'pickup', 'arrival car saved')
-  T.eq(saved.entry.vehicle.damage, 200, 'unpaid damage carried')
+  T.eq(saved.entry.vehicle.damage, 400, 'unpaid damage carried, with the repair still owed from the revert')
   local r = F.controller({ io = mio }); T.eq(r.stage.id, 'stage_2', 'reload stays on Stage 2'); T.eq(r.mode, 'start', 'reload still heads to Windsor')
   local spawns = #g.spawns
   ma.pose = F.position(second.start.latitude, second.start.longitude); m:tick(0.1)

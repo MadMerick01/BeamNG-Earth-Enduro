@@ -206,6 +206,23 @@ do
   T.eq(c:view().gameOver, false, 'the stage carries on')
 end
 
+-- Reverting a part change the player cannot afford on a damaged car leaves the money alone; the
+-- repair the change mended is still owed.
+do
+  local c, _, a, _, _, g = F.controller({ random = seeded(11), startingMoney = 5000 })
+  c:tick(0.1)
+  T.check(c:enterCarKov(), 'entered')
+  a.pose = location.copy(c:view().resume); c:tick(0.1); c:vehicleSpawned(); c:tick(0.1)
+  g.damage = 8000; c:tick(0.1)
+  g:fit('turbo', 'pickup_turbo'); c:vehicleSpawned(); c:tick(0.1)
+  local bill = c:view().partsChange
+  T.eq(bill.repair, 4100, 'repair on the bill'); T.check(not c:view().buyPartsAllowed, 'cannot afford the part')
+  T.check(c:revertParts(false), 'revert accepted'); c:vehicleSpawned(); c:tick(0.1)
+  T.eq(c:view().balance, 3000, 'revert leaves the money unchanged'); T.eq(c:view().partsChange, nil, 'no bill after reverting')
+  T.eq(c:view().repairOwed, 4100, 'the repair is still owed'); T.eq(g.fitted.turbo, nil, 'paid parts put back')
+  T.check(c:requestRepairQuote(), 'repair quoted'); T.eq(c.quote.cost, 4100, 'quote includes the owed repair')
+end
+
 -- Insurance still pays for a wreck on the run; repairs on the run cost no time and keep No Penalty.
 do
   local c, io, a, _, _, g = F.controller({ random = seeded(13), startingMoney = 2000 })
