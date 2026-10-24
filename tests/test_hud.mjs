@@ -227,7 +227,7 @@ test('on a CarKov run the Route tab hides the stage and the Garage still sells p
   const html = readFileSync(new URL('../mod/beamng_earth_enduro/ui/modules/apps/BeamNGEarthEnduroHUD/app.html', import.meta.url), 'utf8')
   const route = html.slice(html.indexOf(`ng-if="tab === 'route'"`), html.indexOf(`ng-if="tab === 'stages'"`))
   const garage = html.slice(html.indexOf(`ng-if="tab === 'garage'"`), html.indexOf(`ng-if="tab === 'carkov'"`))
-  assert.ok(route.includes('ng-if="data.upcomingStage && !data.stageFinished && !data.carkov.active"'), 'up next hidden')
+  assert.ok(!html.includes('upcomingStage'), 'no Up next: every stage is optional')
   assert.ok(route.includes('ng-if="!data.carkov.active" title="Starts the stage again'), 'restart hidden')
   assert.ok(!route.includes('data.stageList'), 'the stage list is on its own tab')
   assert.ok(route.includes('ng-if="!data.carkov.active" style="font-size:12px;color:#c9d6d2;">Navigation tip'), 'stage tip hidden')

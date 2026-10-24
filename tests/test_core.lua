@@ -430,7 +430,7 @@ do
   local m,mio,ma,_,_,g=F.controller()
   m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
   T.eq(m:view().stage.number, 1, 'HUD numbers the stage'); T.eq(m:view().stage.count, #S.list, 'HUD counts the stages')
-  T.eq(m:view().upcomingStage.name, 'Stage 2: Colo River', 'Stage 2 shown as up next while driving Stage 1')
+  T.eq(m:view().upcomingStage, nil, 'stages are optional, so nothing is shown as up next')
   T.eq(m:view().nextStage, nil, 'next stage not offered before the finish'); T.check(not m:startNextStage(), 'next stage refused before the finish')
   m:addTestMoney(); g.damage = 200
   local first = S.get('stage_1')
@@ -467,10 +467,8 @@ do
   ma.pose = F.position(second.start.latitude, second.start.longitude); m:tick(0.1)
   T.eq(g.spawns[#g.spawns].model, 'pickup', 'arrival car given again after the restart')
   m:vehicleSpawned(); m:tick(0.1)
-  T.eq(m:view().upcomingStage.name, 'Stage 3: Death Road', 'Stage 3 shown as up next while driving Stage 2')
   -- With Stage 2 as the last stage, its finish offers nothing next and points to the stage list.
   local all = S.list; S.list = { all[1], all[2] }
-  T.eq(m:view().upcomingStage, nil, 'nothing up next on the last stage')
   ma.pose = F.position(second.finish.latitude, second.finish.longitude); m:tick(0.1)
   T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after the last stage')
   T.check(m:view().sessionStatus:find('Pick another stage'), 'last stage points to the stage list')
