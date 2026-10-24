@@ -518,6 +518,15 @@ do
   T.check(m:view().saveFeedback:find('try again'), 'failed restart says to try again')
   mio.writeFails = false
 
+  -- Got it on the briefing keeps it hidden for the stage, through a Save and reload, until a restart.
+  m,mio,ma=F.controller()
+  m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
+  T.check(not m:view().briefingDismissed, 'the briefing shows at the start')
+  T.check(m:dismissBriefing(), 'Got it accepted'); T.check(m:view().briefingDismissed, 'Got it hides the briefing')
+  T.check(m:manualSave(), 'saved'); r = F.controller({ io = mio }); r:tick(0.1)
+  T.check(r:view().briefingDismissed, 'a saved Got it still hides the briefing after a reload')
+  T.check(not r:restartStage() and r:restartStage(), 'stage restarted'); T.check(not r:view().briefingDismissed, 'a restart shows the briefing again')
+
   -- A save from when a wreck ended the run is restarted when it loads.
   m,mio,ma=F.controller()
   m:tick(0.1); m:addTestMoney(); T.check(m:manualSave(), 'saved')

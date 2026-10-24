@@ -1315,6 +1315,14 @@ function M.new(deps)
     return true
   end
 
+  -- Got it on the stage briefing: it stays hidden for the rest of this stage. A new stage, a restart or
+  -- a new game starts a fresh progression, so its briefing shows again. Save keeps it across a reload.
+  function c:dismissBriefing()
+    if not self.profile or not self.stage or self.carkov then return false end
+    self.profile.progression.briefingDismissed = true
+    return true
+  end
+
   function c:dismissExtraction()
     if not self.extraction then return false end
     self.extraction = nil
@@ -1636,6 +1644,7 @@ function M.new(deps)
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
+      briefingDismissed = self.profile ~= nil and self.profile.progression.briefingDismissed == true,
       stageFinished = self.stageFinished, timer = timer, sponsor = sponsor, perk = perk,
       -- Out of money and can't drive: the repair it needs, the balance, and the way out offered.
       stuck = self.stuck and { cost = self.stuck.cost, balance = self.profile.progression.balance,
@@ -1822,6 +1831,7 @@ function M.startNextStage() return safely(function() return ensure():startNextSt
 function M.startStage(id) return safely(function() return ensure():startStage(id) end) end
 function M.enterCarKov() return safely(function() return ensure():enterCarKov() end) end
 function M.quitCarKov() return safely(function() return ensure():quitCarKov() end) end
+function M.dismissBriefing() return safely(function() return ensure():dismissBriefing() end) end
 function M.dismissExtraction() return safely(function() return ensure():dismissExtraction() end) end
 function M.keepPerk() return safely(function() return ensure():answerPerkOffer(false) end) end
 function M.swapPerk() return safely(function() return ensure():answerPerkOffer(true) end) end

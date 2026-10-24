@@ -14,10 +14,10 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var mount = function (on) {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.uiMounted(' + (on ? 'true' : 'false') + ') end')
       }
-      // A stage's briefing stays hidden for the rest of the session once the player dismisses it;
-      // the next stage's briefing still shows.
-      scope.briefingDismissed = null
-      scope.dismissBriefing = function (stageName) { scope.briefingDismissed = stageName }
+      // Got it hides the stage briefing until the stage ends or another one starts; Lua keeps the choice.
+      scope.dismissBriefing = function () {
+        if (scope.data && scope.data.stage) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.dismissBriefing() end')
+      }
       // Each part of the HUD sits on its own tab so the app stays short.
       scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'stages', label: 'Stages' }, { id: 'garage', label: 'Garage' },
         { id: 'carkov', label: 'CarKov' }, { id: 'tips', label: 'Tips' }]

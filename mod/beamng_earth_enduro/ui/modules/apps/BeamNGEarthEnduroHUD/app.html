@@ -80,10 +80,10 @@
   </div>
   <div role="tabpanel" style="padding-top:10px;">
     <div ng-if="tab === 'route'">
-      <div ng-if="data.mode === 'start' && data.stage.briefing && !data.stageFinished && briefingDismissed !== data.stage.name" role="note" style="margin:0 0 8px;padding:10px;border:2px solid #a7e5c9;border-radius:6px;background:rgba(167,229,201,.1);">
+      <div ng-if="data.mode === 'start' && data.stage.briefing && !data.stageFinished && !data.briefingDismissed" role="note" style="margin:0 0 8px;padding:10px;border:2px solid #a7e5c9;border-radius:6px;background:rgba(167,229,201,.1);">
         <div style="font-weight:bold;color:#a7e5c9;">STAGE BRIEFING: {{data.stage.name}}</div>
         <div style="margin-top:4px;">{{data.stage.briefing}}</div>
-        <button type="button" ng-click="dismissBriefing(data.stage.name)" style="margin-top:6px;padding:5px 10px;">Got it</button>
+        <button type="button" ng-click="dismissBriefing()" style="margin-top:6px;padding:5px 10px;">Got it</button>
       </div>
       <div ng-if="data.carkov.active" role="note" style="margin:0 0 8px;padding:10px;border:1px solid #f2994a;border-radius:6px;">
         <div style="font-weight:bold;color:#f2994a;">You are on a CarKov Off-Road run</div>
