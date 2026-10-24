@@ -76,6 +76,7 @@ do
   c.profile.progression.perk = 'luckyMile'
   local stageKm, stageDriving = c.profile.progression.totalDistanceKm, c.profile.progression.drivingSeconds
   local balance = c:view().balance
+  local stageBalance = balance
   T.check(c:view().carkov.enterAllowed, 'can enter with the fee'); T.check(c:view().timer.running, 'stage clock running')
   g.damage = 400
   T.check(c:enterCarKov(), 'entered CarKov')
@@ -113,21 +114,42 @@ do
   -- Reloading carries on from the run's save.
   c:reload(); c:tick(0.1)
   T.eq(c:view().carkov.active, true, 'run survives a reload'); T.eq(c:view().mode, 'resume', 'back to the last save'); T.eq(c:view().arrived, true, 'already there')
-  -- Extraction pays the reward and goes back to the stage with the car and money.
+  -- Closing in: the HUD counts down in metres from 1 km out.
   balance = c:view().balance
   local perk = c:heldPerk()
-  driveTo(c, a, c.profile.carkov.extraction)
+  local runKm = c.profile.progression.totalDistanceKm
+  driveTo(c, a, c.profile.carkov.extraction, 900)
+  T.check(c:view().carkov.extractionDistanceMetres < c:view().carkov.closingInMetres, 'closing in shown inside 1 km')
+  -- Extraction needs 5 seconds held in the zone; leaving it starts the hold again.
+  local target = c.profile.carkov.extraction
+  a.pose = location.destination(target, 0, 50); F.advance(c, 3)
+  v = c:view()
+  T.eq(v.carkov.active, true, 'not extracted at once'); T.eq(v.carkov.hold.seconds, 2, 'countdown shown'); T.near(v.carkov.hold.progress, 0.6, 1e-9, 'hold bar fills')
+  a.pose = location.destination(target, 0, 150); c:tick(0.1)
+  T.eq(c:view().carkov.hold, nil, 'leaving the zone stops the hold')
+  a.pose = location.destination(target, 0, 50); F.advance(c, 4)
+  T.eq(c:view().carkov.active, true, 'hold started again from zero'); T.eq(c:view().carkov.hold.seconds, 1, 'one second to go')
+  local runSeconds = c.profile.progression.drivingSeconds
+  T.check(runSeconds > 30, 'the run is timed')
+  -- Extraction pays the reward and goes back to the stage with the car and money.
+  F.advance(c, 1.1)
   v = c:view()
   T.eq(v.carkov.active, false, 'run over')
-  T.check(v.balance >= balance + REWARD + 880 and v.balance <= balance + REWARD + 920, 'reward and the last 9 km paid'); T.eq(v.carkov.flash.result, 'extracted', 'extraction celebrated')
+  T.check(v.balance >= balance + REWARD + 780 and v.balance <= balance + REWARD + 820, 'reward and the last 8 km paid')
+  local done = v.carkov.complete
+  T.check(done ~= nil, 'EXTRACTION COMPLETE shown'); T.eq(done.reward, REWARD, 'shows the reward'); T.eq(done.balance, v.balance, 'shows the balance')
+  T.check(done.distanceKm > runKm + 7, 'shows the run distance'); T.check(done.seconds >= runSeconds, 'shows the run time')
+  T.eq(done.net, v.balance - stageBalance, 'shows what the run made after the fee')
+  T.eq(v.carkov.flash, nil, 'no small flash as well')
   T.eq(v.mode, 'resume', 'back to the stage save'); T.near(location.distance(v.resume, stageAt), 0, 0.01, 'to where the stage was saved')
   T.eq(c.profile.carkov, nil, 'save no longer on a run'); T.near(c.profile.progression.totalDistanceKm, stageKm, 1e-9, 'stage mileage back')
   T.near(c.profile.progression.drivingSeconds, stageDriving, 1e-9, 'stage clock back'); T.eq(c.profile.progression.perk, perk, 'perk held comes back')
   T.eq(c.profile.progression.balance, v.balance, 'money saved straight away')
+  F.advance(c, 30); T.check(c:view().carkov.complete ~= nil, 'the screen stays up')
+  T.check(c:dismissExtraction(), 'dismissed'); T.eq(c:view().carkov.complete, nil, 'Back to my stage closes it'); T.check(not c:dismissExtraction(), 'nothing to close')
   -- Back at the stage the car comes back and the stage carries on.
   a.pose = location.copy(stageAt); c:tick(0.1)
   T.eq(c:view().arrived, true, 'back on the stage'); T.check(c:view().timer ~= nil, 'stage clock back'); T.check(c:view().sponsor ~= nil, 'sponsor bonus back')
-  F.advance(c, 11); T.eq(c:view().carkov.flash, nil, 'flash fades')
 end
 
 -- Quitting: needs a second press, keeps the money earned and the car, and loses the fee.

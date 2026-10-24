@@ -12,6 +12,8 @@ M.REWARD = 15000
 M.EXTRACTION_KM = 15 -- straight line from the drop
 M.EXTRACTION_RADIUS_METRES = 100 -- the extraction counts once the car is this close
 M.DROP_RADIUS_METRES = 500 -- arriving anywhere this close to the drop point starts the run
+M.EXTRACT_HOLD_SECONDS = 5 -- the car must stay in the extraction zone this long
+M.CLOSING_IN_METRES = 1000 -- the HUD counts down in metres from here
 -- Random tries before giving up: drop points, then extraction bearings around each drop.
 local DROP_TRIES, BEARING_TRIES = 5000, 64
 

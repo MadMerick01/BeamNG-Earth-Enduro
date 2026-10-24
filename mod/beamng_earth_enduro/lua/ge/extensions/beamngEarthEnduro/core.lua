@@ -162,7 +162,7 @@ function M.new(deps)
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
     self.wreck, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, false, nil, nil, nil
-    self.quitArmed = false
+    self.quitArmed, self.extractHold = false, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -384,6 +384,14 @@ function M.new(deps)
   end
 
   function c:runClock(dt)
+    -- A CarKov run times itself for its finish screen; it has no limit or Time Freeze.
+    if self.carkov then
+      if self.profile and self.state == 'READY' and self.arrived and not self.error and not self.paused() then
+        local progression = self.profile.progression
+        progression.drivingSeconds = (progression.drivingSeconds or 0) + math.min(dt, MAX_CLOCK_STEP)
+      end
+      return
+    end
     if not self:clockRunning() then return end
     local progression = self.profile.progression
     local step = math.min(dt, MAX_CLOCK_STEP)
@@ -883,11 +891,15 @@ function M.new(deps)
     -- Driving before then is not part of the trek.
     if self.arrived and not self.gameOver then self:addMileage(sample, dt) else self.odometer = nil end
     self:transition('READY', 'verified')
-    -- On a CarKov run, reaching the extraction point with no bill open pays out and ends the run.
+    -- On a CarKov run, staying in the extraction zone for EXTRACT_HOLD_SECONDS, with no bill open,
+    -- pays out and ends the run. Leaving the zone starts the hold again.
     if self.carkov then
       local left = self.arrived and location.distance(sample, self.carkov.extraction)
       if left and left <= carkov.EXTRACTION_RADIUS_METRES and not self.pendingParts and not self.pendingCar then
-        self:extract()
+        if not self.paused() then self.extractHold = (self.extractHold or 0) + math.min(dt, MAX_CLOCK_STEP) end
+        if self.extractHold >= carkov.EXTRACT_HOLD_SECONDS then self:extract() end
+      else
+        self.extractHold = nil
       end
       return
     end
@@ -1102,7 +1114,7 @@ function M.new(deps)
         penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0, perk = self:heldPerk() },
       vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() },
       stage = self.stage.id, atStart = true,
-      carkov = { drop = drop, extraction = extraction,
+      carkov = { drop = drop, extraction = extraction, startBalance = progression.balance,
         stage = { resume = location.copy(fresh), progression = stageProgression, finished = self.stageFinished or nil } } })
     if not saved then
       self.feedback = 'Could not enter CarKov just now. You have not been charged. Try again.'
@@ -1112,6 +1124,7 @@ function M.new(deps)
     self.diag:event('carkov_entered', string.format('%.5f,%.5f to %.5f,%.5f', drop.latitude, drop.longitude,
       extraction.latitude, extraction.longitude))
     self:reload()
+    self.extraction = nil
     self.feedback = 'Your stage is saved and you paid ' .. dollars(carkov.ENTRY_FEE) .. '. Go to the drop point to get your car.'
     return true
   end
@@ -1140,7 +1153,6 @@ function M.new(deps)
   end
 
   local carkovResults = {
-    extracted = { title = 'EXTRACTED', text = 'You reached the extraction point and earned ' .. dollars(carkov.REWARD) .. '.' },
     quit = { title = 'CARKOV QUIT', text = 'You left CarKov. The entry fee is lost.' },
     wrecked = { title = 'CARKOV FAILED', text = 'Your car was totalled, so the run is over and the entry fee is lost.' },
   }
@@ -1149,12 +1161,24 @@ function M.new(deps)
     self.carkovFlash = { result = result, title = shown.title, text = shown.text .. (extra or ''), at = self.clock }
   end
 
-  -- Extraction: pays the reward and goes back to the stage. The save is made straight away.
+  -- Extraction: pays the reward and goes back to the stage. The save is made straight away. The
+  -- EXTRACTION COMPLETE screen stays up until the player dismisses it.
   function c:extract()
-    local balance = math.min(MAX_BALANCE, self.profile.progression.balance + carkov.REWARD)
+    local progression = self.profile.progression
+    local balance = math.min(MAX_BALANCE, progression.balance + carkov.REWARD)
+    local result = { reward = carkov.REWARD, distanceKm = progression.totalDistanceKm,
+      seconds = math.floor(progression.drivingSeconds or 0), balance = balance,
+      -- What the run made overall: driving pay and the reward, less the fee and anything spent.
+      net = self.carkov.startBalance and (balance - self.carkov.startBalance) or nil }
     if not self:leaveCarKov('extracted', balance) then return false end
-    self:flashCarKov('extracted')
+    self.extraction = result
     self.feedback = 'Go back to your stage save to carry on. Your car and money come with you.'
+    return true
+  end
+
+  function c:dismissExtraction()
+    if not self.extraction then return false end
+    self.extraction = nil
     return true
   end
 
@@ -1216,6 +1240,12 @@ function M.new(deps)
       distanceKm = run and self.profile and self.profile.progression.totalDistanceKm or nil,
       quitAllowed = run ~= nil and not self.error and not self.pendingParts and not self.pendingCar,
       quitArmed = self.quitArmed,
+      closingInMetres = carkov.CLOSING_IN_METRES,
+      -- Seconds left to hold in the extraction zone, while the car is in it.
+      hold = self.extractHold and { seconds = math.max(0, math.ceil(carkov.EXTRACT_HOLD_SECONDS - self.extractHold)),
+        progress = math.min(1, self.extractHold / carkov.EXTRACT_HOLD_SECONDS) } or nil,
+      -- The EXTRACTION COMPLETE screen, until dismissed.
+      complete = self.extraction,
       flash = flash and { result = self.carkovFlash.result, title = self.carkovFlash.title, text = self.carkovFlash.text } or nil,
     }
   end
@@ -1251,6 +1281,9 @@ function M.new(deps)
         .. dollars(self.profile.progression.balance) .. '. Unless you can pay, '
         .. (self.carkov and 'your CarKov run is over in ' or 'it is game over in ')
         .. math.max(0, math.ceil(self.wreck.left)) .. ' s.'
+    elseif self.state == 'READY' and self.carkov and self.arrived and (self.pendingParts or self.pendingCar)
+        and current and (location.distance(current, self.carkov.extraction) or math.huge) <= carkov.EXTRACTION_RADIUS_METRES then
+      status = 'You are at the extraction point. Pay for or put back your parts or car change on the Garage tab to extract.'
     elseif self.state == 'READY' and self.carkov and self.arrived then
       status = 'CarKov: reach the extraction point to earn ' .. dollars(carkov.REWARD) .. '. Off road is fine. Save to keep your progress.'
     elseif self.state == 'READY' then
@@ -1523,6 +1556,7 @@ function M.restartStage() return safely(function() return ensure():restartStage(
 function M.startNextStage() return safely(function() return ensure():startNextStage() end) end
 function M.enterCarKov() return safely(function() return ensure():enterCarKov() end) end
 function M.quitCarKov() return safely(function() return ensure():quitCarKov() end) end
+function M.dismissExtraction() return safely(function() return ensure():dismissExtraction() end) end
 function M.keepPerk() return safely(function() return ensure():answerPerkOffer(false) end) end
 function M.swapPerk() return safely(function() return ensure():answerPerkOffer(true) end) end
 function M.activatePerk() return safely(function() return ensure():activatePerk() end) end
