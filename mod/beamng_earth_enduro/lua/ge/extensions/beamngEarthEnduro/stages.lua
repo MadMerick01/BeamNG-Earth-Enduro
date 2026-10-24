@@ -45,6 +45,86 @@ M.list = {
     -- Time limit: 30 min.
     targetSeconds = 30 * 60,
   },
+  -- Stages 3 to 8: coordinates from Wikipedia, gazetteer and border-post listings, not yet checked
+  -- in game; time limits are estimates, not Google Maps times.
+  {
+    id = 'death_road', name = 'Stage 3: Death Road',
+    startTown = 'La Cumbre pass, Bolivia', finishTown = 'Yolosa, Bolivia',
+    briefing = 'Drive from the La Cumbre pass at 4,650 m down the North Yungas Road, the Death Road, '
+      .. 'a cliff-edge dirt track that drops into the jungle at Yolosa. Reach the finish to complete the stage.',
+    start = { latitude = -16.3367, longitude = -68.0406 },
+    finish = { latitude = -16.2333, longitude = -67.7333 },
+    finishRadiusMetres = 100,
+    difficulty = 5, lengthKm = 60,
+    startingMoney = 3000,
+    -- Time limit: 2 h 0 min.
+    targetSeconds = 2 * 3600, targetIsEstimate = true,
+  },
+  {
+    id = 'fairy_meadows', name = 'Stage 4: Fairy Meadows Road',
+    startTown = 'Raikot Bridge, Gilgit-Baltistan', finishTown = 'Tato, Gilgit-Baltistan',
+    briefing = 'Drive from the Raikot Bridge on the Karakoram Highway up the Fairy Meadows Road, a narrow gravel shelf '
+      .. 'above the Indus with no guardrails, to Tato village. Reach the finish to complete the stage.',
+    start = { latitude = 35.4926, longitude = 74.5918 },
+    finish = { latitude = 35.4331, longitude = 74.5979 },
+    finishRadiusMetres = 100,
+    difficulty = 5, lengthKm = 15,
+    startingMoney = 3000,
+    -- Time limit: 45 min.
+    targetSeconds = 45 * 60, targetIsEstimate = true,
+  },
+  {
+    id = 'sani_pass', name = 'Stage 5: Sani Pass',
+    startTown = 'Sani Pass border post, South Africa', finishTown = 'Sani Top, Lesotho',
+    briefing = 'Drive from the South African border post up the gravel hairpins of the Sani Pass '
+      .. 'to Sani Top in Lesotho. Reach the finish to complete the stage.',
+    start = { latitude = -29.6030, longitude = 29.3391 },
+    finish = { latitude = -29.5847, longitude = 29.2856 },
+    finishRadiusMetres = 100,
+    difficulty = 4, lengthKm = 9,
+    startingMoney = 3000,
+    -- Time limit: 30 min.
+    targetSeconds = 30 * 60, targetIsEstimate = true,
+  },
+  {
+    id = 'skippers_canyon', name = 'Stage 6: Skippers Canyon',
+    startTown = 'Skippers Saddle, Queenstown', finishTown = 'Skippers Bridge, Otago',
+    briefing = 'Drive from Skippers Saddle down the one-lane Skippers Canyon Road to the Skippers Bridge, '
+      .. '91 m above the Shotover River. Reach the finish to complete the stage.',
+    start = { latitude = -44.94, longitude = 168.71 },
+    finish = { latitude = -44.8444, longitude = 168.6868 },
+    finishRadiusMetres = 100,
+    difficulty = 4, lengthKm = 13,
+    startingMoney = 3000,
+    -- Time limit: 30 min.
+    targetSeconds = 30 * 60, targetIsEstimate = true,
+  },
+  {
+    id = 'dalton_highway', name = 'Stage 7: Dalton Highway',
+    startTown = 'Chandalar Shelf, Alaska', finishTown = 'Galbraith Lake, Alaska',
+    briefing = 'Drive the Dalton Highway from the Chandalar Shelf over the Atigun Pass and across the Brooks Range '
+      .. 'to Galbraith Lake. Reach the finish to complete the stage.',
+    start = { latitude = 68.0481, longitude = -149.6230 },
+    finish = { latitude = 68.4532, longitude = -149.4837 },
+    finishRadiusMetres = 100,
+    difficulty = 3, lengthKm = 61,
+    startingMoney = 3000,
+    -- Time limit: 1 h 15 min.
+    targetSeconds = 75 * 60, targetIsEstimate = true,
+  },
+  {
+    id = 'transfagarasan', name = 'Stage 8: Transfăgărășan',
+    startTown = 'Cârțișoara, Romania', finishTown = 'Bâlea Lac, Romania',
+    briefing = 'Drive from Cârțișoara up the hairpins of the Transfăgărășan to the glacial lake at Bâlea Lac. '
+      .. 'Reach the finish to complete the stage.',
+    start = { latitude = 45.7239, longitude = 24.5792 },
+    finish = { latitude = 45.6033, longitude = 24.6172 },
+    finishRadiusMetres = 100,
+    difficulty = 2, lengthKm = 30,
+    startingMoney = 3000,
+    -- Time limit: 45 min.
+    targetSeconds = 45 * 60, targetIsEstimate = true,
+  },
 }
 
 local function copy(stage, index)

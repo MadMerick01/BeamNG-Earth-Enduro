@@ -425,10 +425,11 @@ do
   local second = S.get('stage_2')
   T.eq(second.name, 'Stage 2: Colo River', 'Stage 2 defined'); T.eq(S.after('stage_1').id, 'stage_2', 'Stage 2 follows Stage 1')
   T.eq(second.start.latitude, -33.601664, 'Stage 2 starts at Windsor'); T.eq(second.finish.longitude, 150.790919, 'Stage 2 finishes at Colo Heights')
-  T.eq(second.targetSeconds, 30 * 60, 'Stage 2 limit is 30 min'); T.eq(S.after('stage_2'), nil, 'Stage 2 is the last stage')
+  T.eq(second.targetSeconds, 30 * 60, 'Stage 2 limit is 30 min'); T.eq(S.after('stage_2').id, 'death_road', 'Stage 3 follows Stage 2')
+  T.eq(S.after(S.list[#S.list].id), nil, 'nothing after the last stage')
   local m,mio,ma,_,_,g=F.controller()
   m:tick(0.1); m:vehicleSpawned(); m:tick(0.1)
-  T.eq(m:view().stage.number, 1, 'HUD numbers the stage'); T.eq(m:view().stage.count, 2, 'HUD counts the stages')
+  T.eq(m:view().stage.number, 1, 'HUD numbers the stage'); T.eq(m:view().stage.count, #S.list, 'HUD counts the stages')
   T.eq(m:view().upcomingStage.name, 'Stage 2: Colo River', 'Stage 2 shown as up next while driving Stage 1')
   T.eq(m:view().nextStage, nil, 'next stage not offered before the finish'); T.check(not m:startNextStage(), 'next stage refused before the finish')
   m:addTestMoney(); g.damage = 200
@@ -466,9 +467,15 @@ do
   ma.pose = F.position(second.start.latitude, second.start.longitude); m:tick(0.1)
   T.eq(g.spawns[#g.spawns].model, 'pickup', 'arrival car given again after the restart')
   m:vehicleSpawned(); m:tick(0.1)
+  T.eq(m:view().upcomingStage.name, 'Stage 3: Death Road', 'Stage 3 shown as up next while driving Stage 2')
+  -- With Stage 2 as the last stage, its finish offers nothing next and points to the stage list.
+  local all = S.list; S.list = { all[1], all[2] }
+  T.eq(m:view().upcomingStage, nil, 'nothing up next on the last stage')
   ma.pose = F.position(second.finish.latitude, second.finish.longitude); m:tick(0.1)
-  T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after Stage 2'); T.eq(m:view().upcomingStage, nil, 'nothing up next after Stage 2')
+  T.check(m:view().stageFinished, 'Stage 2 finished'); T.eq(m:view().nextStage, nil, 'nothing after the last stage')
   T.check(m:view().sessionStatus:find('Pick another stage'), 'last stage points to the stage list')
+  S.list = all
+  T.eq(m:view().nextStage.name, 'Stage 3: Death Road', 'Stage 3 offered after Stage 2')
 end
 
 -- Out of money and can't drive: a damaged car the player cannot pay to repair, standing still for
