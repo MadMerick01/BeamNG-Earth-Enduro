@@ -1294,14 +1294,9 @@ function M.new(deps)
         self.diag:event('hostile_spawn_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
         return
       end
-      self.hostile = { phase = 'chasing', id = id, age = 0, still = 0 }
+      self.hostile = { phase = 'chasing', id = id, still = 0, brain = {} }
       self.diag:event('hostile_spawned', tostring(model) .. ' #' .. tostring(id))
       return
-    end
-    encounter.age = encounter.age + step
-    if not encounter.retried and encounter.age >= hostile.CHASE_RETRY_SECONDS then
-      encounter.retried = true
-      self.hostiles:chase(encounter.id)
     end
     local status, why = self.hostiles:status(encounter.id)
     if not status then
@@ -1312,7 +1307,14 @@ function M.new(deps)
       return
     end
     encounter.damage, encounter.distance = status.damage, status.distance
-    encounter.still = status.speed <= hostile.STILL_SPEED and encounter.still + step or 0
+    -- The brain picks how it drives: straight at the player, the chase AI, reversing out when
+    -- stuck, or backing off to ram again.
+    local mode = encounter.brain.mode
+    local command = hostile.think(encounter.brain, status, step)
+    if command then self.hostiles:drive(encounter.id, command) end
+    if encounter.brain.mode ~= mode then self.diag:event('hostile_mode', tostring(encounter.brain.mode)) end
+    -- Standing still while reversing out or backing off is trying, not disabled.
+    encounter.still = status.speed <= hostile.STILL_SPEED and hostile.counts(encounter.brain) and encounter.still + step or 0
     encounter.disabled = encounter.still >= hostile.STILL_SECONDS and status.damage >= hostile.DISABLED_DAMAGE
     if encounter.disabled and status.distance and status.distance <= hostile.CLAIM_METRES then
       self:addMoney(hostile.REWARD)

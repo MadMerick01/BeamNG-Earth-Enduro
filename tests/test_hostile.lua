@@ -15,7 +15,7 @@ do
   local function point(x, y, z) return { x = x, y = y, z = z } end
   local objects = {
     [7] = { pos = point(1000, 2000, 50), vel = point(20, 0, 0), damage = 0 },
-    [8] = { pos = point(1003, 2004, 50), vel = point(0.3, 0.4, 0), damage = 2500 },
+    [8] = { pos = point(1003, 2004, 50), vel = point(0.3, 0.4, 0), damage = 2500, dirVec = point(0, 1, 0) },
   }
   local world = { [7] = true }
   local function car(id)
@@ -46,7 +46,22 @@ do
   T.check(commands[1].command:find('ai.setMode%("chase"%)'), 'in chase mode')
   local status = h:status(8)
   T.near(status.speed, 0.5, 1e-9, 'reads its speed'); T.eq(status.damage, 2500, 'reads its damage'); T.near(status.distance, 5, 1e-9, 'distance to the player')
+  T.near(status.angle, math.deg(math.atan2(3, -4)), 1e-9, 'the player is behind it on its left')
   T.check(h:chase(8), 'chase order sent again'); T.eq(#commands, 2, 'second order')
+  -- Steered from the mod: the AI is turned off once, and the gearbox only shifts on a change.
+  T.check(h:drive(8, { kind = 'drive', gear = -1, throttle = 0.6, steer = 0.5 }), 'drive order sent')
+  local sent = commands[#commands].command
+  T.check(sent:find('ai.setMode%("disabled"%)'), 'AI off'); T.check(sent:find('shiftToGearIndex%(%-1%)'), 'into reverse')
+  T.check(sent:find('input.event%("throttle", 0.60, 2%)'), 'throttle'); T.check(sent:find('input.event%("steering", 0.50, 2%)'), 'steering')
+  h:drive(8, { kind = 'drive', gear = -1, throttle = 0.6, steer = -0.2 })
+  sent = commands[#commands].command
+  T.check(not sent:find('ai.setMode') and not sent:find('shiftToGearIndex'), 'a steering update sends only the inputs')
+  h:drive(8, { kind = 'rest' })
+  T.check(commands[#commands].command:find('input.event%("brake", 1, 2%)'), 'resting holds the brakes')
+  h:drive(8, { kind = 'chase' })
+  sent = commands[#commands].command
+  T.check(sent:find('shiftToGearIndex%(1%)') and sent:find('ai.setMode%("chase"%)'), 'back into drive for the chase AI')
+  T.check(sent:find('input.event%("brake", 0, 2%)'), 'inputs released for the AI')
   T.check(h:remove(8), 'removed'); T.eq(deleted[1], 8, 'deleted from the world')
   local _, why = h:status(8)
   T.eq(why, 'vehicle_gone', 'gone once removed'); T.check(h:remove(8), 'removing twice is harmless')
@@ -59,6 +74,63 @@ do
   T.eq(select(2, hostile.new(env):spawn('pickup', config, 300)), 'spawn_unavailable', 'missing spawner reported')
   env.vehicles = function() return { spawnNewVehicle = function() error('boom') end } end
   T.eq(select(2, hostile.new(env):spawn('pickup', config, 300)), 'spawn_failed', 'spawn errors contained')
+end
+
+-- The brain, step by step.
+do
+  local B = hostile.BRAIN
+  local function run(brain, reading, seconds)
+    local orders = {}
+    for _ = 1, math.floor(seconds * 10 + 0.5) do
+      local order = hostile.think(brain, reading, 0.1)
+      if order then orders[#orders + 1] = order end
+    end
+    return orders
+  end
+  -- Far off it is steered straight at the player, turning towards them.
+  local brain = {}
+  local orders = run(brain, { speed = 15, damage = 0, distance = 300, angle = 20 }, 1)
+  T.eq(brain.mode, 'direct', 'far off: straight at the player'); T.eq(orders[1].gear, 1, 'forwards')
+  T.near(orders[1].steer, -20 / B.STEER_FULL_DEGREES, 1e-9, 'steers left towards a player on its left')
+  T.eq(orders[1].throttle, B.DIRECT_THROTTLE, 'at speed'); T.eq(#orders, 5, 'steering updated every 0.2 s')
+  orders = run(brain, { speed = 15, damage = 0, distance = 300, angle = -150 }, 0.2)
+  T.eq(orders[#orders].steer, 1, 'full lock right for a player behind on its right'); T.eq(orders[#orders].throttle, B.TURN_THROTTLE, 'slower turning round')
+  -- Close in it hands over to the chase AI, and only goes back to straight-line driving well beyond.
+  orders = run(brain, { speed = 15, damage = 0, distance = 110, angle = 0 }, 0.1)
+  T.eq(brain.mode, 'chase', 'close in: chase AI'); T.eq(orders[1].kind, 'chase', 'chase order')
+  T.eq(#run(brain, { speed = 15, damage = 0, distance = 150, angle = 0 }, 1), 0, 'chase AI left alone in the gap')
+  run(brain, { speed = 15, damage = 0, distance = 200, angle = 0 }, 0.1)
+  T.eq(brain.mode, 'direct', 'back to straight-line driving far off')
+  -- Stuck: reverses out with the wheel turned away, up to three tries, then gives up.
+  brain = {}
+  run(brain, { speed = 0, damage = 0, distance = 60, angle = 30 }, B.STUCK_SECONDS + 0.1)
+  T.eq(brain.mode, 'unstick', 'stuck: reverses out'); T.check(not hostile.counts(brain), 'reversing out is not standing still')
+  orders = run(brain, { speed = 0, damage = 0, distance = 60, angle = 30 }, 0.2)
+  T.eq(orders[#orders].gear, -1, 'in reverse'); T.check(orders[#orders].steer > 0, 'wheel turned away to swing its nose round')
+  for try = 2, 3 do
+    run(brain, { speed = 0, damage = 0, distance = 60, angle = 30 }, B.UNSTICK_SECONDS + B.STUCK_SECONDS + 0.1)
+    T.eq(brain.mode, 'unstick', 'try ' .. try); T.eq(brain.tries, try, 'counted')
+  end
+  run(brain, { speed = 0, damage = 0, distance = 60, angle = 30 }, B.UNSTICK_SECONDS + B.STUCK_SECONDS + 0.1)
+  T.eq(brain.mode, 'beaten', 'gives up after three tries'); T.check(hostile.counts(brain), 'now standing still counts')
+  -- Getting free resets the tries.
+  brain = {}
+  run(brain, { speed = 0, damage = 0, distance = 60 }, B.STUCK_SECONDS + 0.1)
+  run(brain, { speed = 6, damage = 0, distance = 60 }, B.UNSTICK_SECONDS + 0.1)
+  T.eq(brain.tries, 0, 'free again: tries reset'); T.eq(brain.mode, 'chase', 'and back to the chase')
+  -- A hit while ramming, or being pinned against the player, backs it off to ram again.
+  brain = {}
+  run(brain, { speed = 10, damage = 0, distance = 5, angle = 0 }, 0.5)
+  orders = run(brain, { speed = 10, damage = 500, distance = 5, angle = 0 }, 0.1)
+  T.eq(brain.mode, 'backoff', 'hit: backs off'); T.eq(orders[1].gear, -1, 'in reverse'); T.eq(orders[1].throttle, B.BACKOFF_THROTTLE, 'hard')
+  run(brain, { speed = 3, damage = 500, distance = 15, angle = 0 }, B.BACKOFF_SECONDS + 0.1)
+  T.eq(brain.mode, 'chase', 'then goes again'); T.eq(brain.tries, 0, 'backing off is not a try')
+  run(brain, { speed = 0, damage = 500, distance = 4, angle = 0 }, B.STUCK_SECONDS + 0.1)
+  T.eq(brain.mode, 'backoff', 'pinned against the player: backs off, not stuck')
+  -- A crash away from the player is not a hit.
+  brain = {}
+  run(brain, { speed = 10, damage = 0, distance = 50 }, 0.5); run(brain, { speed = 10, damage = 900, distance = 50 }, 0.1)
+  T.eq(brain.mode, 'chase', 'damage far from the player does not back it off')
 end
 
 -- The run, with a hostile set to come 4 km in.
@@ -98,8 +170,9 @@ do
   T.eq(#h.spawns, 1, 'hostile spawned'); T.eq(h.spawns[1].behind, 300, '300 m behind')
   T.eq(h.spawns[1].model, 'roamer', 'a Roamer'); T.eq(h.spawns[1].config, 'vehicles/roamer/robber_light.pc', 'in the Robber Light config')
   T.eq(v.carkov.hostile.phase, 'chasing', 'chasing'); T.eq(v.carkov.hostile.distanceMetres, 300, 'distance shown')
-  F.advance(c, 2.1)
-  T.eq(h.chases, 1, 'chase order sent again after the spawn')
+  T.eq(c.hostile.brain.mode, 'direct', '300 m back it drives straight at the player'); T.eq(h.orders[1].kind, 'drive', 'steered from the mod')
+  h.alive[h:current()].distance = 100; c:tick(0.1)
+  T.eq(c.hostile.brain.mode, 'chase', 'close in it hands over to the chase AI'); T.eq(h.orders[#h.orders].kind, 'chase', 'chase order sent')
   -- Stuck with no damage, beside the player, for longer than 10 s: not disabled, no bounty.
   local id = h:current()
   local balance = c:view().balance
@@ -107,10 +180,17 @@ do
   F.advance(c, 15)
   T.eq(c:view().carkov.hostile.phase, 'chasing', 'a stuck AI is not disabled'); T.eq(c:view().balance, balance, 'and pays nothing')
   -- Rammed: it moves, then stops damaged, but the player is not close enough yet.
-  h.alive[id] = { speed = 8, damage = 4000, distance = 40 }; c:tick(0.1)
+  h.alive[id] = { speed = 8, damage = 4000, distance = 40 }; F.advance(c, 2)
+  T.eq(c.hostile.brain.mode, 'chase', 'chasing again after backing off')
   h.alive[id].speed = 0.2
-  F.advance(c, 9)
-  T.eq(c:view().carkov.hostile.phase, 'chasing', 'not disabled before 10 s')
+  F.advance(c, 4.1)
+  T.eq(c.hostile.brain.mode, 'unstick', 'stuck: it tries to reverse out'); T.eq(c.hostile.still, 0, 'trying is not standing still')
+  F.advance(c, 2.5)
+  T.eq(c.hostile.brain.mode, 'chase', 'then chases again')
+  F.advance(c, 4.1)
+  T.eq(c.hostile.brain.mode, 'beaten', 'damaged, it gives up after one try'); T.eq(h.orders[#h.orders].kind, 'rest', 'and sits still')
+  F.advance(c, 5)
+  T.eq(c:view().carkov.hostile.phase, 'chasing', 'not disabled before 10 s still since its last try')
   F.advance(c, 1.2)
   T.eq(c:view().carkov.hostile.phase, 'disabled', 'disabled after 10 s stopped and damaged'); T.eq(c:view().balance, balance, 'not paid until claimed')
   -- Moving again starts the 10 s again.

@@ -110,6 +110,11 @@ function F.hostiles()
     self.alive[self.nextId] = { speed = 15, damage = 0, distance = behind }
     return self.nextId
   end
+  h.orders = {}
+  function h:drive(id, order)
+    self.orders[#self.orders + 1] = F.copy(order)
+    return self.alive[id] ~= nil
+  end
   function h:chase(id) self.chases = self.chases + 1; return self.alive[id] ~= nil end
   function h:status(id)
     if not self.alive[id] then return nil, 'vehicle_gone' end
