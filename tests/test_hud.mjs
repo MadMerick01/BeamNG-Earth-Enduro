@@ -71,6 +71,14 @@ test('restart button only sends the fixed command when Lua enabled it', () => {
   a.scope.restartStage()
   assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')
 })
+test('next stage button only sends the fixed command when Lua enabled it', () => {
+  const a = app()
+  a.scope.startNextStage()
+  assert.equal(a.commands.length, 1)
+  a.handlers.BeamNGEarthEnduroState({}, { state: 'READY', stageFinished: true, nextStageAllowed: true })
+  a.scope.startNextStage()
+  assert.equal(a.commands[1], 'if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
+})
 test('car buttons only send fixed commands when Lua enabled them', () => {
   const a = app()
   a.scope.buyCar(); a.scope.revertCar()
@@ -121,9 +129,9 @@ test('coordinates copy as one latitude, longitude pair through the game clipboar
 test('the stage briefing can be dismissed without sending a command', () => {
   const a = app()
   const count = a.commands.length
-  assert.equal(a.scope.briefingDismissed, false)
-  a.scope.dismissBriefing()
-  assert.equal(a.scope.briefingDismissed, true)
+  assert.equal(a.scope.briefingDismissed, null)
+  a.scope.dismissBriefing('Stage 1: Zoji La Pass')
+  assert.equal(a.scope.briefingDismissed, 'Stage 1: Zoji La Pass')
   assert.equal(a.commands.length, count)
 })
 test('tabs switch without sending a command and flag what needs attention', () => {
@@ -193,7 +201,7 @@ test('the HUD keeps money, Save and alerts outside the tabs', () => {
     assert.ok(html.indexOf(always) > -1 && html.indexOf(always) < panels, always)
   }
   for (const id of ['route', 'garage', 'tips']) assert.ok(html.includes(`ng-if="tab === '${id}'"`), id)
-  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'addTestMoney()', 'dismissBriefing()']) {
+  for (const action of ['buyParts()', 'revertParts()', 'buyCar()', 'revertCar()', 'requestRepairQuote()', 'repairVehicle()', 'restartStage()', 'startNextStage()', 'addTestMoney()', 'dismissBriefing(data.stage.name)']) {
     assert.ok(html.includes(`ng-click="${action}"`), action)
   }
 })

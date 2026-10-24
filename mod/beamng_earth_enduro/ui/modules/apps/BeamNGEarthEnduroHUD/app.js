@@ -14,9 +14,10 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var mount = function (on) {
         call('if beamngEarthEnduro_core then beamngEarthEnduro_core.uiMounted(' + (on ? 'true' : 'false') + ') end')
       }
-      // The briefing stays hidden for the rest of the session once the player dismisses it.
-      scope.briefingDismissed = false
-      scope.dismissBriefing = function () { scope.briefingDismissed = true }
+      // A stage's briefing stays hidden for the rest of the session once the player dismisses it;
+      // the next stage's briefing still shows.
+      scope.briefingDismissed = null
+      scope.dismissBriefing = function (stageName) { scope.briefingDismissed = stageName }
       // Each part of the HUD sits on its own tab so the app stays short.
       scope.tabs = [{ id: 'route', label: 'Route' }, { id: 'garage', label: 'Garage' }, { id: 'tips', label: 'Tips' }]
       scope.tab = 'route'
@@ -86,6 +87,9 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       }
       scope.revertParts = function () {
         if (scope.data.revertPartsAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.revertParts() end')
+      }
+      scope.startNextStage = function () {
+        if (scope.data.nextStageAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
       }
       scope.restartStage = function () {
         if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')

@@ -17,8 +17,21 @@ local edits = {
   function(s) s.vehicle.config={ model = 'pickup', vars = { x = 0/0 } } end,
   function(s) s.vehicle.config={ model = 'pickup', [true] = 1 } end,
   function(s) s.stage={} end, function(s) s.finished='yes' end, function(s) s.gameOver=false end,
+  function(s) s.completedStages='stage_1' end, function(s) s.completedStages={ 1 } end,
+  function(s) s.entry={ balance=-1, vehicle={} } end, function(s) s.entry={ balance=10 } end,
+  function(s) s.entry={ balance=10, vehicle={ config='pickup.pc' } } end,
+  function(s) s.entry={ balance=10, vehicle={ damage=0/0 } } end,
 }
 for _, edit in ipairs(edits) do local s=F.save(); edit(s); T.eq(P.validate(s),nil,'invalid save rejected') end
+-- A later stage keeps the stages completed and the money and car it was started with.
+do
+  local s=F.save(); s.completedStages={ 'stage_1' }
+  s.entry={ balance=4200, vehicle={ model='pickup', config={ model='pickup', vars={ ['$fuel']=80 } }, damage=60 } }
+  local v=P.validate(s)
+  T.eq(v.completedStages[1],'stage_1','completed stages kept'); T.eq(v.entry.balance,4200,'entry money kept')
+  T.eq(v.entry.vehicle.config.vars['$fuel'],80,'entry car kept'); T.eq(v.entry.vehicle.damage,60,'entry damage kept')
+  T.eq(P.validate(F.save()).entry,nil,'older save without an entry still valid')
+end
 -- A saved car config is kept as plain data.
 do
   local s=F.save(); s.vehicle.config={ model='pickup', partsTree={ chosenPartName='pickup', children={ a={ chosenPartName='' } } },

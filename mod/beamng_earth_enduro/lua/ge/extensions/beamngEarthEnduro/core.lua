@@ -101,6 +101,7 @@ local goLabels = { resume = 'GO TO YOUR LAST SAVE', start = 'GO TO THE START' }
 local goMessages = {
   resume = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to carry on your enduro.',
   start = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start your enduro. You get your starter car when you arrive.',
+  carried = 'Copy these coordinates, paste them into the BeamNG.Earth map and teleport there to start the stage. Your car is waiting for you there.',
 }
 local arrivedMessages = {
   resume = "You're in the right place. Continue your trek, and press Save to keep your progress.",
@@ -175,6 +176,9 @@ function M.new(deps)
     self.owedDamage = self.profile and self.profile.vehicle and self.profile.vehicle.damage or 0
     -- A restarted stage sends the player back to its start for a new starter car.
     self.mode = (self.profile and not self.profile.atStart) and 'resume' or 'start'
+    -- A stage started from the one before, or restarted, can bring a car to its start instead of the starter car.
+    self.carriedCar = self.mode == 'start' and self.profile ~= nil and self.profile.vehicle ~= nil
+      and self.profile.vehicle.config ~= nil
     self.creationBase = location.copy(self.profile and self.profile.base or self.unsavedBase
       or (self.configuration and self.configuration.base))
     self.startupTarget = location.copy(self.profile and self.profile.resume or self.creationBase)
@@ -628,12 +632,12 @@ function M.new(deps)
     self.vehicleProvided = true
     local model, config, label
     local configFile
-    if self.mode == 'start' then
+    if self.mode == 'start' and not self.carriedCar then
       model, config, label, configFile = STARTER_MODEL, STARTER_CONFIG, 'starter_car', STARTER_CONFIG
     else
       config = self.profile and self.profile.vehicle and self.profile.vehicle.config
       if not config then return end
-      model, label, configFile = config.model, 'saved_car', config.partConfigFilename
+      model, label, configFile = config.model, self.carriedCar and 'carried_car' or 'saved_car', config.partConfigFilename
     end
     self.arrivingModel = model
     -- A car respawned from a saved config may not know its .pc file, so its price is looked up here.
@@ -756,8 +760,11 @@ function M.new(deps)
   end
 
   -- Writes a save of this profile and makes it the loaded one. Returns it, or nil and why.
+  -- The stages completed and the stage's entry carry over from the loaded save unless the candidate sets them.
   function c:record(candidate)
     candidate.schemaVersion, candidate.profileId = 1, 'default'
+    if candidate.completedStages == nil and self.profile then candidate.completedStages = self.profile.completedStages end
+    if candidate.entry == nil and self.profile then candidate.entry = self.profile.entry end
     local saved, why = self.store:save(candidate)
     if not saved then return nil, why end
     self.profile, self.unsavedBase = saved, nil
@@ -781,6 +788,50 @@ function M.new(deps)
     return location.copy(self.stage.start)
   end
 
+  -- What a restart goes back to: the money and car the stage was started with, or, on the first
+  -- stage, its starting money and the starter car.
+  function c:stageEntry()
+    local entry = self.profile and self.profile.entry
+    if entry then return entry.balance, persistence.plainConfig(entry.vehicle.config) and {
+      model = entry.vehicle.model, config = entry.vehicle.config, damage = entry.vehicle.damage } or {} end
+    return self.stage.startingMoney, {}
+  end
+
+  -- Moves a finished stage's save on to the next stage, with the car and money the player has now.
+  -- Mileage, the clock and sponsor bonuses start again; the player goes to the next start for their car.
+  function c:startNextStage()
+    local nextStage = self.stage and stages.after(self.stage.id)
+    if not nextStage or not self.stageFinished or self.gameOver or self.error or self.state ~= 'READY'
+        or not self.arrived or not self.profile then
+      self.feedback = 'The next stage is not open yet. Finish this stage first.'
+      return false
+    end
+    if self.pendingParts or self.pendingCar then
+      self.feedback = 'Pay for or put back your parts or car change on the Garage tab before you move on.'
+      return false
+    end
+    local config = self:savedVehicleConfig()
+    local vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() }
+    local balance = self.profile.progression.balance
+    local completed = {}
+    for i, id in ipairs(self.profile.completedStages or {}) do completed[i] = id end
+    completed[#completed + 1] = self.stage.id
+    local start = location.copy(nextStage.start)
+    local saved, why = self:record({ base = start, resume = start, progression = { balance = balance, totalDistanceKm = 0,
+      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0 },
+      stage = nextStage.id, vehicle = vehicle, atStart = true, completedStages = completed,
+      entry = { balance = balance, vehicle = vehicle } })
+    if not saved then
+      self.feedback = 'Could not start ' .. nextStage.name .. ' just now. Your finish is still saved. Try again.'
+      self.diag:event('next_stage_failed', tostring(why), 'E')
+      return false
+    end
+    self.diag:event('next_stage', nextStage.id .. (config and '' or ' (car not carried)'))
+    self:reload()
+    self.feedback = nextStage.name .. ' is ready. Go to the start' .. (self.carriedCar and ' to get your car.' or ' to get the starter car.')
+    return true
+  end
+
   -- Starts the stage again: money, mileage and car go back to the start, and the save is replaced.
   -- After game over one press does it; otherwise a second press confirms, since progress is lost.
   function c:restartStage()
@@ -795,9 +846,10 @@ function M.new(deps)
       return false
     end
     local start = self:stageStart()
-    local saved, why = self:record({ base = start, resume = start, progression = { balance = self.stage.startingMoney, totalDistanceKm = 0,
+    local balance, vehicle = self:stageEntry()
+    local saved, why = self:record({ base = start, resume = start, progression = { balance = balance, totalDistanceKm = 0,
       drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0 },
-      stage = self.stage.id, vehicle = {}, atStart = true })
+      stage = self.stage.id, vehicle = vehicle, atStart = true })
     if not saved then
       self.restartArmed = false
       self.feedback = 'Could not restart just now. Press Restart stage to try again.'
@@ -806,7 +858,7 @@ function M.new(deps)
     end
     self.diag:event('stage_restarted', self.stage.id)
     self:reload()
-    self.feedback = 'Stage restarted. Go to the start to get your starter car.'
+    self.feedback = 'Stage restarted. Go to the start to get ' .. (self.carriedCar and 'your car.' or 'your starter car.')
     return true
   end
 
@@ -815,6 +867,7 @@ function M.new(deps)
     -- Where the player goes to carry on: the last save, or the start before the first save.
     local resume = not self.arrived and not self.error and not self.gameOver and location.copy(self.startupTarget) or nil
     local stageName = self.stage and self.stage.name or ''
+    local nextStage = self.stage and self.stageFinished and stages.after(self.stage.id) or nil
     local base = location.copy(self.profile and self.profile.base or self.creationBase)
     local status = messages[self.reason]
     -- A quote only stands for the vehicle it was made for.
@@ -827,15 +880,19 @@ function M.new(deps)
       status = errorMessages[self.error] or errorMessages.internal_error
     elseif self.gameOver then
       status = 'Ironman rule: your car was wrecked and you could not pay for the repair, so this run is over. '
-        .. 'Press Restart stage to start ' .. stageName .. ' again in the starter car with ' .. dollars(self.stage and self.stage.startingMoney or 0) .. '.'
+        .. 'Press Restart stage to start ' .. stageName .. ' again '
+        .. ((self.profile and self.profile.entry) and ('with the car and ' .. dollars(self.profile.entry.balance) .. ' you started it with.')
+          or ('in the starter car with ' .. dollars(self.stage and self.stage.startingMoney or 0) .. '.'))
     elseif self.state == 'READY' and self.stageFinished then
-      status = 'You conquered ' .. stageName .. '! More stages are coming. Press Restart stage to run it again.'
+      status = nextStage and ('You conquered ' .. stageName .. '! Press Start ' .. nextStage.name .. ' to take your car and money on to '
+          .. nextStage.startTown .. '.')
+        or ('You conquered ' .. stageName .. '! More stages are coming. Press Restart stage to run it again.')
     elseif self.state == 'READY' and self.wreck then
       status = 'Your car is wrecked. The repair costs ' .. dollars(self.wreck.cost) .. ' and you have '
         .. dollars(self.profile.progression.balance) .. '. Unless you can pay, it is game over in '
         .. math.max(0, math.ceil(self.wreck.left)) .. ' s.'
     elseif self.state == 'READY' then
-      status = self.arrived and arrivedMessages[self.mode] or goMessages[self.mode]
+      status = self.arrived and arrivedMessages[self.mode] or goMessages[self.carriedCar and 'carried' or self.mode]
     elseif not status then status = messages.position_invalid end
     local label = labels[self.state]
     if self.state == 'CONFIG_REQUIRED' or self.state == 'ERROR' then -- keep the label
@@ -886,7 +943,13 @@ function M.new(deps)
       stage = self.stage and {
         name = self.stage.name, finish = location.copy(self.stage.finish),
         startTown = self.stage.startTown, finishTown = self.stage.finishTown, briefing = self.stage.briefing,
+        number = self.stage.number, count = self.stage.count,
       } or nil,
+      -- Offered once the stage is finished, when there is a stage after it.
+      nextStage = nextStage and { name = nextStage.name, startTown = nextStage.startTown } or nil,
+      nextStageAllowed = nextStage ~= nil and self.state == 'READY' and self.arrived and not self.gameOver
+        and not self.error and not self.pendingParts and not self.pendingCar,
+      carriedCar = self.carriedCar,
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
@@ -1055,6 +1118,7 @@ function M.revertParts() return safely(function() return ensure():revertParts(fa
 function M.buyCar() return safely(function() return ensure():buyCar() end) end
 function M.revertCar() return safely(function() return ensure():revertCar(false) end) end
 function M.restartStage() return safely(function() return ensure():restartStage() end) end
+function M.startNextStage() return safely(function() return ensure():startNextStage() end) end
 function M.onVehicleSpawned() return safely(function() if active then active:vehicleSpawned() end end) end
 function M.reload() return safely(function() ensure():reload() end) end
 function M.uiMounted(on) return safely(function() ensure():mount(on == true) end) end
