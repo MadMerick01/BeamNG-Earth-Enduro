@@ -52,10 +52,11 @@ local function progression(p)
   -- Sponsor bonuses paid on this stage; optional, so older saves load (the controller fills it in).
   if p.sponsorBonuses ~= nil and not integer(p.sponsorBonuses, 0) then return nil end
   -- Service Perks: the perk held and the one on offer (ids; the controller ignores unknown ones),
-  -- how many offers this stage has made, and the perks running now. All optional, so older saves load.
+  -- how many offers this stage has made, the perks running now, and where the last puncture was.
+  -- All optional, so older saves load.
   if not optionalString(p.perk) or not optionalString(p.perkOffer) then return nil end
   if p.perkOffers ~= nil and not integer(p.perkOffers, 0) then return nil end
-  for _, field in ipairs({ 'timeCreditSeconds', 'freezeSeconds', 'luckyUntilKm' }) do
+  for _, field in ipairs({ 'timeCreditSeconds', 'freezeSeconds', 'luckyUntilKm', 'lastPunctureKm' }) do
     local value = p[field]
     if value ~= nil and (not location.finite(value) or value < 0 or value > MAX_INTEGER) then
       return nil
@@ -64,7 +65,8 @@ local function progression(p)
   return { balance = p.balance, totalDistanceKm = p.totalDistanceKm,
     drivingSeconds = p.drivingSeconds or 0, penaltySeconds = p.penaltySeconds or 0,
     sponsorBonuses = p.sponsorBonuses, perk = p.perk, perkOffer = p.perkOffer, perkOffers = p.perkOffers,
-    timeCreditSeconds = p.timeCreditSeconds, freezeSeconds = p.freezeSeconds, luckyUntilKm = p.luckyUntilKm }
+    timeCreditSeconds = p.timeCreditSeconds, freezeSeconds = p.freezeSeconds, luckyUntilKm = p.luckyUntilKm,
+    lastPunctureKm = p.lastPunctureKm }
 end
 
 -- A saved position, with the altitude and heading when present. Returns a clean copy, or nil and why.

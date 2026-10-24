@@ -29,7 +29,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var alerts = {
         route: function (d) { return !!d.resume && !onCarKov(d) },
         carkov: function (d) { return !!d.resume && onCarKov(d) },
-        garage: function (d) { return !!d.partsChange || !!d.carChange || d.repairOwed > 0 }
+        garage: function (d) { return !!d.partsChange || !!d.carChange || d.repairOwed > 0 || (!!d.puncture && d.puncture.owed) }
       }
       scope.tabAlert = function (id) { return !!alerts[id] && alerts[id](scope.data || {}) }
       // The header names what the player is doing: the CarKov run, the stage, or the mod itself.
@@ -56,7 +56,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         }
       }
       // The one message under the clock: the most urgent of out of money and can't drive, extraction complete, a
-      // hostile inbound, how a CarKov run just ended or its hostile was dealt with, the extraction
+      // hostile inbound, a puncture just now, how a CarKov run just ended or its hostile was dealt with, the extraction
       // countdown, a hostile on the player's tail, stage complete, a sponsor bonus just paid, a perk just used or lost, a perk on offer, then the status.
       var notices = {
         stuck: { kind: 'stuck', title: 'OUT OF MONEY AND CAN\'T DRIVE?', color: '#eb5757', alert: true },
@@ -70,6 +70,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       var extractedNotice = { kind: 'extracted', title: '\uD83D\uDE81 EXTRACTION COMPLETE \uD83D\uDE81', color: '#6fcf97', alert: false }
       var holdNotice = { kind: 'hold', title: '', color: '#6fcf97', alert: false }
       var hostileNotice = { kind: 'hostile', title: '', color: '#eb5757', alert: true }
+      var punctureNotice = { kind: 'puncture', title: 'PUNCTURE!', color: '#eb5757', alert: true }
       scope.notice = function (d) {
         if (!d) return null
         if (d.stuck) return notices.stuck
@@ -79,6 +80,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
           hostileNotice.title = '\u26A0 HOSTILE INBOUND ' + threat.seconds
           return hostileNotice
         }
+        if (d.puncture && d.puncture.flash) return punctureNotice
         if (d.carkov && d.carkov.flash) {
           carkovNotice.title = d.carkov.flash.title
           return carkovNotice

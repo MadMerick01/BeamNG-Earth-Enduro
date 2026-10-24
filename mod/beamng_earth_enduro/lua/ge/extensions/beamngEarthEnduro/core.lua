@@ -9,6 +9,7 @@ local stages = require('beamngEarthEnduro/stages')
 local perks = require('beamngEarthEnduro/perks')
 local carkov = require('beamngEarthEnduro/carkov')
 local hostile = require('beamngEarthEnduro/hostile')
+local punctures = require('beamngEarthEnduro/punctures')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -58,6 +59,8 @@ local PERK_SHOWN_FOR = 6
 -- How long the HUD shows how a CarKov run ended, or how its hostile was dealt with. CarKov's fee
 -- and reward are set in carkov.lua, and the hostile's in hostile.lua.
 local CARKOV_SHOWN_FOR = 10
+-- A puncture's tyre repair, as damage points, so every repair quote and bill includes it.
+local PUNCTURE_DAMAGE = punctures.TYRE_REPAIR_COST / REPAIR_COST_PER_DAMAGE
 -- Perks that work on the stage clock, which does not run on a CarKov run, so they wait for the stage.
 local CLOCK_PERKS = { timeFreeze = true, paceGift = true }
 
@@ -152,6 +155,9 @@ function M.new(deps)
     random = deps.random or math.random,
     -- Spawns, reads and removes the CarKov hostile; without it runs have no hostile.
     hostiles = deps.hostiles,
+    -- Bursts tyres and tells whether the car is off road; without it there are no punctures.
+    punctures = deps.punctures,
+    punctureDamage = 0,
   }
 
   function c:transition(nextState, reason)
@@ -171,6 +177,8 @@ function M.new(deps)
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
     self.stuck, self.still, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, nil, false, nil, nil, nil
     self.quitArmed, self.extractHold = false, nil
+    -- A puncture not yet repaired; a reload respawns the car, so its tyre repair is owed instead.
+    self.punctureDamage, self.punctureFlash, self.offRoad, self.offRoadCheckedAt = 0, nil, nil, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -387,7 +395,7 @@ function M.new(deps)
       end
     end
     self.profile.progression.perk = nil
-    self.owedDamage, self.quote, self.stuck, self.still = 0, nil, nil, nil
+    self.owedDamage, self.punctureDamage, self.quote, self.stuck, self.still = 0, 0, nil, nil, nil
     self:addPenalty('repair')
     self:flashPerk('INSURANCE PAID', 'Your insurance paid for the repair, so you can drive on.')
     self.diag:event('insurance_paid', 'stuck')
@@ -459,7 +467,7 @@ function M.new(deps)
   function c:inspectDamage()
     local vehicle, why = self.garage:inspect()
     if not vehicle then return nil, why end
-    return { id = vehicle.id, damage = vehicle.damage + self.owedDamage }
+    return { id = vehicle.id, damage = vehicle.damage + self.owedDamage + self.punctureDamage }
   end
 
   -- Reads the player vehicle's damage now and prices it. Returns the inspection and cost, or nil and a reason.
@@ -539,7 +547,7 @@ function M.new(deps)
     end
     self:spend(cost, 'repair')
     local timed = self:repaired()
-    self.quote, self.owedDamage = nil, 0
+    self.quote, self.owedDamage, self.punctureDamage = nil, 0, 0
     self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '.' .. (timed and ' The repair cost you 5 minutes.' or '')
       .. ' Save to keep the new balance.'
     return true
@@ -589,7 +597,7 @@ function M.new(deps)
     end
     local previous = self.pendingParts
     local damage = previous and previous.damage
-      or (self.lastDamage and self.lastDamage.id == snapshot.id and self.lastDamage.damage) or self.owedDamage
+      or (self.lastDamage and self.lastDamage.id == snapshot.id and self.lastDamage.damage) or (self.owedDamage + self.punctureDamage)
     local repair = M.repairCost(damage)
     local position = previous and previous.position
       or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil
@@ -614,7 +622,7 @@ function M.new(deps)
     local sameCar = previous and previous.id == snapshot.id and previous.model == snapshot.model
     local oldDamage = previous and previous.oldDamage
       or (self.pendingParts and self.pendingParts.damage)
-      or (self.lastDamage and self.lastDamage.id == owned.id and self.lastDamage.damage) or self.owedDamage
+      or (self.lastDamage and self.lastDamage.id == owned.id and self.lastDamage.damage) or (self.owedDamage + self.punctureDamage)
     local base = sameCar and previous.base or snapshot
     local extras = M.partsDiff(base, snapshot)
     local price = math.floor((base.value or DEFAULT_CAR_PRICE) + 0.5)
@@ -668,7 +676,7 @@ function M.new(deps)
     if pending.discount > 0 then self:usePerk('carDeal') end
     local timed = not self.carkov and not self:usePerk('noPenalty')
     if timed then self:addPenalty('car') end
-    self.owedDamage = 0
+    self.owedDamage, self.punctureDamage = 0, 0
     self.carFeedback = 'Bought ' .. tostring(pending.name) .. ' for ' .. dollars(pending.cost)
       .. (timed and '. The car change cost you 5 minutes.' or (self.carkov and '.' or '. No Penalty saved you the 5 minutes.'))
       .. ' Save to keep it.'
@@ -698,7 +706,7 @@ function M.new(deps)
         self.diag:event('car_revert_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
         return false
       end
-      self.owedDamage = pending.oldDamage
+      self.owedDamage, self.punctureDamage = pending.oldDamage, 0
     end
     self.pendingCar = nil
     self.carFeedback = droveOff and 'You drove off without paying, so your own car is back.' or 'Your own car is back.'
@@ -766,7 +774,7 @@ function M.new(deps)
       return false
     end
     self:adoptParts(self.fittedParts)
-    self.owedDamage = 0
+    self.owedDamage, self.punctureDamage = 0, 0
     if pending.discount > 0 then self:usePerk('partsDiscount') end
     -- Parts alone cost no time, but a bill that includes a repair is a repair.
     local timed = pending.repair > 0 and self:repaired()
@@ -790,7 +798,7 @@ function M.new(deps)
       return false
     end
     -- The bill's damage already includes what was owed before the change.
-    self.pendingParts, self.owedDamage = nil, pending.damage or 0
+    self.pendingParts, self.owedDamage, self.punctureDamage = nil, pending.damage or 0, 0
     self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
       or 'The paid parts were put back.') .. (pending.repair > 0 and ' Its repair is still owed.' or '')
     return true
@@ -841,7 +849,7 @@ function M.new(deps)
   -- The damage Save keeps with the car: what it has now plus what is still owed, or, with a parts
   -- bill open, what it had before the change mended it. A restored car owes its repair.
   function c:savedVehicleDamage()
-    local damage = self.owedDamage
+    local damage = self.owedDamage + self.punctureDamage
     if self.pendingCar then damage = self.pendingCar.oldDamage
     elseif self.pendingParts then damage = self.pendingParts.damage
     elseif self.garage and self.ownedParts then
@@ -866,9 +874,39 @@ function M.new(deps)
         self:addMoney(metres / 1000 * rate)
         self:paySponsor()
         self:offerPerk()
+        self:roadPuncture(sample, metres, dt)
       end
     end
     self.odometer = location.copy(sample)
+  end
+
+  -- Road punctures. Each stretch driven has a small chance of bursting a tyre (see punctures.lua):
+  -- more at speed, double off road, never within GAP_KM of the last one or SAFE_FINISH_METRES of
+  -- the stage finish or CarKov extraction. The tyre repair is added to the repair, which mends it.
+  -- Like mileage, the distance of the last puncture is kept by Save.
+  function c:roadPuncture(sample, metres, dt)
+    if not self.punctures or self.stageFinished or self.paused() or self.pendingParts or self.pendingCar
+        or self.stuck or self.extractHold then return end
+    local progression = self.profile.progression
+    if progression.lastPunctureKm and progression.totalDistanceKm - progression.lastPunctureKm < punctures.GAP_KM then return end
+    local goal = self.carkov and self.carkov.extraction or (self.stage and self.stage.finish)
+    local left = goal and location.distance(sample, goal)
+    if not left or left <= punctures.SAFE_FINISH_METRES then return end
+    if not self.offRoadCheckedAt or self.clock - self.offRoadCheckedAt >= punctures.OFF_ROAD_CHECK_SECONDS then
+      local ok, offRoad = pcall(self.punctures.offRoad, self.punctures)
+      self.offRoad, self.offRoadCheckedAt = ok and offRoad == true, self.clock
+    end
+    if self.random() >= punctures.chance(metres, metres / dt * 3.6, self.offRoad) then return end
+    local ok, why, detail = self.punctures:burst()
+    if not ok then
+      self.diag:event('puncture_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+      return
+    end
+    progression.lastPunctureKm = progression.totalDistanceKm
+    self.punctureDamage = self.punctureDamage + PUNCTURE_DAMAGE
+    self.quote = nil
+    self.punctureFlash = { at = self.clock }
+    self.diag:event('puncture', string.format('%.1f km%s', progression.totalDistanceKm, self.offRoad and ' off road' or ''))
   end
 
   function c:observe(sample, dt)
@@ -1418,6 +1456,7 @@ function M.new(deps)
         penalty = shown and { reason = self.penalty.reason, seconds = PENALTY_SECONDS } or nil,
       }
     end
+    local punctureShown = self.punctureFlash ~= nil and self.clock - self.punctureFlash.at < punctures.SHOWN_FOR
     local onStage = current ~= nil and self.arrived and self.stage ~= nil and not self.carkov
     local sponsor
     if self.stage and not self.carkov then
@@ -1521,6 +1560,12 @@ function M.new(deps)
       saveAllowed = self.state == 'READY' and self.arrived,
       saveFeedback = self.feedback,
       carkov = self:carkovView(current),
+      -- Puncture! for a few seconds after a tyre bursts, and its tyre repair until it is repaired.
+      puncture = (self.punctureDamage > 0 or punctureShown) and {
+        flash = punctureShown,
+        owed = self.punctureDamage > 0,
+        tyreCost = math.floor(self.punctureDamage / PUNCTURE_DAMAGE + 0.5) * punctures.TYRE_REPAIR_COST,
+      } or nil,
     }
   end
 
@@ -1621,6 +1666,7 @@ end
 local function ensure()
   if not active then
     active = M.new({ io = gameIO(), adapter = earthAdapter.new(), garage = garage.new(), hostiles = hostile.new(),
+      punctures = punctures.new(),
       log = rawget(_G, 'log'),
       paused = gamePaused, trigger = function(event, payload) if guihooks then guihooks.trigger(event, payload) end end })
   end
