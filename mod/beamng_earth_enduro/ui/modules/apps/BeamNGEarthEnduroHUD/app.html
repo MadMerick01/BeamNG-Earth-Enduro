@@ -28,7 +28,7 @@
     <div ng-if="notice(data).kind === 'perk'" style="color:#f2f6f5;">{{data.perk.flash.text}}</div>
     <div ng-if="notice(data).kind === 'puncture'" style="color:#f2f6f5;">A tyre burst on the road. Repair it on the Garage tab: the tyre adds ${{data.puncture.tyreCost | number:0}}.</div>
     <div ng-if="notice(data).kind === 'carkov'" style="color:#f2f6f5;">{{data.carkov.flash.text}}</div>
-    <div ng-if="notice(data).kind === 'hostile' && data.carkov.hostile.phase === 'inbound'" style="color:#f2f6f5;">A hostile car is coming for you from behind and will try to ram you. Disable it to earn ${{data.carkov.hostile.reward | number:0}}.</div>
+    <div ng-if="notice(data).kind === 'hostile' && data.carkov.hostile.phase === 'inbound'" style="color:#f2f6f5;">A hostile car is about to appear ahead of you, heading your way, and will try to ram you. Disable it to earn ${{data.carkov.hostile.reward | number:0}}.</div>
     <div ng-if="notice(data).kind === 'hostile' && data.carkov.hostile.phase === 'chasing'" style="color:#f2f6f5;"><span ng-if="data.carkov.hostile.distanceMetres != null">{{data.carkov.hostile.distanceMetres | number:0}} m away. </span>Damage it until it stops for {{data.carkov.hostile.stillSeconds}} s, then get within {{data.carkov.hostile.claimMetres}} m of it to earn ${{data.carkov.hostile.reward | number:0}}.</div>
     <div ng-if="notice(data).kind === 'hostile' && data.carkov.hostile.phase === 'disabled'" style="color:#f2f6f5;">It is out of action<span ng-if="data.carkov.hostile.distanceMetres != null">, {{data.carkov.hostile.distanceMetres | number:0}} m away</span>. Get within {{data.carkov.hostile.claimMetres}} m of it to claim ${{data.carkov.hostile.reward | number:0}}.</div>
     <div ng-if="notice(data).kind === 'hold'">

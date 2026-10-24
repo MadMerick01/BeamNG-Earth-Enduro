@@ -103,12 +103,18 @@ end
 -- Stand-in for the hostile spawner: records spawns and removals; tests set each hostile's reading.
 function F.hostiles()
   local h = { spawns = {}, removed = {}, chases = 0, alive = {}, nextId = 100 }
-  function h:spawn(model, config, behind)
+  function h:spawn(model, config, ahead, side)
     if self.fails then return nil, 'spawn_failed', 'rejected' end
+    if self.noGround then return nil, 'no_ground' end
     self.nextId = self.nextId + 1
-    self.spawns[#self.spawns + 1] = { id = self.nextId, model = model, config = F.copy(config), behind = behind }
-    self.alive[self.nextId] = { speed = 15, damage = 0, distance = behind }
+    self.spawns[#self.spawns + 1] = { id = self.nextId, model = model, config = F.copy(config), ahead = ahead, side = side }
+    self.alive[self.nextId] = { speed = 15, damage = 0, distance = ahead }
     return self.nextId
+  end
+  h.orders = {}
+  function h:drive(id, order)
+    self.orders[#self.orders + 1] = F.copy(order)
+    return self.alive[id] ~= nil
   end
   function h:chase(id) self.chases = self.chases + 1; return self.alive[id] ~= nil end
   function h:status(id)

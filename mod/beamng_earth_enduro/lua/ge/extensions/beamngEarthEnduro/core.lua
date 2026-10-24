@@ -1296,6 +1296,7 @@ function M.new(deps)
     stranded = { title = 'CARKOV FAILED', text = 'You were out of money and could not drive, so the run is over and the entry fee is lost.' },
     hostile_disabled = { title = 'HOSTILE DISABLED', text = 'You took out the hostile and earned ' .. dollars(hostile.REWARD) .. '. Save to keep it.' },
     hostile_lost = { title = 'HOSTILE LOST', text = 'You left the hostile far behind. It is gone.' },
+    hostile_fell = { title = 'HOSTILE LOST', text = 'The hostile fell out of the world. It is gone.' },
   }
   function c:flashCarKov(result, extra)
     local shown = carkovResults[result]
@@ -1340,7 +1341,7 @@ function M.new(deps)
 
   -- The CarKov hostile. Once per run, when the run's distance passes hostileAtKm (and the player is
   -- not within SAFE_EXTRACTION_METRES of the extraction), HOSTILE INBOUND counts down, then a
-  -- hostile car is spawned behind the player and chases them. Once it has stood still for
+  -- hostile car is spawned ahead of the player, facing them, and comes at them. Once it has stood still for
   -- STILL_SECONDS with real damage, getting within CLAIM_METRES of it pays the bounty. Like
   -- driving pay, the bounty and the hostile having come are kept by Save.
   function c:clearHostile(reason)
@@ -1386,21 +1387,24 @@ function M.new(deps)
       if encounter.left > 0 or self.stuck then return end
       local model, config = self:hostileCar()
       local id, why, detail
-      if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_BEHIND_METRES)
+      local side = (self.random() < 0.5 and -1 or 1) * hostile.SPAWN_SIDE_METRES
+      if model then id, why, detail = self.hostiles:spawn(model, config, hostile.SPAWN_AHEAD_METRES, side)
       else why = 'car_unavailable' end
       if not id then
+        -- No ground with collision ahead of the player yet (BeamNG.Earth still streaming it in): try
+        -- again each second for a while.
+        encounter.waited = (encounter.waited or 0) + 1
+        if why == 'no_ground' and encounter.waited <= hostile.SPAWN_WAIT_SECONDS then
+          encounter.left = 1
+          return
+        end
         self.hostile = nil
         self.diag:event('hostile_spawn_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
         return
       end
-      self.hostile = { phase = 'chasing', id = id, age = 0, still = 0 }
+      self.hostile = { phase = 'chasing', id = id, still = 0, brain = {}, airborne = 0, respawns = encounter.respawns or 0 }
       self.diag:event('hostile_spawned', tostring(model) .. ' #' .. tostring(id))
       return
-    end
-    encounter.age = encounter.age + step
-    if not encounter.retried and encounter.age >= hostile.CHASE_RETRY_SECONDS then
-      encounter.retried = true
-      self.hostiles:chase(encounter.id)
     end
     local status, why = self.hostiles:status(encounter.id)
     if not status then
@@ -1411,7 +1415,27 @@ function M.new(deps)
       return
     end
     encounter.damage, encounter.distance = status.damage, status.distance
-    encounter.still = status.speed <= hostile.STILL_SPEED and encounter.still + step or 0
+    -- Fallen through the world (no ground under it): respawned ahead of the player, a few times a run.
+    encounter.airborne = status.grounded == false and encounter.airborne + step or 0
+    if encounter.airborne >= hostile.FALL_SECONDS then
+      local respawns = encounter.respawns + 1
+      self:clearHostile('fell')
+      if respawns > hostile.RESPAWN_TRIES then
+        self:flashCarKov('hostile_fell')
+        return
+      end
+      self.hostile = { phase = 'inbound', left = 1, respawns = respawns }
+      self.diag:event('hostile_respawn', tostring(respawns), 'W')
+      return
+    end
+    -- The brain picks how it drives: straight at the player, the chase AI, reversing out when
+    -- stuck, or backing off to ram again.
+    local mode = encounter.brain.mode
+    local command = hostile.think(encounter.brain, status, step)
+    if command then self.hostiles:drive(encounter.id, command) end
+    if encounter.brain.mode ~= mode then self.diag:event('hostile_mode', tostring(encounter.brain.mode)) end
+    -- Standing still while reversing out or backing off is trying, not disabled.
+    encounter.still = status.speed <= hostile.STILL_SPEED and hostile.counts(encounter.brain) and encounter.still + step or 0
     encounter.disabled = encounter.still >= hostile.STILL_SECONDS and status.damage >= hostile.DISABLED_DAMAGE
     if encounter.disabled and status.distance and status.distance <= hostile.CLAIM_METRES then
       self:addMoney(hostile.REWARD)
