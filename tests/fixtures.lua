@@ -126,6 +126,17 @@ function F.hostiles()
   end
   return h
 end
+-- Stand-in for the puncture maker: counts bursts; tests set whether the car is off road.
+function F.punctures()
+  local p = { bursts = 0, off = false, checks = 0 }
+  function p:burst()
+    if self.fails then return false, 'burst_failed', 'rejected' end
+    self.bursts = self.bursts + 1
+    return true
+  end
+  function p:offRoad() self.checks = self.checks + 1; return self.off end
+  return p
+end
 -- The first stage's starting money as shipped. Controllers start with $0 unless a test asks for
 -- starting money, so the money arithmetic in the tests stays simple.
 local firstStage = require('beamngEarthEnduro/stages').list[1]
@@ -139,7 +150,7 @@ function F.controller(options)
   local garage = options.garage or F.garage()
   local events, logs = {}, {}
   local c = Core.new({ io = io, adapter = adapter, garage = garage, paused = options.paused, random = options.random,
-    hostiles = options.hostiles,
+    hostiles = options.hostiles, punctures = options.punctures,
     trigger = function(name, view) events[#events + 1] = { name = name, data = F.copy(view) } end,
     log = function(level, tag, message) logs[#logs + 1] = message end })
   return c, io, adapter, events, logs, garage
