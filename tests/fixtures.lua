@@ -112,7 +112,7 @@ function F.controller(options)
   local adapter = options.adapter or F.adapter()
   local garage = options.garage or F.garage()
   local events, logs = {}, {}
-  local c = Core.new({ io = io, adapter = adapter, garage = garage, paused = options.paused,
+  local c = Core.new({ io = io, adapter = adapter, garage = garage, paused = options.paused, random = options.random,
     trigger = function(name, view) events[#events + 1] = { name = name, data = F.copy(view) } end,
     log = function(level, tag, message) logs[#logs + 1] = message end })
   return c, io, adapter, events, logs, garage

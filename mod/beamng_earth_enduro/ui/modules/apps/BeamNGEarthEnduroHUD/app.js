@@ -39,7 +39,7 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         }
       }
       // The one message under the clock: the most urgent of wreck, game over, stage complete, a sponsor
-      // bonus just paid, then the status.
+      // bonus just paid, a perk just used or lost, a perk on offer, then the status.
       var notices = {
         wreck: { kind: 'wreck', title: 'WRECKED', color: '#eb5757', alert: true },
         over: { kind: 'over', title: 'GAME OVER', color: '#eb5757', alert: true },
@@ -47,6 +47,8 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       }
       var statusNotice = { kind: 'status', title: '', color: '#a7e5c9', alert: false }
       var sponsorNotice = { kind: 'sponsor', title: '', color: '#f2c94c', alert: false }
+      var perkNotice = { kind: 'perk', title: '', color: '#bb86fc', alert: false }
+      var offerNotice = { kind: 'offer', title: '', color: '#bb86fc', alert: false }
       scope.notice = function (d) {
         if (!d) return null
         if (d.wreck) return notices.wreck
@@ -55,6 +57,14 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
         if (d.sponsor && d.sponsor.flash) {
           sponsorNotice.title = '+$' + String(Math.floor(d.sponsor.flash.amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' SPONSOR BONUS'
           return sponsorNotice
+        }
+        if (d.perk && d.perk.flash) {
+          perkNotice.title = d.perk.flash.title
+          return perkNotice
+        }
+        if (d.perk && d.perk.offer) {
+          offerNotice.title = 'NEW PERK: ' + d.perk.offer.name
+          return offerNotice
         }
         if (!d.stateLabel && !d.sessionStatus && !d.saveFeedback) return null
         statusNotice.title = d.stateLabel || ''
@@ -90,6 +100,15 @@ angular.module('beamng.apps').directive('beamngEarthEnduroHud', [function () {
       }
       scope.startNextStage = function () {
         if (scope.data.nextStageAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.startNextStage() end')
+      }
+      scope.keepPerk = function () {
+        if (scope.data.perk && scope.data.perk.offerAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.keepPerk() end')
+      }
+      scope.swapPerk = function () {
+        if (scope.data.perk && scope.data.perk.offerAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.swapPerk() end')
+      }
+      scope.activatePerk = function () {
+        if (scope.data.perk && scope.data.perk.activateAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.activatePerk() end')
       }
       scope.restartStage = function () {
         if (scope.data.restartAllowed) call('if beamngEarthEnduro_core then beamngEarthEnduro_core.restartStage() end')

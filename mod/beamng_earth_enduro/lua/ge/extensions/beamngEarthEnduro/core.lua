@@ -6,6 +6,7 @@ local hud = require('beamngEarthEnduro/hud')
 local earthAdapter = require('beamngEarthEnduro/earthAdapter')
 local garage = require('beamngEarthEnduro/garage')
 local stages = require('beamngEarthEnduro/stages')
+local perks = require('beamngEarthEnduro/perks')
 local M = {}
 -- Faster movement between two readings is treated as a teleport, not driving (150 m/s = 540 km/h).
 local MAX_DRIVING_SPEED = 150
@@ -48,6 +49,8 @@ M.PENALTY_SECONDS = PENALTY_SECONDS
 -- How long the HUD shows a sponsor bonus once it is paid. The amount and distance are set per stage
 -- in stages.lua.
 local SPONSOR_SHOWN_FOR = 6
+-- How long the HUD shows a perk being used, paid out or lost. Perk values are set in perks.lua.
+local PERK_SHOWN_FOR = 6
 
 -- Whole-dollar price to repair a vehicle with this much damage; 0 means nothing to repair.
 function M.repairCost(damage)
@@ -136,6 +139,7 @@ function M.new(deps)
     store = persistence.new(deps.io), ui = hud.new(deps.trigger),
     feedback = 'Not saved this session.', garage = deps.garage,
     paused = deps.paused or function() return false end,
+    random = deps.random or math.random,
   }
 
   function c:transition(nextState, reason)
@@ -151,7 +155,7 @@ function M.new(deps)
     self.quote, self.repairFeedback = nil, nil
     self.partsFeedback, self.carFeedback = nil, nil
     self.vehicleProvided, self.arrivingModel, self.arrivingValue, self.arrived = false, nil, nil, false
-    self.wreck, self.restartArmed, self.penalty, self.sponsorFlash = nil, false, nil, nil
+    self.wreck, self.restartArmed, self.penalty, self.sponsorFlash, self.perkFlash = nil, false, nil, nil, nil
     self.configuration, self.configError = config.load(deps.io)
     self.diag:event('configuration', self.configuration and 'loaded' or self.configError, self.configuration and 'I' or 'W')
     self.profile, self.loadStatus = self.store:load()
@@ -167,6 +171,10 @@ function M.new(deps)
     -- Saves from before sponsor bonuses count the distance already driven as paid, so nothing is back-paid.
     if self.profile and self.stage and self.profile.progression.sponsorBonuses == nil then
       self.profile.progression.sponsorBonuses = math.floor(self.profile.progression.totalDistanceKm / self.stage.sponsorEveryKm)
+    end
+    -- Likewise, saves from before Service Perks get their first offer at the next stretch.
+    if self.profile and self.profile.progression.perkOffers == nil then
+      self.profile.progression.perkOffers = math.floor(self.profile.progression.totalDistanceKm / perks.OFFER_EVERY_KM)
     end
     self.savedDistanceKm = self.profile and self.profile.progression.totalDistanceKm or 0
     -- Before the first save the stage's starting money counts as saved, since it was not earned.
@@ -237,6 +245,121 @@ function M.new(deps)
     self.diag:event('time_penalty', reason .. ':' .. PENALTY_SECONDS)
   end
 
+  -- Service Perks. The perk held, when this version knows it.
+  function c:heldPerk()
+    local id = self.profile and self.profile.progression.perk
+    return id and perks.get(id) and id or nil
+  end
+
+  function c:flashPerk(title, text)
+    self.perkFlash = { title = title, text = text, at = self.clock }
+  end
+
+  -- A changed perk can change an open parts or car bill, so the bill is priced again.
+  function c:perkChanged()
+    if self.pendingParts or self.pendingCar then self.partsCheckDue = true end
+  end
+
+  -- Uses up the perk held when it is this one. Returns whether it was.
+  function c:usePerk(id)
+    if self:heldPerk() ~= id then return false end
+    self.profile.progression.perk = nil
+    self.diag:event('perk_used', id)
+    self:perkChanged()
+    return true
+  end
+
+  -- A repair costs time unless No Penalty covers it, and loses the perk held, except Insurance.
+  -- Returns whether it cost time.
+  function c:repaired()
+    local timed = not self:usePerk('noPenalty')
+    if timed then self:addPenalty('repair') end
+    local held = self:heldPerk()
+    if held and held ~= 'insurance' then
+      self.profile.progression.perk = nil
+      self:flashPerk('PERK LOST', 'The repair lost your ' .. perks.get(held).name .. ' perk.')
+      self.diag:event('perk_lost', held)
+    elseif not timed then
+      self:flashPerk('NO PENALTY USED', 'The repair cost you no time.')
+    end
+    return timed
+  end
+
+  -- Offers a random perk for each whole stretch of OFFER_EVERY_KM driven, like the sponsor bonus.
+  -- An offer not answered yet is replaced by the next one.
+  function c:offerPerk()
+    if self.stageFinished then return end
+    local progression = self.profile.progression
+    local due = math.floor(progression.totalDistanceKm / perks.OFFER_EVERY_KM)
+    if due <= (progression.perkOffers or 0) then return end
+    progression.perkOffers = due
+    progression.perkOffer = perks.pick(self.random, self:heldPerk())
+    self.diag:event('perk_offered', progression.perkOffer)
+  end
+
+  function c:perkActionsAllowed()
+    return self.profile ~= nil and not self.error and not self.gameOver and self.state == 'READY' and self.arrived
+      and not self.stageFinished
+  end
+
+  -- Keep: turns the offer down. Swap: takes it in place of the perk held (or an empty slot).
+  function c:answerPerkOffer(swap)
+    local offer = self.profile and self.profile.progression.perkOffer
+    if not offer or not self:perkActionsAllowed() then return false end
+    self.profile.progression.perkOffer = nil
+    if swap and perks.get(offer) then
+      self.profile.progression.perk = offer
+      self:perkChanged()
+      self.diag:event('perk_taken', offer)
+    end
+    return true
+  end
+
+  function c:activatePerk()
+    local held = self:heldPerk()
+    local perk = held and perks.get(held)
+    if not perk or not perk.activate or not self:perkActionsAllowed() then return false end
+    local progression = self.profile.progression
+    progression.perk = nil
+    if held == 'timeFreeze' then
+      progression.freezeSeconds = (progression.freezeSeconds or 0) + perks.TIME_FREEZE_SECONDS
+      self:flashPerk('TIME FREEZE', 'The stage clock is stopped.')
+    elseif held == 'paceGift' then
+      progression.timeCreditSeconds = (progression.timeCreditSeconds or 0) + perks.PACE_GIFT_SECONDS
+      self:flashPerk('PACE GIFT', 'Time taken off your stage clock.')
+    elseif held == 'luckyMile' then
+      progression.luckyUntilKm = math.max(progression.luckyUntilKm or 0, progression.totalDistanceKm) + perks.LUCKY_MILE_KM
+      self:flashPerk('LUCKY MILE', 'Driving pays ' .. perks.LUCKY_MILE_MULTIPLIER .. 'x for the next ' .. perks.LUCKY_MILE_KM .. ' km.')
+    end
+    self.diag:event('perk_activated', held)
+    return true
+  end
+
+  -- Ironman with Insurance: pays for the wreck's repair instead of ending the run. With a bill
+  -- open, the repair in the bill is dropped. Like any repair it costs time. Returns whether it paid.
+  function c:claimInsurance()
+    if self:heldPerk() ~= 'insurance' then return false end
+    if self.pendingCar then
+      self.pendingCar.oldDamage = 0
+      self:quoteCar(self.fittedParts)
+    elseif self.pendingParts then
+      local p = self.pendingParts
+      p.damage, p.repair, p.cost = 0, 0, p.partsCost - p.discount
+    else
+      local ok, why, detail = self.garage:repair()
+      if not ok then
+        self.diag:event('insurance_failed', tostring(why) .. (detail and (': ' .. detail) or ''), 'E')
+        return false
+      end
+    end
+    self.profile.progression.perk = nil
+    self.owedDamage, self.quote, self.wreck = 0, nil, nil
+    self:addPenalty('repair')
+    self:flashPerk('INSURANCE PAID', 'Your insurance paid for the repair and kept you in the rally.')
+    self.diag:event('insurance_paid', 'wreck')
+    return true
+  end
+
   -- The stage clock runs while the player is on the stage, the game is not paused and the stage
   -- is neither finished nor over.
   function c:clockRunning()
@@ -248,7 +371,15 @@ function M.new(deps)
   function c:runClock(dt)
     if not self:clockRunning() then return end
     local progression = self.profile.progression
-    progression.drivingSeconds = (progression.drivingSeconds or 0) + math.min(dt, MAX_CLOCK_STEP)
+    local step = math.min(dt, MAX_CLOCK_STEP)
+    -- Time Freeze: the clock stands still until the frozen time is used up.
+    local frozen = math.min(step, progression.freezeSeconds or 0)
+    if frozen > 0 then
+      progression.freezeSeconds = progression.freezeSeconds - frozen
+      if progression.freezeSeconds <= 0 then progression.freezeSeconds = nil end
+      step = step - frozen
+    end
+    progression.drivingSeconds = (progression.drivingSeconds or 0) + step
   end
 
   -- Pays the sponsor bonus for each whole stretch of sponsorEveryKm driven and not yet paid for. The
@@ -260,6 +391,7 @@ function M.new(deps)
     local paid = progression.sponsorBonuses or 0
     if due <= paid then return end
     local amount = (due - paid) * self.stage.sponsorBonus
+    if self:usePerk('sponsorBoost') then amount = amount + self.stage.sponsorBonus * (perks.SPONSOR_BOOST_MULTIPLIER - 1) end
     progression.sponsorBonuses = due
     self:addMoney(amount)
     self.sponsorFlash = { amount = amount, at = self.clock }
@@ -364,9 +496,10 @@ function M.new(deps)
       return false
     end
     self:spend(cost, 'repair')
-    self:addPenalty('repair')
+    local timed = self:repaired()
     self.quote, self.owedDamage = nil, 0
-    self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '. The repair cost you 5 minutes. Save to keep the new balance.'
+    self.repairFeedback = 'Repaired for ' .. dollars(cost) .. '.' .. (timed and ' The repair cost you 5 minutes.' or '')
+      .. ' Save to keep the new balance.'
     return true
   end
 
@@ -418,9 +551,10 @@ function M.new(deps)
     local repair = M.repairCost(damage)
     local position = previous and previous.position
       or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil
+    local discount = self:heldPerk() == 'partsDiscount' and math.floor(diff.cost * perks.PARTS_DISCOUNT_SHARE + 0.5) or 0
     self.pendingParts = {
-      id = snapshot.id, added = diff.added, removed = diff.removed, partsCost = diff.cost,
-      repair = repair, damage = damage, cost = diff.cost + repair, position = position,
+      id = snapshot.id, added = diff.added, removed = diff.removed, partsCost = diff.cost, discount = discount,
+      repair = repair, damage = damage, cost = diff.cost - discount + repair, position = position,
     }
     self.quote = nil
     self.partsFeedback = self:canAfford(self.pendingParts.cost) and 'Press Buy to keep these parts, or Revert.'
@@ -445,11 +579,12 @@ function M.new(deps)
     local repair = M.repairCost(oldDamage)
     local tradeIn = math.max(0, math.floor((owned.value or DEFAULT_CAR_PRICE) * CAR_TRADE_IN_SHARE + 0.5) - repair)
     local extrasCost = extras and extras.cost or 0
+    local discount = self:heldPerk() == 'carDeal' and math.floor(price * perks.CAR_DISCOUNT_SHARE + 0.5) or 0
     self.pendingParts, self.quote = nil, nil
     self.pendingCar = {
       id = snapshot.id, model = snapshot.model, name = base.name or snapshot.model, base = base,
-      price = price, extras = extrasCost, tradeIn = tradeIn, repair = repair, oldDamage = oldDamage,
-      cost = math.max(0, price + extrasCost - tradeIn), fromId = owned.id,
+      price = price, discount = discount, extras = extrasCost, tradeIn = tradeIn, repair = repair, oldDamage = oldDamage,
+      cost = math.max(0, price - discount + extrasCost - tradeIn), fromId = owned.id,
       position = previous and previous.position
         or (self.lastSample and self.lastSample.valid and location.copy(self.lastSample)) or nil,
     }
@@ -488,10 +623,12 @@ function M.new(deps)
     local snapshot = self.fittedParts
     snapshot.value = pending.base.value
     self:adoptParts(snapshot)
-    self:addPenalty('car')
+    if pending.discount > 0 then self:usePerk('carDeal') end
+    local timed = not self:usePerk('noPenalty')
+    if timed then self:addPenalty('car') end
     self.owedDamage = 0
     self.carFeedback = 'Bought ' .. tostring(pending.name) .. ' for ' .. dollars(pending.cost)
-      .. '. The car change cost you 5 minutes. Save to keep it.'
+      .. (timed and '. The car change cost you 5 minutes.' or '. No Penalty saved you the 5 minutes.') .. ' Save to keep it.'
     return true
   end
 
@@ -587,10 +724,11 @@ function M.new(deps)
     end
     self:adoptParts(self.fittedParts)
     self.owedDamage = 0
+    if pending.discount > 0 then self:usePerk('partsDiscount') end
     -- Parts alone cost no time, but a bill that includes a repair is a repair.
-    if pending.repair > 0 then self:addPenalty('repair') end
+    local timed = pending.repair > 0 and self:repaired()
     self.partsFeedback = 'Bought for ' .. dollars(pending.cost) .. '.'
-      .. (pending.repair > 0 and ' The repair cost you 5 minutes.' or '') .. ' Save to keep the new balance.'
+      .. (timed and ' The repair cost you 5 minutes.' or '') .. ' Save to keep the new balance.'
     return true
   end
 
@@ -617,10 +755,10 @@ function M.new(deps)
     local charged = self.profile and math.min(pending.repair, self.profile.progression.balance) or 0
     if charged > 0 then self:spend(charged, 'repair') end
     -- Putting the parts back mended the car, so it counts as a repair on the clock.
-    if self.profile and pending.repair > 0 then self:addPenalty('repair') end
+    local timed = self.profile and pending.repair > 0 and self:repaired()
     self.partsFeedback = (droveOff and 'You drove off without paying, so the paid parts were put back.'
       or 'The paid parts were put back.') .. (charged > 0 and (' The repair cost ' .. dollars(charged) .. '.') or '')
-      .. (pending.repair > 0 and ' The repair cost you 5 minutes.' or '')
+      .. (timed and ' The repair cost you 5 minutes.' or '')
     return true
   end
 
@@ -684,9 +822,16 @@ function M.new(deps)
     if self.odometer and location.finite(dt) and dt > 0 then
       local metres = location.distance(self.odometer, sample)
       if metres and metres <= MAX_DRIVING_SPEED * dt then
-        self.profile.progression.totalDistanceKm = self.profile.progression.totalDistanceKm + metres / 1000
-        self:addMoney(metres / 1000 * EARNINGS_PER_KM)
+        local progression = self.profile.progression
+        local rate = EARNINGS_PER_KM * (self:heldPerk() == 'doubleCash' and perks.DOUBLE_CASH_MULTIPLIER or 1)
+        if progression.luckyUntilKm then
+          if progression.totalDistanceKm < progression.luckyUntilKm then rate = rate * perks.LUCKY_MILE_MULTIPLIER end
+          if progression.totalDistanceKm + metres / 1000 >= progression.luckyUntilKm then progression.luckyUntilKm = nil end
+        end
+        progression.totalDistanceKm = progression.totalDistanceKm + metres / 1000
+        self:addMoney(metres / 1000 * rate)
         self:paySponsor()
+        self:offerPerk()
       end
     end
     self.odometer = location.copy(sample)
@@ -725,6 +870,7 @@ function M.new(deps)
       local left = location.distance(sample, self.stage.finish)
       if left and left <= self.stage.finishRadiusMetres then
         self.stageFinished, self.wreck = true, nil
+        self.profile.progression.perkOffer = nil
         self.diag:event('stage_finished', self.stage.id .. string.format(' %.1f km', self.profile.progression.totalDistanceKm))
         self:manualSave()
       end
@@ -756,7 +902,7 @@ function M.new(deps)
     end
     self.wreck.cost = cost
     self.wreck.left = self.wreck.left - dt
-    if self.wreck.left <= 0 then self:endRun(cost) end
+    if self.wreck.left <= 0 and not self:claimInsurance() then self:endRun(cost) end
   end
 
   -- Writes a save of this profile and makes it the loaded one. Returns it, or nil and why.
@@ -793,12 +939,13 @@ function M.new(deps)
   function c:stageEntry()
     local entry = self.profile and self.profile.entry
     if entry then return entry.balance, persistence.plainConfig(entry.vehicle.config) and {
-      model = entry.vehicle.model, config = entry.vehicle.config, damage = entry.vehicle.damage } or {} end
-    return self.stage.startingMoney, {}
+      model = entry.vehicle.model, config = entry.vehicle.config, damage = entry.vehicle.damage } or {}, entry.perk end
+    return self.stage.startingMoney, {}, nil
   end
 
   -- Moves a finished stage's save on to the next stage, with the car and money the player has now.
   -- Mileage, the clock and sponsor bonuses start again; the player goes to the next start for their car.
+  -- The perk held comes too. A perk running now, or one on offer, stays behind with the stage.
   function c:startNextStage()
     local nextStage = self.stage and stages.after(self.stage.id)
     if not nextStage or not self.stageFinished or self.gameOver or self.error or self.state ~= 'READY'
@@ -813,14 +960,15 @@ function M.new(deps)
     local config = self:savedVehicleConfig()
     local vehicle = { model = config and config.model, config = config, damage = self:savedVehicleDamage() }
     local balance = self.profile.progression.balance
+    local perk = self:heldPerk()
     local completed = {}
     for i, id in ipairs(self.profile.completedStages or {}) do completed[i] = id end
     completed[#completed + 1] = self.stage.id
     local start = location.copy(nextStage.start)
     local saved, why = self:record({ base = start, resume = start, progression = { balance = balance, totalDistanceKm = 0,
-      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0 },
+      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0, perk = perk },
       stage = nextStage.id, vehicle = vehicle, atStart = true, completedStages = completed,
-      entry = { balance = balance, vehicle = vehicle } })
+      entry = { balance = balance, vehicle = vehicle, perk = perk } })
     if not saved then
       self.feedback = 'Could not start ' .. nextStage.name .. ' just now. Your finish is still saved. Try again.'
       self.diag:event('next_stage_failed', tostring(why), 'E')
@@ -832,7 +980,7 @@ function M.new(deps)
     return true
   end
 
-  -- Starts the stage again: money, mileage and car go back to the start, and the save is replaced.
+  -- Starts the stage again: money, mileage, car and perk go back to the start, and the save is replaced.
   -- After game over one press does it; otherwise a second press confirms, since progress is lost.
   function c:restartStage()
     if self.error or not self.configuration or not self.stage then
@@ -842,13 +990,13 @@ function M.new(deps)
     if not self.gameOver and not self.restartArmed then
       self.restartArmed = true
       self.feedback = 'Press Confirm restart to start ' .. self.stage.name
-        .. ' again. Your car, money, mileage and clock go back to the start.'
+        .. ' again. Your car, money, mileage, clock and perk go back to the start.'
       return false
     end
     local start = self:stageStart()
-    local balance, vehicle = self:stageEntry()
+    local balance, vehicle, perk = self:stageEntry()
     local saved, why = self:record({ base = start, resume = start, progression = { balance = balance, totalDistanceKm = 0,
-      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0 },
+      drivingSeconds = 0, penaltySeconds = 0, sponsorBonuses = 0, perkOffers = 0, perk = perk },
       stage = self.stage.id, vehicle = vehicle, atStart = true })
     if not saved then
       self.restartArmed = false
@@ -906,13 +1054,17 @@ function M.new(deps)
     if self.stage and self.stage.targetSeconds then
       local progression = self.profile and self.profile.progression or {}
       local driving, penalties = progression.drivingSeconds or 0, progression.penaltySeconds or 0
-      local elapsed = driving + penalties
+      local credit = progression.timeCreditSeconds or 0
+      local elapsed = driving + penalties - credit
       local shown = self.penalty and self.clock - self.penalty.at < PENALTY_SHOWN_FOR
       timer = {
         targetSeconds = self.stage.targetSeconds, estimate = self.stage.targetIsEstimate,
         -- Whole seconds left; negative once the limit has passed and the player is in overtime.
         remainingSeconds = math.ceil(self.stage.targetSeconds - elapsed),
-        drivingSeconds = math.floor(driving), penaltySeconds = penalties,
+        drivingSeconds = math.floor(driving), penaltySeconds = penalties, creditSeconds = credit,
+        elapsedSeconds = math.floor(elapsed),
+        -- Time Freeze seconds left; the clock stands still while there are any.
+        freezeSeconds = progression.freezeSeconds and math.ceil(progression.freezeSeconds) or nil,
         running = self:clockRunning(), started = self.arrived or elapsed > 0,
         aheadSeconds = (self.arrived and current and not self.gameOver and self.configuration)
           and self:paceSeconds(current, elapsed) or nil,
@@ -932,6 +1084,33 @@ function M.new(deps)
         nextKm = math.max(0, (paid + 1) * every - (progression.totalDistanceKm or 0)),
         progress = math.max(0, math.min(1, 1 - ((paid + 1) * every - (progression.totalDistanceKm or 0)) / every)),
         flash = flash and { amount = self.sponsorFlash.amount } or nil,
+      }
+    end
+    local perk
+    if self.stage then
+      local progression = self.profile and self.profile.progression or {}
+      local function shown(id)
+        local p = id and perks.get(id)
+        return p and { id = p.id, name = p.name, description = p.description, activate = p.activate == true } or nil
+      end
+      local held = self:heldPerk()
+      local actions = self:perkActionsAllowed()
+      local flash = self.perkFlash and self.clock - self.perkFlash.at < PERK_SHOWN_FOR
+      local repairNote
+      if held == 'noPenalty' then repairNote = 'Your No Penalty perk covers the 5 minutes of the next repair.'
+      elseif held == 'insurance' then repairNote = 'Repairs keep your Insurance perk.'
+      elseif held then repairNote = 'Repairing loses your ' .. perks.get(held).name .. ' perk.' end
+      perk = {
+        held = shown(held), offer = actions and shown(progression.perkOffer) or nil,
+        activateAllowed = actions and held ~= nil and perks.get(held).activate == true,
+        offerAllowed = actions and progression.perkOffer ~= nil,
+        everyKm = perks.OFFER_EVERY_KM,
+        nextKm = math.max(0, ((progression.perkOffers or 0) + 1) * perks.OFFER_EVERY_KM - (progression.totalDistanceKm or 0)),
+        luckyKm = progression.luckyUntilKm and math.max(0, progression.luckyUntilKm - (progression.totalDistanceKm or 0)) or nil,
+        freezeSeconds = progression.freezeSeconds and math.ceil(progression.freezeSeconds) or nil,
+        repairNote = repairNote,
+        flash = flash and { title = self.perkFlash.title, text = self.perkFlash.text } or nil,
+        list = perks.list(),
       }
     end
     return {
@@ -956,8 +1135,9 @@ function M.new(deps)
       -- Straight-line distance and compass direction, shown once the player is on the stage.
       finishDistanceMetres = onStage and location.distance(current, self.stage.finish) or nil,
       finishDirection = onStage and location.compassPoint(location.bearing(current, self.stage.finish)) or nil,
-      stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer, sponsor = sponsor,
-      wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)) } or nil,
+      stageFinished = self.stageFinished, gameOver = self.gameOver, timer = timer, sponsor = sponsor, perk = perk,
+      wreck = self.wreck and { cost = self.wreck.cost, seconds = math.max(0, math.ceil(self.wreck.left)),
+        insured = self:heldPerk() == 'insurance' } or nil,
       restartAllowed = self.stage ~= nil and self.configuration ~= nil and not self.error,
       restartArmed = self.restartArmed,
       vehicle = current and self.lastSample.vehicle and {
@@ -976,13 +1156,15 @@ function M.new(deps)
       repairFeedback = self.repairFeedback,
       partsChange = self.pendingParts and {
         added = self.pendingParts.added, removed = self.pendingParts.removed,
-        partsCost = self.pendingParts.partsCost, repair = self.pendingParts.repair, cost = self.pendingParts.cost,
+        partsCost = self.pendingParts.partsCost, discount = self.pendingParts.discount,
+        repair = self.pendingParts.repair, cost = self.pendingParts.cost,
       } or nil,
       buyPartsAllowed = self.pendingParts ~= nil and self:canAfford(self.pendingParts.cost),
       revertPartsAllowed = self.pendingParts ~= nil and not self.gameOver,
       partsFeedback = self.partsFeedback,
       carChange = self.pendingCar and {
-        name = self.pendingCar.name, price = self.pendingCar.price, extras = self.pendingCar.extras,
+        name = self.pendingCar.name, price = self.pendingCar.price, discount = self.pendingCar.discount,
+        extras = self.pendingCar.extras,
         tradeIn = self.pendingCar.tradeIn, cost = self.pendingCar.cost,
       } or nil,
       buyCarAllowed = self.pendingCar ~= nil and self:canAfford(self.pendingCar.cost),
@@ -1122,6 +1304,9 @@ function M.buyCar() return safely(function() return ensure():buyCar() end) end
 function M.revertCar() return safely(function() return ensure():revertCar(false) end) end
 function M.restartStage() return safely(function() return ensure():restartStage() end) end
 function M.startNextStage() return safely(function() return ensure():startNextStage() end) end
+function M.keepPerk() return safely(function() return ensure():answerPerkOffer(false) end) end
+function M.swapPerk() return safely(function() return ensure():answerPerkOffer(true) end) end
+function M.activatePerk() return safely(function() return ensure():activatePerk() end) end
 function M.onVehicleSpawned() return safely(function() if active then active:vehicleSpawned() end end) end
 function M.reload() return safely(function() ensure():reload() end) end
 function M.uiMounted(on) return safely(function() ensure():mount(on == true) end) end

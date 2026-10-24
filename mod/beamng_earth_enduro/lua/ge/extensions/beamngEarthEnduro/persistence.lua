@@ -55,6 +55,16 @@ function M.validate(s)
   end
   -- Sponsor bonuses paid on this stage; optional, so older saves load (the controller fills it in).
   if p.sponsorBonuses ~= nil and not integer(p.sponsorBonuses, 0) then return nil, 'invalid_progression' end
+  -- Service Perks: the perk held and the one on offer (ids; the controller ignores unknown ones),
+  -- how many offers this stage has made, and the perks running now. All optional, so older saves load.
+  if not optionalString(p.perk) or not optionalString(p.perkOffer) then return nil, 'invalid_progression' end
+  if p.perkOffers ~= nil and not integer(p.perkOffers, 0) then return nil, 'invalid_progression' end
+  for _, field in ipairs({ 'timeCreditSeconds', 'freezeSeconds', 'luckyUntilKm' }) do
+    local value = p[field]
+    if value ~= nil and (not location.finite(value) or value < 0 or value > MAX_INTEGER) then
+      return nil, 'invalid_progression'
+    end
+  end
   if type(s.vehicle) ~= 'table' or not optionalString(s.vehicle.model)
       or not optionalString(s.vehicle.configuration) then return nil, 'invalid_vehicle' end
   local vehicleConfig = nil
@@ -88,7 +98,7 @@ function M.validate(s)
   if s.entry ~= nil then
     local e = s.entry
     if type(e) ~= 'table' or not integer(e.balance, 0) or type(e.vehicle) ~= 'table'
-        or not optionalString(e.vehicle.model) then return nil, 'invalid_stage' end
+        or not optionalString(e.vehicle.model) or not optionalString(e.perk) then return nil, 'invalid_stage' end
     local entryDamage = e.vehicle.damage
     if entryDamage ~= nil and (not location.finite(entryDamage) or entryDamage < 0 or entryDamage > MAX_INTEGER) then
       return nil, 'invalid_stage'
@@ -98,7 +108,8 @@ function M.validate(s)
       entryConfig = plainConfig(e.vehicle.config)
       if not entryConfig then return nil, 'invalid_stage' end
     end
-    entry = { balance = e.balance, vehicle = { model = e.vehicle.model, config = entryConfig, damage = entryDamage } }
+    entry = { balance = e.balance, vehicle = { model = e.vehicle.model, config = entryConfig, damage = entryDamage },
+      perk = e.perk }
   end
   local resume = location.copy(s.resume)
   if s.resume.altitude ~= nil then
@@ -116,7 +127,8 @@ function M.validate(s)
     base = location.copy(s.base), resume = resume,
     progression = { balance = p.balance, totalDistanceKm = p.totalDistanceKm,
       drivingSeconds = p.drivingSeconds or 0, penaltySeconds = p.penaltySeconds or 0,
-      sponsorBonuses = p.sponsorBonuses },
+      sponsorBonuses = p.sponsorBonuses, perk = p.perk, perkOffer = p.perkOffer, perkOffers = p.perkOffers,
+      timeCreditSeconds = p.timeCreditSeconds, freezeSeconds = p.freezeSeconds, luckyUntilKm = p.luckyUntilKm },
     vehicle = { model = s.vehicle.model, configuration = s.vehicle.configuration, config = vehicleConfig,
       damage = damage },
     stage = s.stage, finished = s.finished, gameOver = s.gameOver, atStart = s.atStart,
@@ -137,7 +149,7 @@ function M.newProfile(base, pose, vehicle, stage, balance)
     schemaVersion = 1, profileId = 'default', generation = 0, stage = stage,
     base = location.copy(base), resume = location.copy(pose),
     progression = { balance = balance or 0, totalDistanceKm = 0, drivingSeconds = 0, penaltySeconds = 0,
-      sponsorBonuses = 0 },
+      sponsorBonuses = 0, perkOffers = 0 },
     vehicle = { model = vehicle and vehicle.model, configuration = vehicle and vehicle.configuration },
   }
 end
